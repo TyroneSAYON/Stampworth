@@ -5,16 +5,24 @@ import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 
-export default function SignInScreen() {
+export default function CreateAccountScreen() {
   const colorScheme = useColorScheme();
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Title */}
-        <Text style={[styles.title, { color: '#2F4366' }]}>
-          Sign In
-        </Text>
+        <View style={styles.titleContainer}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#2F4366" />
+          </TouchableOpacity>
+          <Text style={[styles.title, { color: '#2F4366' }]}>
+            Create Account
+          </Text>
+        </View>
 
         {/* Logo and Brand */}
         <View style={styles.logoContainer}>
@@ -46,6 +54,16 @@ export default function SignInScreen() {
         {/* Form */}
         <View style={styles.form}>
           <View style={[styles.inputContainer, { borderColor: Colors[colorScheme ?? 'light'].icon }]}>
+            <Ionicons name="person-outline" size={20} color={Colors[colorScheme ?? 'light'].icon} style={styles.inputIcon} />
+            <TextInput
+              style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
+              placeholder="Enter username"
+              placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
+              autoCapitalize="none"
+            />
+          </View>
+
+          <View style={[styles.inputContainer, { borderColor: Colors[colorScheme ?? 'light'].icon }]}>
             <Ionicons name="mail-outline" size={20} color={Colors[colorScheme ?? 'light'].icon} style={styles.inputIcon} />
             <TextInput
               style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
@@ -60,36 +78,30 @@ export default function SignInScreen() {
             <Ionicons name="lock-closed-outline" size={20} color={Colors[colorScheme ?? 'light'].icon} style={styles.inputIcon} />
             <TextInput
               style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
-              placeholder="Password"
+              placeholder="Set up password"
               placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
               secureTextEntry
             />
           </View>
 
-          <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={[styles.forgotPasswordText, { color: '#2F4366' }]}>
-              Forgot password?
-            </Text>
-          </TouchableOpacity>
-
           <TouchableOpacity 
             style={styles.button}
             onPress={() => router.push('/loading')}
           >
-            <Text style={styles.buttonText}>Sign In</Text>
+            <Text style={styles.buttonText}>Create Account</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.createAccount}
-            onPress={() => router.push('/createaccount')}
+            style={styles.signInLink}
+            onPress={() => router.push('/signin')}
           >
-            <Text style={[styles.createAccountText, { color: '#2F4366' }]}>
-              Create Account
+            <Text style={[styles.signInLinkText, { color: '#2F4366' }]}>
+              Already have an account? Sign In
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Social Sign In */}
+        {/* Social Sign Up */}
         <View style={styles.socialSection}>
           <Text style={[styles.socialText, { color: '#2F4366' }]}>
             or sign up with
@@ -120,12 +132,19 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 40,
   },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 80,
+  },
+  backButton: {
+    marginRight: 16,
+    padding: 4,
+  },
   title: {
     fontSize: 28,
     fontWeight: '600',
     fontFamily: 'Poppins-SemiBold',
-    marginBottom: 80,
-    alignSelf: 'flex-start',
   },
   logoContainer: {
     alignItems: 'center',
@@ -166,20 +185,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: 'Poppins-Regular',
   },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-    marginBottom: 24,
-  },
-  forgotPasswordText: {
-    fontSize: 13,
-    fontFamily: 'Poppins-Regular',
-  },
   button: {
     height: 56,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
+    marginTop: 8,
     backgroundColor: '#2F4366',
   },
   buttonText: {
@@ -188,10 +200,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: 'Poppins-SemiBold',
   },
-  createAccount: {
+  signInLink: {
     alignItems: 'center',
   },
-  createAccountText: {
+  signInLinkText: {
     fontSize: 14,
     fontFamily: 'Poppins-Regular',
   },
@@ -215,3 +227,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+
