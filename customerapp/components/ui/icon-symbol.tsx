@@ -19,6 +19,7 @@ const MAPPING = {
   'rectangle.stack.fill': 'credit-card',
   'person.crop.circle': 'person',
   'paperplane.fill': 'send',
+  'map.fill': 'map',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
 } as IconMapping;
