@@ -14,12 +14,34 @@ try {
   console.warn('expo-location not available:', error);
 }
 
+// Dynamically import react-native-maps to avoid native crash when module isn't linked
+let MapView: any = null;
+let Marker: any = null;
+let Circle: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const Maps = require('react-native-maps');
+  MapView = Maps.default;
+  Marker = Maps.Marker;
+  Circle = Maps.Circle;
+} catch (error) {
+  console.warn('react-native-maps not available:', error);
+}
+
 interface Promotion {
   id: string;
   title: string;
   description: string;
   radius: number; // in meters
   active: boolean;
+}
+
+interface Customer {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  distanceFromStore: number; // in meters
 }
 
 export default function ExploreScreen() {
@@ -42,6 +64,57 @@ export default function ExploreScreen() {
     description: '',
     radius: '100',
   });
+  const [customers, setCustomers] = useState<Customer[]>([]);
+
+  // Helper to calculate distance between two lat/lon pairs (in meters)
+  const calculateDistanceMeters = (
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number
+  ) => {
+    const toRad = (value: number) => (value * Math.PI) / 180;
+
+    const R = 6371000; // Earth radius in meters
+    const φ1 = toRad(lat1);
+    const φ2 = toRad(lat2);
+    const Δφ = toRad(lat2 - lat1);
+    const Δλ = toRad(lon2 - lon1);
+
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+  };
+
+  const generateSampleCustomers = (storeLat: number, storeLon: number) => {
+    // These are mock customer locations around the store (some inside, some outside the typical radius)
+    const baseOffsets = [
+      { id: 'c1', name: 'Customer A', latOffset: 0.0005, lonOffset: 0.0005 },
+      { id: 'c2', name: 'Customer B', latOffset: -0.0007, lonOffset: 0.0003 },
+      { id: 'c3', name: 'Customer C', latOffset: 0.0015, lonOffset: -0.0012 },
+      { id: 'c4', name: 'Customer D', latOffset: -0.0018, lonOffset: -0.001 },
+      { id: 'c5', name: 'Customer E', latOffset: 0.0025, lonOffset: 0.002 },
+    ];
+
+    const generated = baseOffsets.map((c) => {
+      const lat = storeLat + c.latOffset;
+      const lon = storeLon + c.lonOffset;
+      const distanceFromStore = calculateDistanceMeters(storeLat, storeLon, lat, lon);
+
+      return {
+        id: c.id,
+        name: c.name,
+        latitude: lat,
+        longitude: lon,
+        distanceFromStore,
+      } as Customer;
+    });
+
+    setCustomers(generated);
+  };
 
   useEffect(() => {
     requestLocationPermission();
@@ -69,6 +142,10 @@ export default function ExploreScreen() {
     try {
       const loc = await Location.getCurrentPositionAsync({});
       setLocation(loc);
+
+      if (loc?.coords) {
+        generateSampleCustomers(loc.coords.latitude, loc.coords.longitude);
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to get current location');
     }
@@ -79,6 +156,11 @@ export default function ExploreScreen() {
       Alert.alert('Error', 'Please enable location services');
       return;
     }
+    // When a store location is saved, (mock) generate surrounding customers
+    if (location?.coords) {
+      generateSampleCustomers(location.coords.latitude, location.coords.longitude);
+    }
+
     Alert.alert('Success', 'Store location saved successfully!', [
       {
         text: 'OK',
@@ -105,7 +187,12 @@ export default function ExploreScreen() {
 
     setPromotions([...promotions, promotion]);
     setNewPromotion({ title: '', description: '', radius: '100' });
-    Alert.alert('Success', 'Location-based promotion created!');
+    // In a real app this is where you would notify nearby customers
+    // For now we just show a success message and keep the promotion in the list
+    Alert.alert(
+      'Success',
+      'Location-based promotion created and will be shown to nearby customers on the map!'
+    );
   };
 
   const togglePromotion = (id: string) => {
@@ -174,6 +261,102 @@ export default function ExploreScreen() {
                       </Text>
                     </View>
                   </View>
+                  {/* Map showing store and customers (only if react-native-maps native module is available) */}
+                  {MapView ? (
+                    <View style={styles.mapContainer}>
+                      <MapView
+                        style={styles.map}
+                        initialRegion={{
+                          latitude: location.coords.latitude,
+                          longitude: location.coords.longitude,
+                          latitudeDelta: 0.01,
+                          longitudeDelta: 0.01,
+                        }}
+                      >
+                        {/* Store pin */}
+                        <Marker
+                          coordinate={{
+                            latitude: location.coords.latitude,
+                            longitude: location.coords.longitude,
+                          }}
+                          title="Your Store"
+                          description="Store location"
+                          pinColor="#2F4366"
+                        />
+
+                        {/* Circle based on the largest active promotion radius (or default) */}
+                        {(() => {
+                          const activeRadii = promotions
+                            .filter((p) => p.active)
+                            .map((p) => p.radius);
+                          const radius = activeRadii.length ? Math.max(...activeRadii) : 100;
+
+                          return (
+                            <Circle
+                              center={{
+                                latitude: location.coords.latitude,
+                                longitude: location.coords.longitude,
+                              }}
+                              radius={radius}
+                              strokeColor="rgba(47, 67, 102, 0.8)"
+                              fillColor="rgba(47, 67, 102, 0.15)"
+                            />
+                          );
+                        })()}
+
+                        {/* Customer pins (inside vs outside radius) */}
+                        {customers.map((customer) => {
+                          const activeRadii = promotions
+                            .filter((p) => p.active)
+                            .map((p) => p.radius);
+                          const radius = activeRadii.length ? Math.max(...activeRadii) : 100;
+                          const isInside = customer.distanceFromStore <= radius;
+
+                          return (
+                            <Marker
+                              key={customer.id}
+                              coordinate={{
+                                latitude: customer.latitude,
+                                longitude: customer.longitude,
+                              }}
+                              title={customer.name}
+                              description={
+                                isInside ? 'Within promotion area' : 'Outside promotion area'
+                              }
+                              pinColor={isInside ? '#27AE60' : '#E74C3C'}
+                            />
+                          );
+                        })}
+                      </MapView>
+                      <View style={styles.mapLegend}>
+                        <View style={styles.legendItem}>
+                          <View style={[styles.legendDot, { backgroundColor: '#2F4366' }]} />
+                          <Text style={[styles.legendText, { color: theme.text }]}>
+                            Store location
+                          </Text>
+                        </View>
+                        <View style={styles.legendItem}>
+                          <View style={[styles.legendDot, { backgroundColor: '#27AE60' }]} />
+                          <Text style={[styles.legendText, { color: theme.text }]}>
+                            Customers inside area
+                          </Text>
+                        </View>
+                        <View style={styles.legendItem}>
+                          <View style={[styles.legendDot, { backgroundColor: '#E74C3C' }]} />
+                          <Text style={[styles.legendText, { color: theme.text }]}>
+                            Customers beyond area
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={[styles.mapContainer, { justifyContent: 'center', alignItems: 'center' }]}>
+                      <Text style={[styles.coordinatesText, { color: theme.icon, textAlign: 'center' }]}>
+                        Map view is not available in this build. Please run a dev build with react-native-maps
+                        installed to see the live map.
+                      </Text>
+                    </View>
+                  )}
                   <TouchableOpacity
                     style={[styles.updateButton, { backgroundColor: '#2F4366' }]}
                     onPress={getCurrentLocation}
@@ -378,6 +561,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
     borderRadius: 12,
     padding: 16,
+  },
+  mapContainer: {
+    height: 260,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  map: {
+    flex: 1,
+  },
+  mapLegend: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendText: {
+    fontSize: 11,
+    fontFamily: 'Poppins-Regular',
   },
   locationInfo: {
     flexDirection: 'row',
