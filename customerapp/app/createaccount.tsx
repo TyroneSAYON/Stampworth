@@ -1,12 +1,50 @@
 import { Image } from 'expo-image';
-import { StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { signInWithOAuth, signUp } from '@/lib/auth';
 
 export default function CreateAccountScreen() {
   const colorScheme = useColorScheme();
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<'google' | 'facebook' | null>(null);
+
+  const handleCreateAccount = async () => {
+    if (!username.trim() || !email.trim() || !password.trim()) {
+      Alert.alert('Missing fields', 'Please complete username, email, and password.');
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await signUp(email.trim(), password, username.trim());
+    setLoading(false);
+
+    if (error) {
+      Alert.alert('Sign up failed', error.message);
+      return;
+    }
+
+    router.replace('/(tabs)/qrcode');
+  };
+
+  const handleOAuthSignUp = async (provider: 'google' | 'facebook') => {
+    setSocialLoading(provider);
+    const { error } = await signInWithOAuth(provider);
+    setSocialLoading(null);
+
+    if (error) {
+      Alert.alert(`${provider === 'google' ? 'Google' : 'Facebook'} sign up failed`, error.message);
+      return;
+    }
+
+    router.replace('/(tabs)/qrcode');
+  };
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
@@ -56,6 +94,8 @@ export default function CreateAccountScreen() {
           <View style={[styles.inputContainer, { borderColor: Colors[colorScheme ?? 'light'].icon }]}>
             <Ionicons name="person-outline" size={20} color={Colors[colorScheme ?? 'light'].icon} style={styles.inputIcon} />
             <TextInput
+              value={username}
+              onChangeText={setUsername}
               style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
               placeholder="Enter username"
               placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
@@ -66,6 +106,8 @@ export default function CreateAccountScreen() {
           <View style={[styles.inputContainer, { borderColor: Colors[colorScheme ?? 'light'].icon }]}>
             <Ionicons name="mail-outline" size={20} color={Colors[colorScheme ?? 'light'].icon} style={styles.inputIcon} />
             <TextInput
+              value={email}
+              onChangeText={setEmail}
               style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
               placeholder="Enter email"
               placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
@@ -77,6 +119,8 @@ export default function CreateAccountScreen() {
           <View style={[styles.inputContainer, { borderColor: Colors[colorScheme ?? 'light'].icon }]}>
             <Ionicons name="lock-closed-outline" size={20} color={Colors[colorScheme ?? 'light'].icon} style={styles.inputIcon} />
             <TextInput
+              value={password}
+              onChangeText={setPassword}
               style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
               placeholder="Set up password"
               placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
@@ -86,9 +130,10 @@ export default function CreateAccountScreen() {
 
           <TouchableOpacity 
             style={styles.button}
-            onPress={() => router.push('/loading')}
+            onPress={handleCreateAccount}
+            disabled={loading}
           >
-            <Text style={styles.buttonText}>Create Account</Text>
+            <Text style={styles.buttonText}>{loading ? 'Creating...' : 'Create Account'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -107,16 +152,27 @@ export default function CreateAccountScreen() {
             or sign up with
           </Text>
           <View style={styles.socialButtons}>
-            <TouchableOpacity style={[styles.socialButton, { backgroundColor: colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5' }]}>
+            <TouchableOpacity
+              style={[styles.socialButton, { backgroundColor: colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5' }]}
+              onPress={() => handleOAuthSignUp('facebook')}
+              disabled={loading || socialLoading !== null}
+            > 
               <Ionicons name="logo-facebook" size={28} color="#1877F2" />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.socialButton, { backgroundColor: colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5' }]}>
+            <TouchableOpacity
+              style={[styles.socialButton, { backgroundColor: colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5' }]}
+              onPress={() => handleOAuthSignUp('google')}
+              disabled={loading || socialLoading !== null}
+            > 
               <Ionicons name="logo-google" size={28} color="#DB4437" />
             </TouchableOpacity>
             <TouchableOpacity style={[styles.socialButton, { backgroundColor: colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5' }]}>
               <Ionicons name="logo-apple" size={28} color={colorScheme === 'dark' ? '#FFFFFF' : '#000000'} />
             </TouchableOpacity>
           </View>
+          {socialLoading && (
+            <Text style={[styles.socialLoadingText, { color: '#2F4366' }]}>Creating account with {socialLoading}...</Text>
+          )}
         </View>
       </ScrollView>
     </ThemedView>
@@ -218,6 +274,11 @@ const styles = StyleSheet.create({
   socialButtons: {
     flexDirection: 'row',
     gap: 20,
+  },
+  socialLoadingText: {
+    marginTop: 12,
+    fontSize: 13,
+    fontFamily: 'Poppins-Regular',
   },
   socialButton: {
     width: 56,

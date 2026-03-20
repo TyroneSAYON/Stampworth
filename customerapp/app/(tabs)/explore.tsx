@@ -1,216 +1,179 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
   StyleSheet,
-  View,
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
-  Modal,
-  ScrollView,
-  ActivityIndicator,
-  Platform,
+  View,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import { Linking } from 'react-native';
+
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { findNearbyStores, getMerchantById } from '@/lib/database';
 
-interface LocationData {
-  id: string;
-  name: string;
-  address: string;
-  services: string[];
+type NearbyMerchant = {
+  merchant_id: string;
+  business_name: string;
   latitude: number;
   longitude: number;
-}
+  distance_meters: number;
+  geofence_radius_meters: number;
+};
 
-// Sample location data - replace with actual API data
-const SAMPLE_LOCATIONS: LocationData[] = [
-  {
-    id: '1',
-    name: 'Coffee Corner',
-    address: '123 Main Street, Downtown',
-    services: ['Coffee', 'Pastries', 'WiFi'],
-    latitude: 37.78825,
-    longitude: -122.4324,
-  },
-  {
-    id: '2',
-    name: 'Bakery Delight',
-    address: '456 Oak Avenue, Midtown',
-    services: ['Bread', 'Cakes', 'Sandwiches'],
-    latitude: 37.78425,
-    longitude: -122.4284,
-  },
-  {
-    id: '3',
-    name: 'Tech Hub Cafe',
-    address: '789 Tech Boulevard, Uptown',
-    services: ['Coffee', 'Workspace', 'Charging Stations'],
-    latitude: 37.79225,
-    longitude: -122.4364,
-  },
-  {
-    id: '4',
-    name: 'Green Market',
-    address: '321 Park Lane, Central',
-    services: ['Organic Food', 'Smoothies', 'Salads'],
-    latitude: 37.78025,
-    longitude: -122.4244,
-  },
-];
+type MerchantDetail = {
+  id: string;
+  business_name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+  latitude: number;
+  longitude: number;
+};
 
 export default function ExploreScreen() {
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? 'light'];
 
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [locationPermission, setLocationPermission] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
+  const [allMerchants, setAllMerchants] = useState<NearbyMerchant[]>([]);
+  const [filteredMerchants, setFilteredMerchants] = useState<NearbyMerchant[]>([]);
+  const [selectedMerchant, setSelectedMerchant] = useState<MerchantDetail | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [filteredLocations, setFilteredLocations] = useState<LocationData[]>(SAMPLE_LOCATIONS);
   const [region, setRegion] = useState<Region>({
-    latitude: 37.78825,
-    longitude: -122.4324,
-    latitudeDelta: 0.0922,
-    longitudeDelta: 0.0421,
+    latitude: 14.5995,
+    longitude: 120.9842,
+    latitudeDelta: 0.08,
+    longitudeDelta: 0.04,
   });
 
   const mapRef = useRef<MapView>(null);
 
   useEffect(() => {
-    requestLocationPermission();
-  }, []);
-
-  useEffect(() => {
-    filterLocations();
-  }, [searchQuery]);
-
-  const requestLocationPermission = async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        setLocationPermission(true);
-        getCurrentLocation();
-      } else {
-        setLocationPermission(false);
-        setLoading(false);
-        Alert.alert(
-          'Location Permission',
-          'Location permission is required to show nearby merchants. Please enable it in settings.',
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (error) {
-      console.error('Error requesting location permission:', error);
-      setLoading(false);
-    }
-  };
-
-  const getCurrentLocation = async () => {
-    try {
-      setLoading(true);
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-
-      setLocation(location);
-      const newRegion: Region = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      };
-      setRegion(newRegion);
-
-      // Center map on user location
-      if (mapRef.current) {
-        mapRef.current.animateToRegion(newRegion, 1000);
-      }
-
-      setLoading(false);
-    } catch (error) {
-      console.error('Error getting location:', error);
-      setLoading(false);
-    }
-  };
-
-  const filterLocations = () => {
     if (!searchQuery.trim()) {
-      setFilteredLocations(SAMPLE_LOCATIONS);
+      setFilteredMerchants(allMerchants);
       return;
     }
 
     const query = searchQuery.toLowerCase();
-    const filtered = SAMPLE_LOCATIONS.filter(
-      (loc) =>
-        loc.name.toLowerCase().includes(query) ||
-        loc.address.toLowerCase().includes(query) ||
-        loc.services.some((service) => service.toLowerCase().includes(query))
+    setFilteredMerchants(
+      allMerchants.filter((merchant) => merchant.business_name.toLowerCase().includes(query)),
     );
-    setFilteredLocations(filtered);
-  };
+  }, [searchQuery, allMerchants]);
 
-  const handleMarkerPress = (location: LocationData) => {
-    setSelectedLocation(location);
+  const refreshNearbyMerchants = useCallback(async () => {
+    try {
+      setLoading(true);
+      const currentLocation = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+
+      const nextRegion: Region = {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.04,
+      };
+
+      setRegion(nextRegion);
+      mapRef.current?.animateToRegion(nextRegion, 800);
+
+      const { data, error } = await findNearbyStores(currentLocation.coords.latitude, currentLocation.coords.longitude, 10000);
+
+      if (error) {
+        setLoading(false);
+        Alert.alert('Store lookup failed', error.message);
+        return;
+      }
+
+      const mapped = ((data || []) as NearbyMerchant[]).filter(
+        (item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude),
+      );
+
+      setAllMerchants(mapped);
+      setFilteredMerchants(mapped);
+      setLoading(false);
+    } catch {
+      setLoading(false);
+      Alert.alert('Map error', 'Unable to load nearby stores right now.');
+    }
+  }, []);
+
+  const requestLocationPermission = useCallback(async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setLocationPermission(false);
+        setLoading(false);
+        Alert.alert('Location permission required', 'Please allow location access to view nearby stores.');
+        return;
+      }
+
+      setLocationPermission(true);
+      await refreshNearbyMerchants();
+    } catch {
+      setLoading(false);
+      Alert.alert('Location error', 'Could not read your location.');
+    }
+  }, [refreshNearbyMerchants]);
+
+  useEffect(() => {
+    requestLocationPermission();
+  }, [requestLocationPermission]);
+
+  const openMerchantDetail = async (merchant: NearbyMerchant) => {
+    const { data } = await getMerchantById(merchant.merchant_id);
+
+    setSelectedMerchant(
+      data || {
+        id: merchant.merchant_id,
+        business_name: merchant.business_name,
+        latitude: merchant.latitude,
+        longitude: merchant.longitude,
+      },
+    );
     setShowModal(true);
   };
 
-  const openGoogleMapsNavigation = (location: LocationData) => {
-    const url = Platform.select({
-      ios: `maps://app?daddr=${location.latitude},${location.longitude}&dirflg=d`,
-      android: `google.navigation:q=${location.latitude},${location.longitude}`,
+  const navigateToMerchant = (merchant: MerchantDetail) => {
+    const destination = `${merchant.latitude},${merchant.longitude}`;
+
+    const appUrl = Platform.select({
+      ios: `maps://app?daddr=${destination}&dirflg=d`,
+      android: `google.navigation:q=${destination}`,
+      default: '',
     });
 
-    if (url) {
-      Linking.canOpenURL(url).then((supported) => {
+    if (appUrl) {
+      Linking.canOpenURL(appUrl).then((supported) => {
         if (supported) {
-          Linking.openURL(url);
+          Linking.openURL(appUrl);
         } else {
-          // Fallback to web Google Maps
-          const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${location.latitude},${location.longitude}`;
-          Linking.openURL(webUrl);
+          Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${destination}`);
         }
       });
-    } else {
-      // Web fallback
-      const webUrl = `https://www.google.com/maps/dir/?api=1&destination=${location.latitude},${location.longitude}`;
-      Linking.openURL(webUrl);
-    }
-  };
-
-  const centerOnUserLocation = () => {
-    if (location) {
-      const newRegion: Region = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      };
-      setRegion(newRegion);
-      if (mapRef.current) {
-        mapRef.current.animateToRegion(newRegion, 1000);
-      }
-    } else {
-      getCurrentLocation();
     }
   };
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Search Bar */}
-      <View style={[styles.searchContainer, { backgroundColor: theme.background }]}>
-        <View style={[styles.searchBar, { borderColor: theme.icon, backgroundColor: '#FFFFFF' }]}>
+      <View style={[styles.searchContainer, { backgroundColor: theme.background }]}> 
+        <View style={[styles.searchBar, { borderColor: theme.icon, backgroundColor: '#FFFFFF' }]}> 
           <Ionicons name="search" size={20} color={theme.icon} style={styles.searchIcon} />
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
-            placeholder="Search locations, services..."
+            placeholder="Search store name..."
             placeholderTextColor={theme.icon}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -221,19 +184,16 @@ export default function ExploreScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity
-          style={[styles.locationButton, { backgroundColor: '#2F4366' }]}
-          onPress={centerOnUserLocation}
-        >
+
+        <TouchableOpacity style={styles.locationButton} onPress={refreshNearbyMerchants}>
           <Ionicons name="locate" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      {/* Map */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2F4366" />
-          <Text style={[styles.loadingText, { color: theme.text }]}>Loading map...</Text>
+          <Text style={[styles.loadingText, { color: theme.text }]}>Finding nearby stores...</Text>
         </View>
       ) : (
         <MapView
@@ -244,90 +204,61 @@ export default function ExploreScreen() {
           onRegionChangeComplete={setRegion}
           showsUserLocation={locationPermission}
           showsMyLocationButton={false}
-          customMapStyle={colorScheme === 'dark' ? darkMapStyle : []}
         >
-          {filteredLocations.map((location) => (
+          {filteredMerchants.map((merchant) => (
             <Marker
-              key={location.id}
-              coordinate={{
-                latitude: location.latitude,
-                longitude: location.longitude,
-              }}
-              title={location.name}
-              description={location.address}
-              onPress={() => handleMarkerPress(location)}
+              key={merchant.merchant_id}
+              coordinate={{ latitude: merchant.latitude, longitude: merchant.longitude }}
+              title={merchant.business_name}
+              description={`${Math.round(merchant.distance_meters)}m away`}
+              onPress={() => openMerchantDetail(merchant)}
             >
-              <View style={styles.markerContainer}>
-                <View style={[styles.markerPin, { backgroundColor: '#2F4366' }]}>
-                  <Ionicons name="location" size={20} color="#FFFFFF" />
-                </View>
+              <View style={styles.markerPin}>
+                <Ionicons name="storefront" size={16} color="#FFFFFF" />
               </View>
             </Marker>
           ))}
         </MapView>
       )}
 
-      {/* Results Count */}
       {!loading && (
-        <View style={[styles.resultsContainer, { backgroundColor: '#FFFFFF' }]}>
-          <Text style={[styles.resultsText, { color: theme.text }]}>
-            {filteredLocations.length} location{filteredLocations.length !== 1 ? 's' : ''} found
+        <View style={styles.resultsContainer}>
+          <Text style={[styles.resultsText, { color: theme.text }]}> 
+            {filteredMerchants.length} Stampworth Business App store{filteredMerchants.length === 1 ? '' : 's'} nearby
           </Text>
         </View>
       )}
 
-      {/* Location Detail Modal */}
-      <Modal
-        visible={showModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowModal(false)}
-      >
+      <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.background }]}>
+          <View style={[styles.modalContent, { backgroundColor: theme.background }]}> 
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>
-                {selectedLocation?.name}
-              </Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>{selectedMerchant?.business_name}</Text>
               <TouchableOpacity onPress={() => setShowModal(false)}>
                 <Ionicons name="close" size={24} color={theme.text} />
               </TouchableOpacity>
             </View>
 
-            {selectedLocation && (
-              <ScrollView style={styles.modalBody}>
+            {selectedMerchant && (
+              <ScrollView>
                 <View style={styles.modalSection}>
                   <Ionicons name="location-outline" size={20} color={theme.icon} />
-                  <Text style={[styles.modalAddress, { color: theme.text }]}>
-                    {selectedLocation.address}
+                  <Text style={[styles.modalAddress, { color: theme.text }]}> 
+                    {[selectedMerchant.address, selectedMerchant.city, selectedMerchant.state, selectedMerchant.postal_code, selectedMerchant.country]
+                      .filter(Boolean)
+                      .join(', ') || 'Address unavailable'}
                   </Text>
                 </View>
 
-                <View style={styles.modalSection}>
-                  <Ionicons name="list-outline" size={20} color={theme.icon} />
-                  <View style={styles.servicesContainer}>
-                    <Text style={[styles.servicesLabel, { color: theme.text }]}>Services:</Text>
-                    <View style={styles.servicesList}>
-                      {selectedLocation.services.map((service, index) => (
-                        <View key={index} style={[styles.serviceTag, { backgroundColor: '#E8F4F8' }]}>
-                          <Text style={[styles.serviceText, { color: '#2F4366' }]}>{service}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                </View>
-
                 <TouchableOpacity
-                  style={[styles.navigateButton, { backgroundColor: '#2F4366' }]}
+                  style={styles.navigateButton}
                   onPress={() => {
-                    if (selectedLocation) {
-                      openGoogleMapsNavigation(selectedLocation);
-                      setShowModal(false);
-                    }
+                    navigateToMerchant(selectedMerchant);
+                    setShowModal(false);
                   }}
                 >
                   <Ionicons name="navigate" size={20} color="#FFFFFF" />
-                  <Text style={styles.navigateButtonText}>Navigate with Google Maps</Text>
+                  <Text style={styles.navigateButtonText}>Navigate</Text>
                 </TouchableOpacity>
               </ScrollView>
             )}
@@ -338,173 +269,128 @@ export default function ExploreScreen() {
   );
 }
 
-const darkMapStyle = [
-  {
-    elementType: 'geometry',
-    stylers: [{ color: '#242f3e' }],
-  },
-  {
-    elementType: 'labels.text.stroke',
-    stylers: [{ color: '#242f3e' }],
-  },
-  {
-    elementType: 'labels.text.fill',
-    stylers: [{ color: '#746855' }],
-  },
-];
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 12,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    zIndex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 56,
+    paddingBottom: 12,
+    gap: 10,
+    zIndex: 2,
   },
   searchBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 12,
     height: 48,
   },
-  searchIcon: {
-    marginRight: 8,
-  },
+  searchIcon: { marginRight: 8 },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Poppins-Regular',
   },
   locationButton: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: 10,
+    backgroundColor: '#2F4366',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  map: {
-    flex: 1,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
   },
   loadingText: {
-    marginTop: 12,
     fontSize: 14,
     fontFamily: 'Poppins-Regular',
   },
-  markerContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  map: { flex: 1 },
   markerPin: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#2F4366',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
   },
   resultsContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#EEF0F2',
+    position: 'absolute',
+    bottom: 20,
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   resultsText: {
-    fontSize: 12,
-    fontFamily: 'Poppins-Regular',
+    fontSize: 13,
+    fontFamily: 'Poppins-SemiBold',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
-    paddingBottom: 40,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 18,
+    minHeight: 210,
+    maxHeight: '65%',
   },
   modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEF0F2',
+    justifyContent: 'space-between',
+    marginBottom: 14,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 19,
     fontFamily: 'Poppins-SemiBold',
     flex: 1,
-  },
-  modalBody: {
-    padding: 20,
+    marginRight: 12,
   },
   modalSection: {
     flexDirection: 'row',
-    marginBottom: 20,
     alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 20,
   },
   modalAddress: {
     flex: 1,
-    marginLeft: 12,
     fontSize: 14,
-    fontFamily: 'Poppins-Regular',
     lineHeight: 20,
-  },
-  servicesContainer: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  servicesLabel: {
-    fontSize: 14,
-    fontFamily: 'Poppins-SemiBold',
-    marginBottom: 8,
-  },
-  servicesList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  serviceTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  serviceText: {
-    fontSize: 12,
     fontFamily: 'Poppins-Regular',
   },
   navigateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 8,
     gap: 8,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: '#2F4366',
   },
   navigateButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: 'Poppins-SemiBold',
   },
 });

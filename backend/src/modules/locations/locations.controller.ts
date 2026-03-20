@@ -14,45 +14,45 @@ export class LocationsController {
     return this.locationsService.findNearbyStores(latitude, longitude, maxDistance);
   }
 
-  @Get('nearby-users/:businessId')
+  @Get('nearby-customers/:merchantId')
   findNearbyUsers(
-    @Param('businessId') businessId: string,
+    @Param('merchantId') merchantId: string,
     @Query('maxDistance') maxDistance?: number,
   ) {
-    return this.locationsService.findNearbyUsers(businessId, maxDistance);
+    return this.locationsService.findNearbyUsers(merchantId, maxDistance);
   }
 
   @Post('check-geofence')
   checkGeofence(
     @Body('latitude') latitude: number,
     @Body('longitude') longitude: number,
-    @Body('businessId') businessId: string,
+    @Body('merchantId') merchantId: string,
   ) {
-    return this.locationsService.checkGeofence(latitude, longitude, businessId);
+    return this.locationsService.checkGeofence(latitude, longitude, merchantId);
   }
 
   @Post('update-location')
   updateUserLocation(
-    @Body('userId') userId: string,
+    @Body('customerId') customerId: string,
     @Body('latitude') latitude: number,
     @Body('longitude') longitude: number,
     @Body('accuracy') accuracy?: number,
   ) {
-    return this.locationsService.updateUserLocation(userId, latitude, longitude, accuracy);
+    return this.locationsService.updateUserLocation(customerId, latitude, longitude, accuracy);
   }
 
-  @Get('store-visits/:businessId')
-  getStoreVisits(@Param('businessId') businessId: string) {
-    return this.locationsService.getStoreVisits(businessId);
+  @Get('store-visits/:merchantId')
+  getStoreVisits(@Param('merchantId') merchantId: string) {
+    return this.locationsService.getStoreVisits(merchantId);
   }
 
   @Post('store-visit')
   createStoreVisit(
-    @Body('userId') userId: string,
-    @Body('businessId') businessId: string,
+    @Body('customerId') customerId: string,
+    @Body('merchantId') merchantId: string,
     @Body('latitude') latitude: number,
     @Body('longitude') longitude: number,
   ) {
-    return this.locationsService.createStoreVisit(userId, businessId, latitude, longitude);
+    return this.locationsService.createStoreVisit(customerId, merchantId, latitude, longitude);
   }
 }

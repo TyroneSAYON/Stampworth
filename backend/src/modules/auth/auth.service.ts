@@ -1,5 +1,5 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
-import { supabase } from '@/config/supabase.config';
+import { supabase, supabaseAdmin } from '@/config/supabase.config';
 import { BusinessSignUpDto, BusinessSignInDto } from './dto/business-signup.dto';
 
 @Injectable()
@@ -16,12 +16,13 @@ export class AuthService {
         throw new BadRequestException(authError.message);
       }
 
-      // Create business record
-      const { data: businessData, error: businessError } = await supabase
-        .from('businesses')
+      // Create merchant record linked to auth user
+      const { data: businessData, error: businessError } = await supabaseAdmin
+        .from('merchants')
         .insert({
+          auth_id: authData.user?.id,
           owner_email: signUpDto.email,
-          name: signUpDto.businessName,
+          business_name: signUpDto.businessName,
           address: signUpDto.address,
           city: signUpDto.city,
           state: signUpDto.state,
@@ -59,8 +60,8 @@ export class AuthService {
       }
 
       // Get business data
-      const { data: businessData, error: businessError } = await supabase
-        .from('businesses')
+      const { data: businessData, error: businessError } = await supabaseAdmin
+        .from('merchants')
         .select('*')
         .eq('owner_email', signInDto.email)
         .single();

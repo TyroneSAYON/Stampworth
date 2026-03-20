@@ -11,9 +11,9 @@ export class QRCodesController {
     return this.qrCodesService.createQRCode(createQRDto);
   }
 
-  @Get('business/:businessId')
-  getBusinessQRCodes(@Param('businessId') businessId: string) {
-    return this.qrCodesService.getBusinessQRCodes(businessId);
+  @Get('merchant/:merchantId')
+  getBusinessQRCodes(@Param('merchantId') merchantId: string) {
+    return this.qrCodesService.getBusinessQRCodes(merchantId);
   }
 
   @Post('validate/:codeValue')
@@ -26,17 +26,17 @@ export class QRCodesController {
     return this.qrCodesService.deactivateQRCode(id);
   }
 
-  @Post('customer/:userId')
+  @Post('customer/:customerId')
   generateCustomerQRCode(
-    @Param('userId') userId: string,
+    @Param('customerId') customerId: string,
     @Body('qrCodeValue') qrCodeValue: string,
     @Body('qrCodeImageUrl') qrCodeImageUrl?: string,
   ) {
-    return this.qrCodesService.generateCustomerQRCode(userId, qrCodeValue, qrCodeImageUrl);
+    return this.qrCodesService.generateCustomerQRCode(customerId, qrCodeValue, qrCodeImageUrl);
   }
 
-  @Get('customer/:userId')
-  getUserCustomerQRCodes(@Param('userId') userId: string) {
-    return this.qrCodesService.getUserCustomerQRCodes(userId);
+  @Get('customer/:customerId')
+  getUserCustomerQRCodes(@Param('customerId') customerId: string) {
+    return this.qrCodesService.getUserCustomerQRCodes(customerId);
   }
 }

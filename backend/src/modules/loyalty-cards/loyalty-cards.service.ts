@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { supabase } from '@/config/supabase.config';
+import { supabaseAdmin } from '@/config/supabase.config';
 import { CreateLoyaltyCardDto } from './dto/create-loyalty-card.dto';
 
 @Injectable()
@@ -7,22 +7,22 @@ export class LoyaltyCardsService {
   async createCard(createCardDto: CreateLoyaltyCardDto) {
     try {
       // Check if card already exists
-      const { data: existingCard } = await supabase
+      const { data: existingCard } = await supabaseAdmin
         .from('loyalty_cards')
         .select('*')
-        .eq('user_id', createCardDto.userId)
-        .eq('business_id', createCardDto.businessId)
+        .eq('customer_id', createCardDto.customerId)
+        .eq('merchant_id', createCardDto.merchantId)
         .single();
 
       if (existingCard) {
         throw new BadRequestException('Card already exists for this customer and business');
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('loyalty_cards')
         .insert({
-          user_id: createCardDto.userId,
-          business_id: createCardDto.businessId,
+          customer_id: createCardDto.customerId,
+          merchant_id: createCardDto.merchantId,
         })
         .select()
         .single();
@@ -39,10 +39,10 @@ export class LoyaltyCardsService {
 
   async getUserCards(userId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('loyalty_cards')
-        .select('*, businesses(name, logo_url, geofence_radius_meters, latitude, longitude)')
-        .eq('user_id', userId);
+        .select('*, merchants(business_name, logo_url, geofence_radius_meters, latitude, longitude), stamp_settings(*)')
+        .eq('customer_id', userId);
 
       if (error) {
         throw new BadRequestException(error.message);
@@ -56,10 +56,10 @@ export class LoyaltyCardsService {
 
   async getBusinessCards(businessId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('loyalty_cards')
-        .select('*, users(full_name, email)')
-        .eq('business_id', businessId);
+        .select('*, customers(full_name, email, username)')
+        .eq('merchant_id', businessId);
 
       if (error) {
         throw new BadRequestException(error.message);
@@ -73,9 +73,9 @@ export class LoyaltyCardsService {
 
   async getCardDetail(cardId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('loyalty_cards')
-        .select('*, businesses(*), users(*), stamps(*)')
+        .select('*, merchants(*), customers(*), stamps(*)')
         .eq('id', cardId)
         .single();
 

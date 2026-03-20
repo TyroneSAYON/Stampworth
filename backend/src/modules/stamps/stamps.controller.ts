@@ -16,13 +16,13 @@ export class StampsController {
     return this.stampsService.getCardStamps(loyaltyCardId);
   }
 
-  @Get('user/:userId')
-  getUserStamps(@Param('userId') userId: string) {
-    return this.stampsService.getUserStamps(userId);
+  @Get('customer/:customerId')
+  getUserStamps(@Param('customerId') customerId: string) {
+    return this.stampsService.getUserStamps(customerId);
   }
 
-  @Get('business/:businessId')
-  getBusinessStamps(@Param('businessId') businessId: string) {
-    return this.stampsService.getBusinessStamps(businessId);
+  @Get('merchant/:merchantId')
+  getBusinessStamps(@Param('merchantId') merchantId: string) {
+    return this.stampsService.getBusinessStamps(merchantId);
   }
 }

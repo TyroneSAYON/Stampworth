@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { supabase } from '@/config/supabase.config';
+import { supabaseAdmin } from '@/config/supabase.config';
 import { CreateStampDto } from './dto/create-stamp.dto';
 
 @Injectable()
@@ -7,14 +7,12 @@ export class StampsService {
   async addStamp(createStampDto: CreateStampDto) {
     try {
       // Add stamp
-      const { data: stampData, error: stampError } = await supabase
+      const { data: stampData, error: stampError } = await supabaseAdmin
         .from('stamps')
         .insert({
           loyalty_card_id: createStampDto.loyaltyCardId,
-          business_id: createStampDto.businessId,
-          user_id: createStampDto.userId,
-          qr_code_id: createStampDto.qrCodeId,
-          notes: createStampDto.notes,
+          merchant_id: createStampDto.merchantId,
+          customer_id: createStampDto.customerId,
           earned_date: new Date().toISOString(),
         })
         .select()
@@ -24,19 +22,37 @@ export class StampsService {
         throw new BadRequestException(stampError.message);
       }
 
-      // Update loyalty card stamp count
-      await supabase.rpc('increment_stamp_count', {
-        card_id: createStampDto.loyaltyCardId,
-      });
+      // Update loyalty card stamp count after issuing a new stamp
+      const { data: card, error: cardError } = await supabaseAdmin
+        .from('loyalty_cards')
+        .select('stamp_count, total_stamps_earned')
+        .eq('id', createStampDto.loyaltyCardId)
+        .single();
+
+      if (cardError) {
+        throw new BadRequestException(cardError.message);
+      }
+
+      const nextStampCount = (card?.stamp_count || 0) + 1;
+      const totalEarned = (card?.total_stamps_earned || 0) + 1;
+
+      await supabaseAdmin
+        .from('loyalty_cards')
+        .update({
+          stamp_count: nextStampCount,
+          total_stamps_earned: totalEarned,
+          is_free_redemption: false,
+        })
+        .eq('id', createStampDto.loyaltyCardId);
 
       // Create transaction record
-      await supabase.from('transactions').insert({
+      await supabaseAdmin.from('transactions').insert({
         loyalty_card_id: createStampDto.loyaltyCardId,
-        business_id: createStampDto.businessId,
-        user_id: createStampDto.userId,
-        transaction_type: 'stamp_earned',
-        stamp_count: 1,
-        qr_code_id: createStampDto.qrCodeId,
+        merchant_id: createStampDto.merchantId,
+        customer_id: createStampDto.customerId,
+        transaction_type: 'STAMP_EARNED',
+        stamp_count_after: nextStampCount,
+        notes: createStampDto.notes,
       });
 
       return stampData;
@@ -47,7 +63,7 @@ export class StampsService {
 
   async getCardStamps(loyaltyCardId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('stamps')
         .select('*')
         .eq('loyalty_card_id', loyaltyCardId)
@@ -65,10 +81,10 @@ export class StampsService {
 
   async getUserStamps(userId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('stamps')
-        .select('*, loyalty_cards(businesses(name))')
-        .eq('user_id', userId)
+        .select('*, loyalty_cards(merchants(business_name))')
+        .eq('customer_id', userId)
         .order('earned_date', { ascending: false });
 
       if (error) {
@@ -83,10 +99,10 @@ export class StampsService {
 
   async getBusinessStamps(businessId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('stamps')
-        .select('*, users(full_name, email)')
-        .eq('business_id', businessId)
+        .select('*, customers(full_name, email, username)')
+        .eq('merchant_id', businessId)
         .order('earned_date', { ascending: false });
 
       if (error) {

@@ -1,13 +1,13 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { supabase } from '@/config/supabase.config';
+import { supabaseAdmin } from '@/config/supabase.config';
 
 @Injectable()
 export class LocationsService {
   async findNearbyStores(latitude: number, longitude: number, maxDistance: number = 5000) {
     try {
-      const { data, error } = await supabase.rpc('find_nearby_stores', {
-        user_lat: latitude,
-        user_lon: longitude,
+      const { data, error } = await supabaseAdmin.rpc('find_nearby_merchants', {
+        customer_lat: latitude,
+        customer_lon: longitude,
         max_distance_meters: maxDistance,
       });
 
@@ -21,10 +21,10 @@ export class LocationsService {
     }
   }
 
-  async findNearbyUsers(businessId: string, maxDistance: number = 1000) {
+  async findNearbyUsers(merchantId: string, maxDistance: number = 1000) {
     try {
-      const { data, error } = await supabase.rpc('find_nearby_users', {
-        store_business_id: businessId,
+      const { data, error } = await supabaseAdmin.rpc('find_nearby_customers', {
+        merchant_id_param: merchantId,
         max_distance_meters: maxDistance,
       });
 
@@ -38,12 +38,11 @@ export class LocationsService {
     }
   }
 
-  async checkGeofence(latitude: number, longitude: number, businessId: string) {
+  async checkGeofence(customerId: string, merchantId: string) {
     try {
-      const { data, error } = await supabase.rpc('is_user_in_geofence', {
-        user_lat: latitude,
-        user_lon: longitude,
-        store_business_id: businessId,
+      const { data, error } = await supabaseAdmin.rpc('is_customer_in_geofence', {
+        customer_id_param: customerId,
+        merchant_id_param: merchantId,
       });
 
       if (error) {
@@ -56,12 +55,12 @@ export class LocationsService {
     }
   }
 
-  async updateUserLocation(userId: string, latitude: number, longitude: number, accuracy?: number) {
+  async updateUserLocation(customerId: string, latitude: number, longitude: number, accuracy?: number) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('user_locations')
         .insert({
-          user_id: userId,
+          customer_id: customerId,
           latitude,
           longitude,
           accuracy_meters: accuracy,
@@ -79,13 +78,13 @@ export class LocationsService {
     }
   }
 
-  async getStoreVisits(businessId: string) {
+  async getStoreVisits(merchantId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('store_visits')
-        .select('*, users(full_name, email)')
-        .eq('business_id', businessId)
-        .order('visited_at', { ascending: false });
+        .select('*, customers(full_name, email, username)')
+        .eq('merchant_id', merchantId)
+        .order('created_at', { ascending: false });
 
       if (error) {
         throw new BadRequestException(error.message);
@@ -97,13 +96,13 @@ export class LocationsService {
     }
   }
 
-  async createStoreVisit(userId: string, businessId: string, latitude: number, longitude: number) {
+  async createStoreVisit(customerId: string, merchantId: string, latitude: number, longitude: number) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('store_visits')
         .insert({
-          user_id: userId,
-          business_id: businessId,
+          customer_id: customerId,
+          merchant_id: merchantId,
           visit_latitude: latitude,
           visit_longitude: longitude,
         })

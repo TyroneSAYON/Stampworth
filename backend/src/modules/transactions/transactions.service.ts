@@ -1,14 +1,14 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { supabase } from '@/config/supabase.config';
+import { supabaseAdmin } from '@/config/supabase.config';
 
 @Injectable()
 export class TransactionsService {
   async getBusinessTransactions(businessId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('transactions')
-        .select('*, users(full_name, email)')
-        .eq('business_id', businessId)
+        .select('*, customers(full_name, email, username)')
+        .eq('merchant_id', businessId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -23,10 +23,10 @@ export class TransactionsService {
 
   async getUserTransactions(userId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('transactions')
-        .select('*, businesses(name)')
-        .eq('user_id', userId)
+        .select('*, merchants(business_name)')
+        .eq('customer_id', userId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -41,7 +41,7 @@ export class TransactionsService {
 
   async getCardTransactions(loyaltyCardId: string) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('transactions')
         .select('*')
         .eq('loyalty_card_id', loyaltyCardId)

@@ -11,14 +11,14 @@ export class LoyaltyCardsController {
     return this.loyaltyCardsService.createCard(createCardDto);
   }
 
-  @Get('user/:userId')
-  getUserCards(@Param('userId') userId: string) {
-    return this.loyaltyCardsService.getUserCards(userId);
+  @Get('customer/:customerId')
+  getUserCards(@Param('customerId') customerId: string) {
+    return this.loyaltyCardsService.getUserCards(customerId);
   }
 
-  @Get('business/:businessId')
-  getBusinessCards(@Param('businessId') businessId: string) {
-    return this.loyaltyCardsService.getBusinessCards(businessId);
+  @Get('merchant/:merchantId')
+  getBusinessCards(@Param('merchantId') merchantId: string) {
+    return this.loyaltyCardsService.getBusinessCards(merchantId);
   }
 
   @Get(':cardId')

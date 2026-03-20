@@ -1,11 +1,18 @@
-import { useState } from 'react';
-import { Alert, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, ActivityIndicator, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import {
+  getCurrentMerchantProfile,
+  getMerchantStampRules,
+  issueStampForCustomer,
+  resolveCustomerById,
+  resolveCustomerFromScannedQR,
+} from '@/lib/database';
 
 export default function ScanScreen() {
   const colorScheme = useColorScheme();
@@ -15,56 +22,91 @@ export default function ScanScreen() {
   const [showCamera, setShowCamera] = useState(false);
   const [showIdInput, setShowIdInput] = useState(false);
   const [customerId, setCustomerId] = useState('');
-  
-  // Sample conditions & redemption rules - in real app, this would come from state/backend
-  const conditions = 'Buy 10 coffees and get your 11th coffee free.';
 
-  const handleBarCodeScanned = ({ data }: BarcodeScanningResult) => {
-    setScanned(true);
-    setShowCamera(false);
-    // Process the scanned QR code data
-    Alert.alert('QR Code Scanned', `Customer ID: ${data}`, [
-      {
-        text: 'Issue Stamp',
-        onPress: () => {
-          Alert.alert('Success', 'Stamp issued successfully!');
-          setScanned(false);
-          setShowCamera(true);
-          setShowIdInput(false);
-        },
-      },
-      {
-        text: 'Cancel',
-        style: 'cancel',
-        onPress: () => {
-          setScanned(false);
-          setShowCamera(true);
-        },
-      },
-    ]);
+  const [merchantId, setMerchantId] = useState<string | null>(null);
+  const [conditions, setConditions] = useState('Buy 10 coffees and get your 11th coffee free.');
+  const [issuingStamp, setIssuingStamp] = useState(false);
+
+  useEffect(() => {
+    const loadMerchantContext = async () => {
+      const { data: merchant, error } = await getCurrentMerchantProfile();
+      if (error || !merchant) {
+        Alert.alert('Merchant account not found', 'Please sign in with your business account.');
+        return;
+      }
+
+      setMerchantId(merchant.id);
+
+      const { data: rules } = await getMerchantStampRules(merchant.id);
+      if (rules?.promotion_text) {
+        setConditions(rules.promotion_text);
+      }
+    };
+
+    loadMerchantContext();
+  }, []);
+
+  const issueStampToCustomer = async (resolvedCustomerId: string, source: 'QR' | 'MANUAL', reference?: string) => {
+    if (!merchantId) {
+      Alert.alert('Merchant not loaded', 'Please sign in again before issuing a stamp.');
+      return;
+    }
+
+    setIssuingStamp(true);
+
+    const { data, error } = await issueStampForCustomer(merchantId, resolvedCustomerId, source, reference);
+
+    setIssuingStamp(false);
+
+    if (error || !data) {
+      Alert.alert('Failed to issue stamp', error?.message || 'Please try again.');
+      return;
+    }
+
+    const redemptionText = data.freeRedemptionReached
+      ? '\nCustomer has reached FREE REDEMPTION.'
+      : '';
+
+    Alert.alert('Stamp Issued', `Stamp count is now ${data.stampCount}.${redemptionText}`);
   };
 
-  const handleIdSearch = () => {
+  const handleBarCodeScanned = async ({ data }: BarcodeScanningResult) => {
+    setScanned(true);
+    setShowCamera(false);
+
+    const { data: resolved, error } = await resolveCustomerFromScannedQR(data);
+
+    if (error || !resolved?.customer?.id) {
+      Alert.alert('Invalid QR code', error?.message || 'Only QR codes generated from customerapp are accepted.');
+      setScanned(false);
+      setShowCamera(true);
+      return;
+    }
+
+    await issueStampToCustomer(resolved.customer.id, 'QR', data);
+
+    setScanned(false);
+    setShowCamera(true);
+    setShowIdInput(false);
+  };
+
+  const handleIdSearch = async () => {
     if (!customerId.trim()) {
       Alert.alert('Required', 'Please enter a customer ID');
       return;
     }
-    // Search for customer by ID
-    Alert.alert('Customer Found', `Customer ID: ${customerId}`, [
-      {
-        text: 'Issue Stamp',
-        onPress: () => {
-          Alert.alert('Success', 'Stamp issued successfully!');
-          setCustomerId('');
-          setShowIdInput(false);
-          setShowCamera(true);
-        },
-      },
-      {
-        text: 'Cancel',
-        style: 'cancel',
-      },
-    ]);
+
+    const { data, error } = await resolveCustomerById(customerId.trim());
+    if (error || !data?.id) {
+      Alert.alert('Customer not found', 'Enter a valid customer ID.');
+      return;
+    }
+
+    await issueStampToCustomer(data.id, 'MANUAL', customerId.trim());
+
+    setCustomerId('');
+    setShowIdInput(false);
+    setShowCamera(true);
   };
 
   const handleQrScanFailed = () => {
@@ -144,6 +186,12 @@ export default function ScanScreen() {
         {/* Greeting */}
         <View style={styles.greetingContainer}>
           <Text style={styles.greeting}>Scan Customer QR Code</Text>
+          {issuingStamp && (
+            <View style={styles.processingRow}>
+              <ActivityIndicator size="small" color="#2F4366" />
+              <Text style={styles.processingText}>Verifying customer QR and issuing stamp...</Text>
+            </View>
+          )}
         </View>
 
         {/* QR Code Scanner Container */}
@@ -151,6 +199,7 @@ export default function ScanScreen() {
           <TouchableOpacity
             style={styles.scanButtonContainer}
             onPress={() => setShowCamera(true)}
+            disabled={issuingStamp}
           >
             <View style={styles.scanButtonBox}>
               <Ionicons name="qr-code-outline" size={64} color="#2F4366" />
@@ -217,6 +266,7 @@ export default function ScanScreen() {
               <TouchableOpacity
                 style={[styles.searchButton, { backgroundColor: '#2F4366' }]}
                 onPress={handleIdSearch}
+                disabled={issuingStamp}
               >
                 <Text style={styles.searchButtonText}>Search</Text>
               </TouchableOpacity>
@@ -229,6 +279,7 @@ export default function ScanScreen() {
           <TouchableOpacity
             style={styles.fallbackButton}
             onPress={handleQrScanFailed}
+            disabled={issuingStamp}
           >
             <Ionicons name="id-card-outline" size={18} color="#2F4366" />
             <Text style={styles.fallbackButtonText}>Enter ID Manually</Text>
@@ -329,6 +380,17 @@ const styles = StyleSheet.create({
     color: '#2F4366',
     textAlign: 'center',
     fontFamily: 'Poppins-SemiBold',
+  },
+  processingRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  processingText: {
+    fontSize: 12,
+    color: '#2F4366',
+    fontFamily: 'Poppins-Regular',
   },
   qrCodeContainer: {
     width: 280,

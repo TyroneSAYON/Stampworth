@@ -5,14 +5,14 @@ import { TransactionsService } from './transactions.service';
 export class TransactionsController {
   constructor(private transactionsService: TransactionsService) {}
 
-  @Get('business/:businessId')
-  getBusinessTransactions(@Param('businessId') businessId: string) {
-    return this.transactionsService.getBusinessTransactions(businessId);
+  @Get('merchant/:merchantId')
+  getBusinessTransactions(@Param('merchantId') merchantId: string) {
+    return this.transactionsService.getBusinessTransactions(merchantId);
   }
 
-  @Get('user/:userId')
-  getUserTransactions(@Param('userId') userId: string) {
-    return this.transactionsService.getUserTransactions(userId);
+  @Get('customer/:customerId')
+  getUserTransactions(@Param('customerId') customerId: string) {
+    return this.transactionsService.getUserTransactions(customerId);
   }
 
   @Get('card/:cardId')

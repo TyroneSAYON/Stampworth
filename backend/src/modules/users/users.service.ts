@@ -1,12 +1,12 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { supabase } from '@/config/supabase.config';
+import { supabaseAdmin } from '@/config/supabase.config';
 
 @Injectable()
 export class UsersService {
   async getUserById(userId: string) {
     try {
-      const { data, error } = await supabase
-        .from('users')
+      const { data, error } = await supabaseAdmin
+        .from('customers')
         .select('*')
         .eq('id', userId)
         .single();
@@ -23,8 +23,8 @@ export class UsersService {
 
   async getUserByEmail(email: string) {
     try {
-      const { data, error } = await supabase
-        .from('users')
+      const { data, error } = await supabaseAdmin
+        .from('customers')
         .select('*')
         .eq('email', email)
         .single();
@@ -41,8 +41,8 @@ export class UsersService {
 
   async updateUser(userId: string, updateData: any) {
     try {
-      const { data, error } = await supabase
-        .from('users')
+      const { data, error } = await supabaseAdmin
+        .from('customers')
         .update(updateData)
         .eq('id', userId)
         .select()

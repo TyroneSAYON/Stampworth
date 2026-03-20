@@ -3,11 +3,11 @@ import { IsNotEmpty, IsUUID, IsOptional } from 'class-validator';
 export class CreateQRCodeDto {
   @IsNotEmpty()
   @IsUUID()
-  businessId: string;
+  merchantId: string;
 
   @IsNotEmpty()
-  codeValue: string;
+  qrCodeValue: string;
 
   @IsOptional()
-  codeImageUrl?: string;
+  qrCodeImageUrl?: string;
 }

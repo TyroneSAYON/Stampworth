@@ -7,11 +7,11 @@ export class CreateStampDto {
 
   @IsNotEmpty()
   @IsUUID()
-  businessId: string;
+  merchantId: string;
 
   @IsNotEmpty()
   @IsUUID()
-  userId: string;
+  customerId: string;
 
   @IsOptional()
   @IsUUID()

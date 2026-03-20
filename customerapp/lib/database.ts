@@ -1,109 +1,252 @@
 import { supabase } from '@/lib/supabase';
 
-// CUSTOMER APP: Get user's loyalty cards
-export const getUserLoyaltyCards = async (userId: string) => {
-  const { data, error } = await supabase
-    .from('loyalty_cards')
-    .select('*, businesses(name, logo_url, geofence_radius_meters, latitude, longitude)')
-    .eq('user_id', userId);
-  return { data, error };
+type CustomerProfile = {
+  id: string;
+  auth_id: string;
+  email: string;
+  username: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
 };
 
-// CUSTOMER APP: Get stamps for a specific card
+export const getOrCreateCustomerProfile = async () => {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return { data: null, error: userError || new Error('No authenticated user found') };
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from('customers')
+    .select('*')
+    .eq('auth_id', user.id)
+    .maybeSingle();
+
+  if (existingError) {
+    return { data: null, error: existingError };
+  }
+
+  if (existing) {
+    return { data: existing as CustomerProfile, error: null };
+  }
+
+  const email = user.email || '';
+  const metadataFullName = (user.user_metadata?.full_name as string | undefined) || null;
+  const baseUsername = (email.split('@')[0] || 'customer').replace(/[^a-zA-Z0-9_]/g, '');
+  const fallbackUsername = `${baseUsername || 'customer'}_${user.id.slice(0, 8)}`;
+
+  const { data: created, error: createError } = await supabase
+    .from('customers')
+    .upsert(
+      {
+        auth_id: user.id,
+        email,
+        username: fallbackUsername,
+        full_name: metadataFullName,
+        avatar_url: user.user_metadata?.avatar_url || null,
+      },
+      { onConflict: 'auth_id' },
+    )
+    .select('*')
+    .single();
+
+  return { data: created as CustomerProfile | null, error: createError };
+};
+
 export const getCardStamps = async (loyaltyCardId: string) => {
   const { data, error } = await supabase
     .from('stamps')
     .select('*')
     .eq('loyalty_card_id', loyaltyCardId)
     .order('earned_date', { ascending: false });
+
   return { data, error };
 };
 
-// CUSTOMER APP: Find nearby stores
+export const getUserLoyaltyCards = async (customerId: string) => {
+  const { data, error } = await supabase
+    .from('loyalty_cards')
+    .select('*, merchants(business_name, logo_url, geofence_radius_meters, latitude, longitude), stamp_settings(*)')
+    .eq('customer_id', customerId);
+
+  return { data, error };
+};
+
+export const getCustomerAnnouncements = async (customerId: string) => {
+  const { data: cards, error: cardsError } = await supabase
+    .from('loyalty_cards')
+    .select('merchant_id')
+    .eq('customer_id', customerId);
+
+  if (cardsError) {
+    return { data: null, error: cardsError };
+  }
+
+  const merchantIds = Array.from(new Set((cards || []).map((card) => card.merchant_id).filter(Boolean)));
+  if (merchantIds.length === 0) {
+    return { data: [], error: null };
+  }
+
+  const { data, error } = await supabase
+    .from('merchant_announcements')
+    .select('id, merchant_id, message, created_at, merchants(business_name)')
+    .eq('is_active', true)
+    .in('merchant_id', merchantIds)
+    .order('created_at', { ascending: false })
+    .limit(10);
+
+  return { data, error };
+};
+
 export const findNearbyStores = async (latitude: number, longitude: number, maxDistance: number = 5000) => {
-  const { data, error } = await supabase
-    .rpc('find_nearby_stores', {
-      user_lat: latitude,
-      user_lon: longitude,
-      max_distance_meters: maxDistance,
-    });
+  const { data, error } = await supabase.rpc('find_nearby_merchants', {
+    customer_lat: latitude,
+    customer_lon: longitude,
+    max_distance_meters: maxDistance,
+  });
+
   return { data, error };
 };
 
-// CUSTOMER APP: Check if user in geofence
-export const checkGeofence = async (latitude: number, longitude: number, businessId: string) => {
+export const getMerchantById = async (merchantId: string) => {
   const { data, error } = await supabase
-    .rpc('is_user_in_geofence', {
-      user_lat: latitude,
-      user_lon: longitude,
-      store_business_id: businessId,
-    });
+    .from('merchants')
+    .select('id, business_name, address, city, state, postal_code, country, latitude, longitude, logo_url')
+    .eq('id', merchantId)
+    .single();
+
   return { data, error };
 };
 
-// CUSTOMER APP: Generate customer QR code
-export const generateCustomerQRCode = async (userId: string, qrCodeValue: string, qrCodeImageUrl: string) => {
+export const checkGeofence = async (customerId: string, merchantId: string) => {
+  const { data, error } = await supabase.rpc('is_customer_in_geofence', {
+    customer_id_param: customerId,
+    merchant_id_param: merchantId,
+  });
+
+  return { data, error };
+};
+
+const buildStableCustomerQrValue = (customerId: string) => `STAMPWORTH:${customerId}`;
+
+export const getOrCreateCustomerQRCode = async (customerId: string) => {
+  const stableQrValue = buildStableCustomerQrValue(customerId);
+
+  const { data: existingActive, error: existingActiveError } = await supabase
+    .from('customer_qr_codes')
+    .select('*')
+    .eq('customer_id', customerId)
+    .eq('is_active', true)
+    .eq('qr_code_value', stableQrValue)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingActiveError) {
+    return { data: null, error: existingActiveError };
+  }
+
+  if (existingActive) {
+    return { data: existingActive, error: null };
+  }
+
+  const { data: existingRows, error: existingRowsError } = await supabase
+    .from('customer_qr_codes')
+    .select('*')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (existingRowsError) {
+    return { data: null, error: existingRowsError };
+  }
+
+  const existing = existingRows?.[0];
+
+  if (existing?.id) {
+    await supabase
+      .from('customer_qr_codes')
+      .update({ is_active: false })
+      .eq('customer_id', customerId)
+      .neq('id', existing.id)
+      .eq('is_active', true);
+
+    const { data: updated, error: updateError } = await supabase
+      .from('customer_qr_codes')
+      .update({
+        qr_code_value: stableQrValue,
+        is_active: true,
+      })
+      .eq('id', existing.id)
+      .select('*')
+      .single();
+
+    return { data: updated, error: updateError };
+  }
+
   const { data, error } = await supabase
     .from('customer_qr_codes')
     .insert({
-      user_id: userId,
-      qr_code_value: qrCodeValue,
-      qr_code_image_url: qrCodeImageUrl,
-    });
-  return { data, error };
-};
-
-// CUSTOMER APP: Get user's QR codes
-export const getUserQRCodes = async (userId: string) => {
-  const { data, error } = await supabase
-    .from('customer_qr_codes')
+      customer_id: customerId,
+      qr_code_value: stableQrValue,
+      is_active: true,
+    })
     .select('*')
-    .eq('user_id', userId);
+    .single();
+
   return { data, error };
 };
 
-// CUSTOMER APP: Get user's transactions
-export const getUserTransactions = async (userId: string) => {
+export const rotateCustomerQRCode = async (customerId: string) => {
+  // Keep backward compatibility for any old calls, but return stable QR.
+  return getOrCreateCustomerQRCode(customerId);
+};
+
+export const getUserTransactions = async (customerId: string) => {
   const { data, error } = await supabase
     .from('transactions')
-    .select('*, businesses(name)')
-    .eq('user_id', userId)
+    .select('*, merchants(business_name)')
+    .eq('customer_id', customerId)
     .order('created_at', { ascending: false });
+
   return { data, error };
 };
 
-// CUSTOMER APP: Get redeemed rewards
-export const getRedeemedRewards = async (userId: string) => {
+export const getRedeemedRewards = async (customerId: string) => {
   const { data, error } = await supabase
     .from('redeemed_rewards')
-    .select('*, businesses(name)')
-    .eq('user_id', userId)
+    .select('*, merchants(business_name)')
+    .eq('customer_id', customerId)
     .order('created_at', { ascending: false });
+
   return { data, error };
 };
 
-// CUSTOMER APP: Update user location
-export const updateUserLocation = async (userId: string, latitude: number, longitude: number, accuracy: number) => {
+export const updateUserLocation = async (customerId: string, latitude: number, longitude: number, accuracy: number) => {
   const { data, error } = await supabase
     .from('user_locations')
     .insert({
-      user_id: userId,
+      customer_id: customerId,
       latitude,
       longitude,
       accuracy_meters: accuracy,
     });
+
   return { data, error };
 };
 
-// CUSTOMER APP: Create store visit record
-export const createStoreVisit = async (userId: string, businessId: string, latitude: number, longitude: number) => {
+export const createStoreVisit = async (customerId: string, merchantId: string, latitude: number, longitude: number) => {
   const { data, error } = await supabase
     .from('store_visits')
     .insert({
-      user_id: userId,
-      business_id: businessId,
+      customer_id: customerId,
+      merchant_id: merchantId,
       visit_latitude: latitude,
       visit_longitude: longitude,
     });
+
   return { data, error };
 };

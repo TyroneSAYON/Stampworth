@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,14 +8,53 @@ import { router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getCurrentUser, signOut } from '@/lib/auth';
+import { getOrCreateCustomerProfile } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
 
 export default function AccountScreen() {
   const colorScheme = useColorScheme();
   const theme = useMemo(() => Colors[colorScheme ?? 'light'], [colorScheme]);
+  const avatarBucket = 'customer-avatars';
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
-  const [username, setUsername] = useState('Andrei');
-  const [email, setEmail] = useState('andrei@email.com');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+
+  useEffect(() => {
+    const loadAccount = async () => {
+      setLoading(true);
+
+      const user = await getCurrentUser();
+      if (!user) {
+        setLoading(false);
+        router.replace('/signin');
+        return;
+      }
+
+      const { data: customer } = await getOrCreateCustomerProfile();
+
+      setAuthUserId(user.id);
+      setEmail(user.email || customer?.email || '');
+      setUsername(
+        customer?.full_name ||
+          customer?.username ||
+          (user.user_metadata?.full_name as string | undefined) ||
+          (user.user_metadata?.name as string | undefined) ||
+          user.email?.split('@')[0] ||
+          'Customer',
+      );
+      setPhotoUri(customer?.avatar_url || (user.user_metadata?.avatar_url as string | undefined) || null);
+
+      setLoading(false);
+    };
+
+    loadAccount();
+  }, []);
 
   const pickPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -35,6 +74,127 @@ export default function AccountScreen() {
       setPhotoUri(result.assets[0].uri);
     }
   };
+
+  const uploadAvatarIfNeeded = async (uri: string) => {
+    if (!authUserId || uri.startsWith('http://') || uri.startsWith('https://')) {
+      return uri;
+    }
+
+    const fileExtension = uri.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
+    const normalizedExtension = fileExtension === 'png' ? 'png' : 'jpg';
+    const contentType = normalizedExtension === 'png' ? 'image/png' : 'image/jpeg';
+    const filePath = `${authUserId}/avatar.${normalizedExtension}`;
+
+    const response = await fetch(uri);
+    const fileData = await response.arrayBuffer();
+
+    const { error: uploadError } = await supabase.storage.from(avatarBucket).upload(filePath, fileData, {
+      contentType,
+      upsert: true,
+    });
+
+    if (uploadError) {
+      throw uploadError;
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from(avatarBucket).getPublicUrl(filePath);
+
+    return `${publicUrl}?v=${Date.now()}`;
+  };
+
+  const handleSaveProfile = async () => {
+    if (!authUserId) {
+      Alert.alert('Profile unavailable', 'Please sign in again.');
+      return;
+    }
+
+    setSaving(true);
+
+    let uploadedPhotoUrl = photoUri;
+    if (photoUri) {
+      try {
+        uploadedPhotoUrl = await uploadAvatarIfNeeded(photoUri);
+      } catch (error: any) {
+        const hint =
+          typeof error?.message === 'string' && error.message.toLowerCase().includes('bucket')
+            ? ' Create a public storage bucket named customer-avatars in Supabase first.'
+            : '';
+        Alert.alert('Photo upload failed', `${error?.message || 'Could not upload image.'}${hint}`);
+        setSaving(false);
+        return;
+      }
+    }
+
+    const { error } = await supabase
+      .from('customers')
+      .update({
+        full_name: username.trim(),
+        avatar_url: uploadedPhotoUrl,
+      })
+      .eq('auth_id', authUserId);
+
+    if (error) {
+      Alert.alert('Update failed', error.message);
+      setSaving(false);
+      return;
+    }
+
+    setPhotoUri(uploadedPhotoUrl || null);
+    setSaving(false);
+
+    Alert.alert('Profile updated', 'Your account center now reflects your latest profile details.');
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.replace('/signin');
+  };
+
+  const executeDeleteAccount = async () => {
+    if (deletingAccount) {
+      return;
+    }
+
+    setDeletingAccount(true);
+
+    const { error } = await supabase.rpc('delete_my_customer_account');
+
+    if (error) {
+      Alert.alert('Delete failed', error.message);
+      setDeletingAccount(false);
+      return;
+    }
+
+    await signOut();
+    setDeletingAccount(false);
+
+    Alert.alert('Account deleted', 'Your account and related customer data were permanently removed.', [
+      {
+        text: 'OK',
+        onPress: () => router.replace('/signin'),
+      },
+    ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert('Delete account', 'This will permanently delete your account and related data. Continue?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: executeDeleteAccount },
+    ]);
+  };
+
+  if (loading) {
+    return (
+      <ThemedView style={[styles.container, { backgroundColor: theme.background }]}> 
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color="#2F4366" />
+          <Text style={[styles.loadingText, { color: theme.text }]}>Loading account...</Text>
+        </View>
+      </ThemedView>
+    );
+  }
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -89,20 +249,21 @@ export default function AccountScreen() {
           <Ionicons name="mail-outline" size={18} color={theme.icon} style={styles.inputIcon} />
           <TextInput
             value={email}
-            onChangeText={setEmail}
             style={[styles.input, { color: theme.text }]}
-            placeholder="Update email"
+            placeholder="Email"
             placeholderTextColor={theme.icon}
             autoCapitalize="none"
             keyboardType="email-address"
+            editable={false}
           />
         </View>
 
         <TouchableOpacity
           style={styles.confirmButton}
-          onPress={() => Alert.alert('Profile updated', 'Your name and email have been updated.')}
+          onPress={handleSaveProfile}
+          disabled={saving}
         >
-          <Text style={styles.confirmButtonText}>Confirm changes</Text>
+          <Text style={styles.confirmButtonText}>{saving ? 'Saving...' : 'Confirm changes'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -112,39 +273,32 @@ export default function AccountScreen() {
 
         <TouchableOpacity
           style={styles.actionRow}
-          onPress={() => Alert.alert('Announcement', 'No announcements right now.')}
+          onPress={() => router.push('/terms')}
         >
-          <Text style={[styles.actionText, { color: theme.text }]}>Announcement</Text>
+          <Text style={[styles.actionText, { color: theme.text }]}>Terms of service</Text>
           <Ionicons name="chevron-forward" size={18} color={theme.icon} />
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.actionRow}
-          onPress={() =>
-            Alert.alert('Delete account', 'Are you sure you want to delete your account?', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete', style: 'destructive' },
-            ])
-          }
+          onPress={() => router.push('/policy')}
         >
-          <Text style={[styles.actionText, { color: '#C0392B' }]}>Delete Account</Text>
+          <Text style={[styles.actionText, { color: theme.text }]}>Policy</Text>
+          <Ionicons name="chevron-forward" size={18} color={theme.icon} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionRow}
+          onPress={handleDeleteAccount}
+          disabled={deletingAccount}
+        >
+          <Text style={[styles.actionText, { color: '#C0392B' }]}>{deletingAccount ? 'Deleting account...' : 'Delete Account'}</Text>
           <Ionicons name="trash-outline" size={18} color="#C0392B" />
         </TouchableOpacity>
       </View>
 
-      {/* Links */}
-      <View style={styles.linksRow}>
-        <TouchableOpacity onPress={() => router.push('/terms')}>
-          <Text style={[styles.linkText, { color: '#2F4366' }]}>Terms of service</Text>
-        </TouchableOpacity>
-        <Text style={[styles.linkDivider, { color: theme.icon }]}>•</Text>
-        <TouchableOpacity onPress={() => router.push('/policy')}>
-          <Text style={[styles.linkText, { color: '#2F4366' }]}>Policy</Text>
-        </TouchableOpacity>
-      </View>
-
       {/* Sign out */}
-      <TouchableOpacity style={styles.signOutButton} onPress={() => router.replace('/signin')}>
+      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
         <Text style={styles.signOutText}>Sign out</Text>
       </TouchableOpacity>
     </ThemedView>
@@ -155,6 +309,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 24,
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontFamily: 'Poppins-Regular',
   },
   header: {
     flexDirection: 'row',
@@ -282,21 +446,6 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 14,
     fontFamily: 'Poppins-Regular',
-  },
-  linksRow: {
-    marginTop: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  linkText: {
-    fontSize: 13,
-    fontFamily: 'Poppins-Regular',
-    textDecorationLine: 'underline',
-  },
-  linkDivider: {
-    fontSize: 12,
   },
   signOutButton: {
     marginTop: 24,

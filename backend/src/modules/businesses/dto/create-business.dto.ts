@@ -2,7 +2,7 @@ import { IsNotEmpty, IsOptional, IsNumber } from 'class-validator';
 
 export class CreateBusinessDto {
   @IsNotEmpty()
-  name: string;
+  businessName: string;
 
   @IsNotEmpty()
   address: string;
@@ -23,17 +23,17 @@ export class CreateBusinessDto {
   phone?: string;
 
   @IsOptional()
-  description?: string;
+  websiteUrl?: string;
 
   @IsOptional()
   logoUrl?: string;
 
   @IsNumber()
   @IsOptional()
-  stampsPerReward?: number;
+  stampsPerRedemption?: number;
 
   @IsOptional()
-  rewardDescription?: string;
+  redemptionRewardDescription?: string;
 
   @IsNumber()
   @IsOptional()
@@ -50,20 +50,20 @@ export class CreateBusinessDto {
 
 export class UpdateBusinessDto {
   @IsOptional()
-  name?: string;
+  businessName?: string;
 
   @IsOptional()
-  description?: string;
+  websiteUrl?: string;
 
   @IsOptional()
   phone?: string;
 
   @IsNumber()
   @IsOptional()
-  stampsPerReward?: number;
+  stampsPerRedemption?: number;
 
   @IsOptional()
-  rewardDescription?: string;
+  redemptionRewardDescription?: string;
 
   @IsNumber()
   @IsOptional()

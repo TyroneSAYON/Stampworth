@@ -6,15 +6,22 @@ import { router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getCurrentUser } from '@/lib/auth';
 
 export default function LoadingScreen() {
   const colorScheme = useColorScheme();
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      router.replace('/(tabs)/qrcode');
-    }, 5000);
+    const bootstrap = async () => {
+      const user = await getCurrentUser();
+      if (user) {
+        router.replace('/(tabs)/qrcode');
+      } else {
+        router.replace('/signin');
+      }
+    };
 
+    const timeout = setTimeout(bootstrap, 1200);
     return () => clearTimeout(timeout);
   }, []);
 
