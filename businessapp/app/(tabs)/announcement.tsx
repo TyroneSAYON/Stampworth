@@ -1,279 +1,145 @@
-import { useState } from 'react';
-import { Alert, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView, FlatList } from 'react-native';
+import { useState, useCallback } from 'react';
+import { Alert, ActivityIndicator, StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
+import { saveMerchantAnnouncement, getMerchantAnnouncements } from '@/lib/database';
 
 interface Announcement {
   id: string;
   message: string;
-  timestamp: Date;
-  sent: boolean;
+  created_at: string;
+  is_active: boolean;
 }
 
 export default function AnnouncementScreen() {
-  const colorScheme = useColorScheme();
-  const theme = Colors[colorScheme ?? 'light'];
-
   const [message, setMessage] = useState('');
-  const [announcements, setAnnouncements] = useState<Announcement[]>([
-    {
-      id: '1',
-      message: 'Welcome to our loyalty program! Collect stamps and earn rewards.',
-      timestamp: new Date(Date.now() - 86400000),
-      sent: true,
-    },
-  ]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
 
-  const handleSend = () => {
-    if (!message.trim()) {
-      Alert.alert('Required', 'Please enter an announcement message');
+  useFocusEffect(
+    useCallback(() => {
+      loadAnnouncements();
+    }, [])
+  );
+
+  const loadAnnouncements = async () => {
+    setLoading(true);
+    const { data, error } = await getMerchantAnnouncements();
+    if (data) setAnnouncements(data);
+    setLoading(false);
+  };
+
+  const handleSend = async () => {
+    if (!message.trim()) { Alert.alert('Required', 'Enter an announcement message.'); return; }
+    setSending(true);
+    const { data, error } = await saveMerchantAnnouncement(message.trim());
+    setSending(false);
+
+    if (error) {
+      Alert.alert('Failed', error.message || 'Could not save announcement.');
       return;
     }
 
-    const newAnnouncement: Announcement = {
-      id: Date.now().toString(),
-      message: message.trim(),
-      timestamp: new Date(),
-      sent: false,
-    };
-
-    setAnnouncements([newAnnouncement, ...announcements]);
     setMessage('');
-
-    Alert.alert('Success', 'Announcement sent to all active loyalty card holders!', [
-      {
-        text: 'OK',
-        onPress: () => {
-          setAnnouncements((prev) =>
-            prev.map((ann) => (ann.id === newAnnouncement.id ? { ...ann, sent: true } : ann))
-          );
-        },
-      },
-    ]);
+    if (data) setAnnouncements([data, ...announcements]);
+    Alert.alert('Sent', 'Announcement saved and sent to all loyalty card holders!');
   };
 
-  const formatTime = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const diff = Date.now() - date.getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(diff / 3600000);
+    if (hrs < 24) return `${hrs}h ago`;
     const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `${days}d ago`;
     return date.toLocaleDateString();
   };
 
-  const renderAnnouncement = ({ item }: { item: Announcement }) => (
-    <View style={[styles.messageBubble, { backgroundColor: item.sent ? '#E3F2FD' : '#F5F5F5' }]}>
-      <View style={styles.messageHeader}>
-        <Ionicons
-          name={item.sent ? 'checkmark-circle' : 'time-outline'}
-          size={16}
-          color={item.sent ? '#2F4366' : theme.icon}
-        />
-        <Text style={[styles.timestamp, { color: theme.icon }]}>{formatTime(item.timestamp)}</Text>
-      </View>
-      <Text style={[styles.messageText, { color: theme.text }]}>{item.message}</Text>
-    </View>
-  );
-
   return (
-    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
+    <ThemedView style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Image
-            source={require('@/assets/images/stampworthb-logo.png')}
-            style={styles.logo}
-            contentFit="contain"
-          />
-          <Text style={styles.brandName}>Stampworth Business</Text>
+          <Image source={require('@/assets/images/stampworthb-logo.png')} style={styles.logo} contentFit="contain" />
+          <Text style={styles.brandName}>Stampworth</Text>
         </View>
-        <TouchableOpacity
-          style={styles.profileButton}
-          onPress={() => router.push('/(tabs)/options')}
-        >
-          <View style={styles.profileLogoContainer}>
-            <Ionicons name="storefront" size={20} color="#2F4366" />
-          </View>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.titleContainer}>
-        <Text style={[styles.title, { color: '#2F4366' }]}>Announcements</Text>
-        <Text style={[styles.subtitle, { color: theme.icon }]}>
-          Broadcast messages to all loyalty card holders
-        </Text>
-      </View>
-
-      {/* Message Input */}
-      <View style={styles.inputContainer}>
-        <View style={[styles.textInputContainer, { borderColor: theme.icon }]}>
-          <TextInput
-            value={message}
-            onChangeText={setMessage}
-            style={[styles.textInput, { color: theme.text }]}
-            placeholder="Type your announcement..."
-            placeholderTextColor={theme.icon}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-        </View>
-        <TouchableOpacity
-          style={[styles.sendButton, { backgroundColor: '#2F4366' }]}
-          onPress={handleSend}
-        >
-          <Ionicons name="send" size={20} color="#FFFFFF" />
-          <Text style={styles.sendButtonText}>Send to All</Text>
+        <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/(tabs)/options')}>
+          <Ionicons name="storefront" size={18} color="#2F4366" />
         </TouchableOpacity>
       </View>
 
-      {/* Messages List */}
-      <View style={styles.messagesContainer}>
-        <Text style={[styles.sectionTitle, { color: '#2F4366' }]}>Recent Announcements</Text>
+      <Text style={styles.pageTitle}>Announcements</Text>
+      <Text style={styles.pageSubtitle}>Broadcast to all loyalty card holders</Text>
+
+      {/* Compose */}
+      <View style={styles.composeCard}>
+        <TextInput
+          value={message}
+          onChangeText={setMessage}
+          style={styles.composeInput}
+          placeholder="Type your announcement..."
+          placeholderTextColor="#C4CAD4"
+          multiline
+          textAlignVertical="top"
+        />
+        <TouchableOpacity style={styles.sendButton} onPress={handleSend} disabled={sending}>
+          <Ionicons name="send" size={16} color="#FFFFFF" />
+          <Text style={styles.sendButtonText}>{sending ? 'Sending...' : 'Send to All'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* List */}
+      <Text style={styles.sectionTitle}>Recent</Text>
+      {loading ? (
+        <View style={styles.loadingRow}><ActivityIndicator size="small" color="#2F4366" /></View>
+      ) : (
         <FlatList
           data={announcements}
-          renderItem={renderAnnouncement}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messagesList}
+          contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          ListEmptyComponent={<View style={styles.emptyCard}><Text style={styles.emptyText}>No announcements yet</Text></View>}
+          renderItem={({ item }) => (
+            <View style={styles.messageCard}>
+              <View style={styles.messageHeader}>
+                <Ionicons name="checkmark-circle" size={14} color="#27AE60" />
+                <Text style={styles.messageTime}>{formatTime(item.created_at)}</Text>
+              </View>
+              <Text style={styles.messageText}>{item.message}</Text>
+            </View>
+          )}
         />
-      </View>
+      )}
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 110,
-    paddingBottom: 10,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  logo: {
-    width: 40,
-    height: 40,
-    marginRight: 8,
-  },
-  brandName: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#2F4366',
-    letterSpacing: 0.5,
-    fontFamily: 'Poppins-SemiBold',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  profileButton: {
-    marginLeft: 16,
-  },
-  profileLogoContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#2F4366',
-  },
-  titleContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    alignItems: 'flex-start',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#2F4366',
-    marginBottom: 8,
-    textAlign: 'left',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: 'Poppins-Regular',
-  },
-  inputContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  textInputContainer: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    minHeight: 120,
-  },
-  textInput: {
-    fontSize: 15,
-    fontFamily: 'Poppins-Regular',
-    minHeight: 100,
-  },
-  sendButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 10,
-    gap: 8,
-  },
-  sendButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontFamily: 'Poppins-SemiBold',
-  },
-  messagesContainer: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Poppins-SemiBold',
-    marginBottom: 16,
-  },
-  messagesList: {
-    paddingBottom: 16,
-  },
-  messageBubble: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  messageHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  timestamp: {
-    fontSize: 12,
-    fontFamily: 'Poppins-Regular',
-  },
-  messageText: {
-    fontSize: 15,
-    fontFamily: 'Poppins-Regular',
-    lineHeight: 22,
-  },
+  container: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 8 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  logo: { width: 32, height: 32 },
+  brandName: { fontSize: 20, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
+  profileButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E0E4EA' },
+  pageTitle: { fontSize: 26, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold', paddingHorizontal: 24, marginTop: 20 },
+  pageSubtitle: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', paddingHorizontal: 24, marginTop: 4, marginBottom: 20 },
+  composeCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 24 },
+  composeInput: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#1A1A2E', minHeight: 80, marginBottom: 14, padding: 0 },
+  sendButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 46, borderRadius: 12, backgroundColor: '#2F4366', gap: 8 },
+  sendButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Poppins-SemiBold' },
+  sectionTitle: { fontSize: 15, fontFamily: 'Poppins-SemiBold', color: '#2F4366', paddingHorizontal: 24, marginBottom: 12 },
+  list: { paddingHorizontal: 24, paddingBottom: 120 },
+  loadingRow: { alignItems: 'center', paddingTop: 24 },
+  emptyCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 24, alignItems: 'center' },
+  emptyText: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
+  messageCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 10 },
+  messageHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  messageTime: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
+  messageText: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#1A1A2E', lineHeight: 20 },
 });
-

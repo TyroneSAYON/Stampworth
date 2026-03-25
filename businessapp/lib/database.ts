@@ -258,18 +258,22 @@ export const ensureCurrentMerchantProfile = async (preferredBusinessName?: strin
 
   const { data: created, error: createError } = await supabase
     .from('merchants')
-    .insert({
-      auth_id: user.id,
-      owner_email: email,
-      business_name: businessName,
-    })
+    .upsert(
+      {
+        auth_id: user.id,
+        owner_email: email,
+        business_name: businessName,
+      },
+      { onConflict: 'owner_email' },
+    )
     .select('*')
     .single();
 
   if (createError) {
     const rlsBlocked =
       createError.message?.toLowerCase().includes('row-level security') ||
-      createError.message?.toLowerCase().includes('permission');
+      createError.message?.toLowerCase().includes('permission') ||
+      createError.message?.toLowerCase().includes('duplicate key');
 
     if (rlsBlocked) {
       const ensured = await ensureMerchantProfileViaBackend(businessName);
@@ -385,6 +389,8 @@ export const getCurrentMerchantProfile = async () => {
 
 export const saveMerchantStoreSetup = async (payload: {
   businessName: string;
+  email?: string;
+  phone?: string;
   address: string;
   websiteUrl?: string;
   logoUri?: string | null;
@@ -393,6 +399,7 @@ export const saveMerchantStoreSetup = async (payload: {
     mockMerchantProfile = {
       ...mockMerchantProfile,
       business_name: payload.businessName.trim(),
+      owner_email: payload.email?.trim().toLowerCase() || mockMerchantProfile.owner_email,
       address: payload.address.trim(),
       website_url: payload.websiteUrl?.trim() || null,
       logo_url: payload.logoUri || mockMerchantProfile.logo_url || null,
@@ -425,17 +432,35 @@ export const saveMerchantStoreSetup = async (payload: {
     }
   }
 
+  const updatePayload: Record<string, any> = {
+    business_name: payload.businessName.trim(),
+    address: payload.address.trim(),
+    website_url: payload.websiteUrl?.trim() || null,
+    logo_url: logoUrl,
+  };
+
+  if (payload.email?.trim()) {
+    updatePayload.owner_email = payload.email.trim().toLowerCase();
+  }
+
+  if (payload.phone !== undefined) {
+    updatePayload.phone_number = payload.phone.trim() || null;
+  }
+
   const { data, error } = await supabase
     .from('merchants')
-    .update({
-      business_name: payload.businessName.trim(),
-      address: payload.address.trim(),
-      website_url: payload.websiteUrl?.trim() || null,
-      logo_url: logoUrl,
-    })
+    .update(updatePayload)
     .eq('id', merchant.id)
     .select('*')
     .single();
+
+  // Also update Supabase Auth email if it changed
+  if (!error && payload.email?.trim()) {
+    const newEmail = payload.email.trim().toLowerCase();
+    if (newEmail !== user.email) {
+      await supabase.auth.updateUser({ email: newEmail });
+    }
+  }
 
   return { data, error };
 };
@@ -874,6 +899,109 @@ export const removeLatestStampForCustomer = async (
     },
     error: null,
   };
+};
+
+// Check if merchant has completed store setup (has address set)
+export const isMerchantSetupComplete = async () => {
+  const { data: merchant, error } = await ensureCurrentMerchantProfile();
+  if (error || !merchant) return { complete: false, error };
+  const hasAddress = !!merchant.address && merchant.address !== 'To be updated';
+  return { complete: hasAddress, error: null };
+};
+
+// Announcements
+export const saveMerchantAnnouncement = async (message: string) => {
+  const { data: merchant, error: merchantError } = await ensureCurrentMerchantProfile();
+  if (merchantError || !merchant) return { data: null, error: merchantError || new Error('Merchant not found') };
+
+  const { data, error } = await supabase
+    .from('merchant_announcements')
+    .insert({ merchant_id: merchant.id, message, is_active: true })
+    .select('*')
+    .single();
+
+  return { data, error };
+};
+
+export const getMerchantAnnouncements = async () => {
+  const { data: merchant, error: merchantError } = await ensureCurrentMerchantProfile();
+  if (merchantError || !merchant) return { data: null, error: merchantError };
+
+  const { data, error } = await supabase
+    .from('merchant_announcements')
+    .select('*')
+    .eq('merchant_id', merchant.id)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  return { data, error };
+};
+
+// Explore analytics
+export const getMerchantExploreAnalytics = async () => {
+  const { data: merchant, error: merchantError } = await ensureCurrentMerchantProfile();
+  if (merchantError || !merchant) return { data: null, error: merchantError };
+
+  // Total redeemed
+  const { count: totalRedeemed } = await supabase
+    .from('redeemed_rewards')
+    .select('id', { count: 'exact', head: true })
+    .eq('merchant_id', merchant.id);
+
+  // Most loyal customer (most stamps earned)
+  const { data: topCards } = await supabase
+    .from('loyalty_cards')
+    .select('customer_id, total_stamps_earned, stamp_count, customers(id, full_name, username, email)')
+    .eq('merchant_id', merchant.id)
+    .order('total_stamps_earned', { ascending: false })
+    .limit(1);
+
+  const mostLoyal = topCards?.[0] || null;
+
+  // All loyalty card holders for this merchant
+  const { data: allCards } = await supabase
+    .from('loyalty_cards')
+    .select('customer_id, stamp_count, total_stamps_earned, status, is_free_redemption, customers(id, full_name, username, email)')
+    .eq('merchant_id', merchant.id)
+    .order('total_stamps_earned', { ascending: false });
+
+  return {
+    data: {
+      merchantId: merchant.id,
+      totalRedeemed: totalRedeemed || 0,
+      mostLoyal: mostLoyal ? {
+        customerId: mostLoyal.customer_id,
+        name: (mostLoyal.customers as any)?.full_name || (mostLoyal.customers as any)?.username || 'Unknown',
+        email: (mostLoyal.customers as any)?.email || '',
+        totalStampsEarned: mostLoyal.total_stamps_earned || 0,
+        currentStamps: mostLoyal.stamp_count || 0,
+      } : null,
+      cardHolders: (allCards || []).map((c: any) => ({
+        customerId: c.customer_id,
+        name: c.customers?.full_name || c.customers?.username || 'Unknown',
+        email: c.customers?.email || '',
+        stampCount: c.stamp_count || 0,
+        totalStampsEarned: c.total_stamps_earned || 0,
+        status: c.status,
+        isFreeRedemption: c.is_free_redemption,
+      })),
+    },
+    error: null,
+  };
+};
+
+// Search customers by name or email
+export const searchCustomers = async (query: string) => {
+  const q = query.trim().toLowerCase();
+  if (!q) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('customers')
+    .select('id, full_name, username, email')
+    .or(`full_name.ilike.%${q}%,username.ilike.%${q}%,email.ilike.%${q}%`)
+    .limit(20);
+
+  return { data: data || [], error };
 };
 
 export const getMerchantDashboardSnapshot = async () => {

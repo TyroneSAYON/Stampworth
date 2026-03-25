@@ -1,124 +1,116 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-
-import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 type Params = {
   merchant?: string;
   collected?: string;
   total?: string;
+  color?: string;
 };
 
 export default function StampsScreen() {
-  const colorScheme = useColorScheme();
-  const { merchant, collected, total } = useLocalSearchParams<Params>();
+  const { merchant, collected, total, color } = useLocalSearchParams<Params>();
 
   const merchantName = merchant ?? 'Merchant';
-  const collectedCount = Number(collected ?? 3);
+  const collectedCount = Number(collected ?? 0);
   const totalCount = Number(total ?? 10);
+  const cardColor = color || '#2F4366';
 
   const slots = useMemo(() => {
     const safeTotal = Number.isFinite(totalCount) && totalCount > 0 ? totalCount : 10;
     const safeCollected = Number.isFinite(collectedCount) ? Math.min(Math.max(collectedCount, 0), safeTotal) : 0;
-    return { safeCollected, safeTotal };
+    return Array.from({ length: safeTotal }, (_, i) => ({
+      id: i,
+      filled: i < safeCollected,
+      isFree: i === safeTotal - 1,
+    }));
   }, [collectedCount, totalCount]);
 
+  const pct = totalCount > 0 ? Math.min(100, (collectedCount / totalCount) * 100) : 0;
+
   return (
-    <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#2F4366" />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: '#2F4366' }]}>Stamps</Text>
-      </View>
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={22} color="#2F4366" />
+          </TouchableOpacity>
+          <View>
+            <Text style={styles.title}>Stamps</Text>
+            <Text style={styles.subtitle}>{merchantName}</Text>
+          </View>
+        </View>
 
-      <Text style={[styles.merchant, { color: Colors[colorScheme ?? 'light'].text }]}>
-        {merchantName}
-      </Text>
-      <Text style={[styles.progress, { color: Colors[colorScheme ?? 'light'].icon }]}>
-        {slots.safeCollected} / {slots.safeTotal} collected
-      </Text>
+        {/* Progress */}
+        <View style={styles.progressCard}>
+          <View style={styles.progressRow}>
+            <Text style={styles.progressLabel}>Progress</Text>
+            <Text style={styles.progressValue}>{collectedCount} / {totalCount}</Text>
+          </View>
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: cardColor }]} />
+          </View>
+          {collectedCount >= totalCount && (
+            <View style={[styles.freeBanner, { backgroundColor: cardColor }]}>
+              <Ionicons name="gift" size={16} color="#FFFFFF" />
+              <Text style={styles.freeText}>FREE REDEMPTION AVAILABLE</Text>
+            </View>
+          )}
+        </View>
 
-      <View style={styles.grid}>
-        {Array.from({ length: slots.safeTotal }).map((_, idx) => {
-          const filled = idx < slots.safeCollected;
-          return (
+        {/* Stamp grid */}
+        <View style={styles.grid}>
+          {slots.map((slot) => (
             <View
-              key={idx}
+              key={slot.id}
               style={[
                 styles.stampSlot,
-                {
-                  borderColor: filled ? '#2F4366' : Colors[colorScheme ?? 'light'].icon,
-                  backgroundColor: filled ? 'rgba(47,67,102,0.12)' : 'transparent',
-                },
+                slot.isFree
+                  ? { borderColor: cardColor, borderWidth: 2, backgroundColor: `${cardColor}10` }
+                  : slot.filled
+                    ? { borderColor: cardColor, backgroundColor: `${cardColor}18` }
+                    : { borderColor: '#E0E4EA', backgroundColor: '#F8F9FB' },
               ]}
             >
-              {filled ? <Ionicons name="checkmark" size={18} color="#2F4366" /> : null}
+              {slot.isFree
+                ? <Text style={[styles.freeLabel, { color: cardColor }]}>FREE</Text>
+                : slot.filled
+                  ? <Ionicons name="checkmark" size={20} color={cardColor} />
+                  : <Text style={styles.slotNumber}>{slot.id + 1}</Text>}
             </View>
-          );
-        })}
-      </View>
+          ))}
+        </View>
 
-      <Text style={[styles.helper, { color: Colors[colorScheme ?? 'light'].icon }]}>
-        Collect stamps every time you purchase from this merchant.
-      </Text>
-    </ThemedView>
+        <Text style={styles.helper}>Collect stamps every time you purchase from this merchant.</Text>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 24,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  backButton: {
-    marginRight: 12,
-    padding: 4,
-  },
-  title: {
-    fontSize: 24,
-    fontFamily: 'Poppins-SemiBold',
-  },
-  merchant: {
-    fontSize: 18,
-    fontFamily: 'Poppins-SemiBold',
-    marginBottom: 4,
-  },
-  progress: {
-    fontSize: 13,
-    fontFamily: 'Poppins-Regular',
-    marginBottom: 20,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 20,
-  },
-  stampSlot: {
-    width: 54,
-    height: 54,
-    borderRadius: 12,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  helper: {
-    fontSize: 13,
-    fontFamily: 'Poppins-Regular',
-    textAlign: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#F6F8FB' },
+  scroll: { paddingHorizontal: 28, paddingTop: 64, paddingBottom: 48 },
+
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 28 },
+  backButton: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 24, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
+  subtitle: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 2 },
+
+  progressCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 28 },
+  progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  progressLabel: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
+  progressValue: { fontSize: 16, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  progressBar: { height: 8, backgroundColor: '#F0F2F5', borderRadius: 4, overflow: 'hidden' },
+  progressFill: { height: 8, borderRadius: 4 },
+  freeBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, borderRadius: 10, paddingVertical: 10 },
+  freeText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF', letterSpacing: 0.5 },
+
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 28 },
+  stampSlot: { width: 56, height: 56, borderRadius: 14, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  slotNumber: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
+  freeLabel: { fontSize: 9, fontFamily: 'Poppins-SemiBold' },
+
+  helper: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', textAlign: 'center' },
 });
-
-

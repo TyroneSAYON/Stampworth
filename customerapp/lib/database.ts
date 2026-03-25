@@ -19,20 +19,30 @@ export const getOrCreateCustomerProfile = async () => {
     return { data: null, error: userError || new Error('No authenticated user found') };
   }
 
-  const { data: existing, error: existingError } = await supabase
-    .from('customers')
-    .select('*')
-    .eq('auth_id', user.id)
-    .maybeSingle();
+  // The trigger on auth.users creates the customer row automatically.
+  // Just look it up by auth_id — retry a few times to handle trigger timing.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const { data: existing, error: selectError } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('auth_id', user.id)
+      .maybeSingle();
 
-  if (existingError) {
-    return { data: null, error: existingError };
+    if (existing) {
+      return { data: existing as CustomerProfile, error: null };
+    }
+
+    if (selectError) {
+      return { data: null, error: selectError };
+    }
+
+    // Wait briefly for trigger to complete
+    if (attempt < 3) {
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    }
   }
 
-  if (existing) {
-    return { data: existing as CustomerProfile, error: null };
-  }
-
+  // Trigger didn't create the row — create it ourselves
   const email = user.email || '';
   const metadataFullName = (user.user_metadata?.full_name as string | undefined) || null;
   const baseUsername = (email.split('@')[0] || 'customer').replace(/[^a-zA-Z0-9_]/g, '');
@@ -40,20 +50,32 @@ export const getOrCreateCustomerProfile = async () => {
 
   const { data: created, error: createError } = await supabase
     .from('customers')
-    .upsert(
-      {
-        auth_id: user.id,
-        email,
-        username: fallbackUsername,
-        full_name: metadataFullName,
-        avatar_url: user.user_metadata?.avatar_url || null,
-      },
-      { onConflict: 'auth_id' },
-    )
+    .insert({
+      auth_id: user.id,
+      email,
+      username: fallbackUsername,
+      full_name: metadataFullName,
+      avatar_url: user.user_metadata?.avatar_url || null,
+    })
     .select('*')
     .single();
 
-  return { data: created as CustomerProfile | null, error: createError };
+  if (createError) {
+    // If insert failed due to duplicate, try one more select
+    const { data: retry } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('auth_id', user.id)
+      .maybeSingle();
+
+    if (retry) {
+      return { data: retry as CustomerProfile, error: null };
+    }
+
+    return { data: null, error: createError };
+  }
+
+  return { data: created as CustomerProfile | null, error: null };
 };
 
 export const getCardStamps = async (loyaltyCardId: string) => {
@@ -109,6 +131,17 @@ export const findNearbyStores = async (latitude: number, longitude: number, maxD
   });
 
   return { data, error };
+};
+
+// Get all active Stampworth businesses
+export const getAllMerchants = async () => {
+  const { data, error } = await supabase
+    .from('merchants')
+    .select('id, business_name, address, city, state, country, latitude, longitude, logo_url, phone_number')
+    .eq('is_active', true)
+    .order('business_name', { ascending: true });
+
+  return { data: data || [], error };
 };
 
 export const getMerchantById = async (merchantId: string) => {
@@ -249,4 +282,11 @@ export const createStoreVisit = async (customerId: string, merchantId: string, l
     });
 
   return { data, error };
+};
+
+// Convenience: get current user's loyalty cards
+export const getCustomerLoyaltyCards = async () => {
+  const { data: customer, error: customerError } = await getOrCreateCustomerProfile();
+  if (customerError || !customer) return { data: null, error: customerError };
+  return getUserLoyaltyCards(customer.id);
 };

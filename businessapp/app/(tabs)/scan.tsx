@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Alert, ActivityIndicator, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, ActivityIndicator, StyleSheet, View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
 import {
   getCustomerLoyaltyCardProgress,
   getCurrentMerchantProfile,
@@ -17,12 +16,7 @@ import {
 } from '@/lib/database';
 
 type CustomerProgress = {
-  customer: {
-    id: string;
-    full_name?: string | null;
-    username?: string | null;
-    email?: string | null;
-  };
+  customer: { id: string; full_name?: string | null; username?: string | null; email?: string | null };
   stampCount: number;
   stampsPerRedemption: number;
   rewardDescription?: string | null;
@@ -31,172 +25,86 @@ type CustomerProgress = {
 };
 
 export default function ScanScreen() {
-  const colorScheme = useColorScheme();
-  const theme = Colors[colorScheme ?? 'light'];
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [showIdInput, setShowIdInput] = useState(false);
   const [customerId, setCustomerId] = useState('');
-
   const [merchantId, setMerchantId] = useState<string | null>(null);
-  const [conditions, setConditions] = useState('Buy 10 coffees and get your 11th coffee free.');
+  const [conditions, setConditions] = useState('');
   const [issuingStamp, setIssuingStamp] = useState(false);
-  const [selectedCustomerProgress, setSelectedCustomerProgress] = useState<CustomerProgress | null>(null);
-  const [selectedSource, setSelectedSource] = useState<'QR' | 'MANUAL'>('QR');
-  const [selectedReference, setSelectedReference] = useState<string | undefined>(undefined);
+  const [progress, setProgress] = useState<CustomerProgress | null>(null);
+  const [source, setSource] = useState<'QR' | 'MANUAL'>('QR');
+  const [reference, setReference] = useState<string | undefined>(undefined);
 
-  useEffect(() => {
-    const loadMerchantContext = async () => {
-      const { data: merchant, error } = await getCurrentMerchantProfile();
-      if (error || !merchant) {
-        if (error?.message === 'AUTH_SESSION_MISSING') {
-          Alert.alert('Session expired', 'Please sign in again.');
-          router.replace('/signin');
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const load = async () => {
+        const { data: merchant, error } = await getCurrentMerchantProfile();
+        if (cancelled) return;
+        if (error || !merchant) {
+          if (error?.message === 'AUTH_SESSION_MISSING') { Alert.alert('Session expired', 'Please sign in again.'); router.replace('/signin'); }
           return;
         }
+        setMerchantId(merchant.id);
+        const { data: rules } = await getMerchantStampRules(merchant.id);
+        if (!cancelled && rules?.promotion_text) setConditions(rules.promotion_text);
+      };
+      load();
+      return () => { cancelled = true; };
+    }, [])
+  );
 
-        Alert.alert('Merchant account not found', 'Please sign in with your business account.');
-        return;
-      }
-
-      setMerchantId(merchant.id);
-
-      const { data: rules } = await getMerchantStampRules(merchant.id);
-      if (rules?.promotion_text) {
-        setConditions(rules.promotion_text);
-      }
-    };
-
-    loadMerchantContext();
-  }, []);
-
-  const loadCustomerProgress = async (resolvedCustomerId: string, source: 'QR' | 'MANUAL', reference?: string) => {
-    if (!merchantId) {
-      Alert.alert('Merchant not loaded', 'Please sign in again before managing customer stamps.');
-      return;
-    }
-
-    const { data, error } = await getCustomerLoyaltyCardProgress(merchantId, resolvedCustomerId);
-
-    if (error || !data) {
-      Alert.alert('Unable to load loyalty card', error?.message || 'Please try scanning again.');
-      return;
-    }
-
-    setSelectedCustomerProgress(data);
-    setSelectedSource(source);
-    setSelectedReference(reference);
-
-    if (data.conditions) {
-      setConditions(data.conditions);
-    }
+  const loadProgress = async (cid: string, src: 'QR' | 'MANUAL', ref?: string) => {
+    if (!merchantId) return;
+    const { data, error } = await getCustomerLoyaltyCardProgress(merchantId, cid);
+    if (error || !data) { Alert.alert('Error', error?.message || 'Try again.'); return; }
+    setProgress(data); setSource(src); setReference(ref);
+    if (data.conditions) setConditions(data.conditions);
   };
 
-  const issueStampToCustomer = async (resolvedCustomerId: string, source: 'QR' | 'MANUAL', reference?: string) => {
-    if (!merchantId) {
-      Alert.alert('Merchant not loaded', 'Please sign in again before issuing a stamp.');
-      return;
-    }
-
+  const issueStamp = async () => {
+    if (!merchantId || !progress) return;
     setIssuingStamp(true);
-
-    const { data, error } = await issueStampForCustomer(merchantId, resolvedCustomerId, source, reference);
-
+    const { data, error } = await issueStampForCustomer(merchantId, progress.customer.id, source, reference);
     setIssuingStamp(false);
-
-    if (error || !data) {
-      Alert.alert('Failed to issue stamp', error?.message || 'Please try again.');
-      return;
-    }
-
-    const redemptionText = data.freeRedemptionReached
-      ? '\nCustomer has reached FREE REDEMPTION.'
-      : '';
-
-    await loadCustomerProgress(resolvedCustomerId, source, reference);
-    Alert.alert('Stamp Issued', `Stamp count is now ${data.stampCount}.${redemptionText}`);
+    if (error || !data) { Alert.alert('Failed', error?.message || 'Try again.'); return; }
+    await loadProgress(progress.customer.id, source, reference);
+    Alert.alert('Stamp Issued', `Count: ${data.stampCount}${data.freeRedemptionReached ? '\nFREE REDEMPTION reached!' : ''}`);
   };
 
-  const removeStampFromCustomer = async (resolvedCustomerId: string, source: 'QR' | 'MANUAL', reference?: string) => {
-    if (!merchantId) {
-      Alert.alert('Merchant not loaded', 'Please sign in again before deleting a stamp.');
-      return;
-    }
-
+  const removeStamp = async () => {
+    if (!merchantId || !progress) return;
     setIssuingStamp(true);
-
-    const { data, error } = await removeLatestStampForCustomer(merchantId, resolvedCustomerId, source, reference);
-
+    const { data, error } = await removeLatestStampForCustomer(merchantId, progress.customer.id, source, reference);
     setIssuingStamp(false);
-
-    if (error || !data) {
-      Alert.alert('Failed to delete stamp', error?.message || 'Please try again.');
-      return;
-    }
-
-    await loadCustomerProgress(resolvedCustomerId, source, reference);
-    Alert.alert('Stamp Deleted', `Stamp count is now ${data.stampCount}.`);
+    if (error || !data) { Alert.alert('Failed', error?.message || 'Try again.'); return; }
+    await loadProgress(progress.customer.id, source, reference);
+    Alert.alert('Stamp Removed', `Count: ${data.stampCount}`);
   };
 
-  const handleBarCodeScanned = async ({ data }: BarcodeScanningResult) => {
-    setScanned(true);
-    setShowCamera(false);
-
+  const handleBarCode = async ({ data }: BarcodeScanningResult) => {
+    setScanned(true); setShowCamera(false);
     const { data: resolved, error } = await resolveCustomerFromScannedQR(data);
-
-    if (error || !resolved?.customer?.id) {
-      Alert.alert('Invalid QR code', error?.message || 'Only QR codes generated from customerapp are accepted.');
-      setScanned(false);
-      setShowCamera(true);
-      return;
-    }
-
-    await loadCustomerProgress(resolved.customer.id, 'QR', data);
-
-    setScanned(false);
-    setShowCamera(false);
-    setShowIdInput(false);
+    if (error || !resolved?.customer?.id) { Alert.alert('Invalid QR', error?.message || 'Only customerapp QR codes accepted.'); setScanned(false); setShowCamera(true); return; }
+    await loadProgress(resolved.customer.id, 'QR', data);
+    setScanned(false); setShowIdInput(false);
   };
 
   const handleIdSearch = async () => {
-    if (!customerId.trim()) {
-      Alert.alert('Required', 'Please enter a customer ID');
-      return;
-    }
-
+    if (!customerId.trim()) { Alert.alert('Required', 'Enter a customer ID.'); return; }
     const { data, error } = await resolveCustomerById(customerId.trim());
-    if (error || !data?.id) {
-      Alert.alert('Customer not found', 'Enter a valid customer ID.');
-      return;
-    }
-
-    await loadCustomerProgress(data.id, 'MANUAL', customerId.trim());
-
-    setCustomerId('');
-    setShowIdInput(false);
-    setShowCamera(false);
+    if (error || !data?.id) { Alert.alert('Not found', 'Enter a valid customer ID.'); return; }
+    await loadProgress(data.id, 'MANUAL', customerId.trim());
+    setCustomerId(''); setShowIdInput(false); setShowCamera(false);
   };
 
-  const handleQrScanFailed = () => {
-    setShowCamera(false);
-    setShowIdInput(true);
-  };
-
+  // Permission states
   if (!permission) {
     return (
       <ThemedView style={styles.container}>
-        <View style={styles.header}>
-          <Image
-            source={require('@/assets/images/stampworthb-logo.png')}
-            style={styles.logo}
-            contentFit="contain"
-          />
-          <Text style={styles.brandName}>Stampworth Business</Text>
-        </View>
-        <View style={styles.content}>
-          <Text style={[styles.loadingText, { color: theme.text }]}>Requesting camera permission...</Text>
-        </View>
+        <View style={styles.center}><ActivityIndicator size="large" color="#2F4366" /></View>
       </ThemedView>
     );
   }
@@ -205,23 +113,14 @@ export default function ScanScreen() {
     return (
       <ThemedView style={styles.container}>
         <View style={styles.header}>
-          <Image
-            source={require('@/assets/images/stampworthb-logo.png')}
-            style={styles.logo}
-            contentFit="contain"
-          />
-          <Text style={styles.brandName}>Stampworth Business</Text>
+          <Image source={require('@/assets/images/stampworthb-logo.png')} style={styles.logo} contentFit="contain" />
+          <Text style={styles.brandName}>Stampworth</Text>
         </View>
-        <View style={styles.content}>
-          <Ionicons name="camera-outline" size={64} color={theme.icon} />
-          <Text style={[styles.permissionText, { color: theme.text }]}>
-            Camera permission is required to scan QR codes
-          </Text>
-          <TouchableOpacity
-            style={[styles.permissionButton, { backgroundColor: '#2F4366' }]}
-            onPress={requestPermission}
-          >
-            <Text style={styles.permissionButtonText}>Grant Permission</Text>
+        <View style={styles.center}>
+          <Ionicons name="camera-outline" size={48} color="#C4CAD4" />
+          <Text style={styles.permText}>Camera permission is needed to scan QR codes</Text>
+          <TouchableOpacity style={styles.primaryButton} onPress={requestPermission}>
+            <Text style={styles.primaryButtonText}>Grant Permission</Text>
           </TouchableOpacity>
         </View>
       </ThemedView>
@@ -229,587 +128,174 @@ export default function ScanScreen() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      {/* Header with Logo and Brand Name */}
+    <ThemedView style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Image
-            source={require('@/assets/images/stampworthb-logo.png')}
-            style={styles.logo}
-            contentFit="contain"
-          />
-          <Text style={styles.brandName}>Stampworth Business</Text>
+          <Image source={require('@/assets/images/stampworthb-logo.png')} style={styles.logo} contentFit="contain" />
+          <Text style={styles.brandName}>Stampworth</Text>
         </View>
-        <TouchableOpacity
-          style={styles.profileButton}
-          onPress={() => router.push('/(tabs)/options')}
-        >
-          <View style={styles.profileLogoContainer}>
-            <Ionicons name="storefront" size={20} color="#2F4366" />
-          </View>
+        <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/(tabs)/options')}>
+          <Ionicons name="storefront" size={18} color="#2F4366" />
         </TouchableOpacity>
       </View>
 
-      {/* Main Content */}
-      <View style={styles.content}>
-        {/* Greeting */}
-        <View style={styles.greetingContainer}>
-          <Text style={styles.greeting}>Scan Customer QR Code</Text>
-          {issuingStamp && (
-            <View style={styles.processingRow}>
-              <ActivityIndicator size="small" color="#2F4366" />
-              <Text style={styles.processingText}>Verifying customer QR and issuing stamp...</Text>
-            </View>
-          )}
-        </View>
+      <Text style={styles.pageTitle}>Scan</Text>
+      <Text style={styles.pageSubtitle}>Scan customer QR code to manage stamps</Text>
 
-        {selectedCustomerProgress && (
-          <View style={styles.customerCardContainer}>
-            <Text style={styles.customerName}>
-              {selectedCustomerProgress.customer.full_name || selectedCustomerProgress.customer.username || 'Customer'}
-            </Text>
-            <Text style={styles.customerSubtext}>
-              {selectedCustomerProgress.stampCount} / {selectedCustomerProgress.stampsPerRedemption} stamps
-            </Text>
-            {selectedCustomerProgress.rewardDescription ? (
-              <Text style={styles.customerSubtext}>{selectedCustomerProgress.rewardDescription}</Text>
-            ) : null}
-            <View style={styles.customerActionsRow}>
-              <TouchableOpacity
-                style={[styles.customerActionButton, styles.addStampButton]}
-                onPress={() =>
-                  issueStampToCustomer(
-                    selectedCustomerProgress.customer.id,
-                    selectedSource,
-                    selectedReference,
-                  )
-                }
-                disabled={issuingStamp}
-              >
-                <Ionicons name="add" size={18} color="#FFFFFF" />
-                <Text style={styles.customerActionText}>Add Stamp</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.customerActionButton, styles.deleteStampButton]}
-                onPress={() =>
-                  removeStampFromCustomer(
-                    selectedCustomerProgress.customer.id,
-                    selectedSource,
-                    selectedReference,
-                  )
-                }
-                disabled={issuingStamp}
-              >
-                <Ionicons name="remove" size={18} color="#FFFFFF" />
-                <Text style={styles.customerActionText}>Delete Stamp</Text>
-              </TouchableOpacity>
+      {issuingStamp && (
+        <View style={styles.processingBar}>
+          <ActivityIndicator size="small" color="#2F4366" />
+          <Text style={styles.processingText}>Processing...</Text>
+        </View>
+      )}
+
+      {/* Customer Card */}
+      {progress && (
+        <View style={styles.customerCard}>
+          <View style={styles.customerRow}>
+            <View style={styles.customerAvatar}>
+              <Ionicons name="person" size={18} color="#2F4366" />
             </View>
-            <TouchableOpacity
-              style={styles.customerActionClose}
-              onPress={() => {
-                setSelectedCustomerProgress(null);
-                setShowCamera(false);
-                setShowIdInput(false);
-              }}
-            >
-              <Text style={styles.customerActionCloseText}>Clear Customer</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.customerName}>{progress.customer.full_name || progress.customer.username || 'Customer'}</Text>
+              <Text style={styles.customerStamps}>{progress.stampCount} / {progress.stampsPerRedemption} stamps</Text>
+              {progress.rewardDescription ? <Text style={styles.customerReward}>{progress.rewardDescription}</Text> : null}
+            </View>
+          </View>
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#2F4366' }]} onPress={issueStamp} disabled={issuingStamp}>
+              <Ionicons name="add" size={16} color="#FFF" />
+              <Text style={styles.actionText}>Add Stamp</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#E74C3C' }]} onPress={removeStamp} disabled={issuingStamp}>
+              <Ionicons name="remove" size={16} color="#FFF" />
+              <Text style={styles.actionText}>Remove</Text>
             </TouchableOpacity>
           </View>
-        )}
+          <TouchableOpacity style={styles.clearButton} onPress={() => { setProgress(null); setShowCamera(false); setShowIdInput(false); }}>
+            <Text style={styles.clearText}>Clear Customer</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-        {/* QR Code Scanner Container */}
+      {/* Scan Area */}
+      <View style={styles.scanArea}>
         {!showCamera && !showIdInput && (
-          <TouchableOpacity
-            style={styles.scanButtonContainer}
-            onPress={() => setShowCamera(true)}
-            disabled={issuingStamp}
-          >
-            <View style={styles.scanButtonBox}>
-              <Ionicons name="qr-code-outline" size={64} color="#2F4366" />
-              <Text style={styles.scanButtonText}>Tap to scan</Text>
-            </View>
+          <TouchableOpacity style={styles.scanTrigger} onPress={() => setShowCamera(true)} disabled={issuingStamp}>
+            <Ionicons name="qr-code-outline" size={52} color="#2F4366" />
+            <Text style={styles.scanTriggerText}>Tap to scan</Text>
           </TouchableOpacity>
         )}
 
         {showCamera && !showIdInput && (
-          <View style={styles.qrCodeContainer}>
-            <View style={styles.cameraWrapper}>
-              <CameraView
-                style={styles.camera}
-                barcodeScannerSettings={{
-                  barcodeTypes: ['qr'],
-                }}
-                onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-              />
-              <View style={styles.scannerOverlay}>
-                {/* Scanner frame with corner indicators */}
-                <View style={styles.scannerFrameContainer}>
-                  <View style={styles.scannerFrame}>
-                    {/* Corner indicators */}
-                    <View style={[styles.corner, styles.topLeft]} />
-                    <View style={[styles.corner, styles.topRight]} />
-                    <View style={[styles.corner, styles.bottomLeft]} />
-                    <View style={[styles.corner, styles.bottomRight]} />
-                  </View>
-                </View>
-                {/* Scanning hint */}
-                <Text style={styles.scanningHint}>Position QR code within frame</Text>
-              </View>
+          <View style={styles.cameraBox}>
+            <CameraView
+              style={styles.camera}
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              onBarcodeScanned={scanned ? undefined : handleBarCode}
+            />
+            <View style={styles.cameraOverlay}>
+              <View style={styles.scanFrame} />
+              <Text style={styles.scanHint}>Position QR code within frame</Text>
             </View>
           </View>
         )}
 
-        {/* Customer ID Input (Fallback) */}
         {showIdInput && (
-          <View style={styles.idContainer}>
-            <View style={styles.idInputWrapper}>
-              <Ionicons name="id-card-outline" size={24} color={theme.icon} style={styles.idIcon} />
-              <TextInput
-                value={customerId}
-                onChangeText={setCustomerId}
-                style={[styles.idInput, { color: theme.text }]}
-                placeholder="Enter customer ID"
-                placeholderTextColor={theme.icon}
-                autoCapitalize="none"
-                autoFocus
-              />
+          <View style={styles.idSection}>
+            <View style={styles.inputBox}>
+              <Ionicons name="id-card-outline" size={18} color="#B0B8C4" />
+              <TextInput value={customerId} onChangeText={setCustomerId} style={styles.input} placeholder="Enter customer ID" placeholderTextColor="#C4CAD4" autoCapitalize="none" autoFocus />
             </View>
             <View style={styles.idActions}>
-              <TouchableOpacity
-                style={[styles.backButton, { borderColor: theme.icon }]}
-                onPress={() => {
-                  setShowIdInput(false);
-                  setShowCamera(true);
-                  setCustomerId('');
-                }}
-              >
-                <Ionicons name="arrow-back" size={18} color={theme.icon} />
-                <Text style={[styles.backButtonText, { color: theme.icon }]}>Back</Text>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => { setShowIdInput(false); setShowCamera(true); setCustomerId(''); }}>
+                <Text style={styles.secondaryButtonText}>Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.searchButton, { backgroundColor: '#2F4366' }]}
-                onPress={handleIdSearch}
-                disabled={issuingStamp}
-              >
-                <Text style={styles.searchButtonText}>Search</Text>
+              <TouchableOpacity style={styles.primaryButtonSmall} onPress={handleIdSearch} disabled={issuingStamp}>
+                <Text style={styles.primaryButtonText}>Search</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
-
-        {/* Fallback Button */}
-        {showCamera && !showIdInput && (
-          <TouchableOpacity
-            style={styles.fallbackButton}
-            onPress={handleQrScanFailed}
-            disabled={issuingStamp}
-          >
-            <Ionicons name="id-card-outline" size={18} color="#2F4366" />
-            <Text style={styles.fallbackButtonText}>Enter ID Manually</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Back to Scan Button when showing ID input */}
-        {showIdInput && (
-          <TouchableOpacity
-            style={styles.backToScanButton}
-            onPress={() => {
-              setShowIdInput(false);
-              setShowCamera(false);
-              setCustomerId('');
-            }}
-          >
-            <Ionicons name="qr-code-outline" size={18} color="#2F4366" />
-            <Text style={styles.backToScanButtonText}>Back to Scan</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
-      {/* Footer with Conditions & Redemption Rules */}
-      <View style={styles.footer}>
-        <View style={styles.rulesContainer}>
-          <View style={styles.rulesHeader}>
-            <Ionicons name="document-text-outline" size={16} color="#5F6368" />
-            <Text style={styles.rulesTitle}>Conditions & Redemption Rules</Text>
-          </View>
-          <Text style={styles.rulesText}>{conditions}</Text>
+      {/* Bottom actions */}
+      {showCamera && !showIdInput && (
+        <TouchableOpacity style={styles.fallbackRow} onPress={() => { setShowCamera(false); setShowIdInput(true); }}>
+          <Ionicons name="id-card-outline" size={16} color="#2F4366" />
+          <Text style={styles.fallbackText}>Enter ID manually</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Conditions */}
+      {conditions ? (
+        <View style={styles.conditionsCard}>
+          <Ionicons name="document-text-outline" size={14} color="#8A94A6" />
+          <Text style={styles.conditionsText}>{conditions}</Text>
         </View>
-      </View>
+      ) : null}
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 110,
-    paddingBottom: 10,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  logo: {
-    width: 40,
-    height: 40,
-    marginRight: 8,
-  },
-  brandName: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#2F4366',
-    letterSpacing: 0.5,
-    fontFamily: 'Poppins-SemiBold',
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  profileButton: {
-    marginLeft: 16,
-  },
-  profileLogoContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#2F4366',
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  greetingContainer: {
-    width: '100%',
-    paddingHorizontal: 20,
-    marginBottom: 40,
-    alignItems: 'center',
-  },
-  greeting: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#2F4366',
-    textAlign: 'center',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  processingRow: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  processingText: {
-    fontSize: 12,
-    color: '#2F4366',
-    fontFamily: 'Poppins-Regular',
-  },
-  customerCardContainer: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: '#F5F7FB',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#D8E0EE',
-    padding: 14,
-    marginBottom: 20,
-  },
-  customerName: {
-    fontSize: 16,
-    fontFamily: 'Poppins-SemiBold',
-    color: '#2F4366',
-  },
-  customerSubtext: {
-    fontSize: 13,
-    fontFamily: 'Poppins-Regular',
-    color: '#4D5A70',
-    marginTop: 2,
-  },
-  customerActionsRow: {
-    marginTop: 12,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  customerActionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 8,
-    paddingVertical: 10,
-    gap: 6,
-  },
-  addStampButton: {
-    backgroundColor: '#2F4366',
-  },
-  deleteStampButton: {
-    backgroundColor: '#B33434',
-  },
-  customerActionText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontFamily: 'Poppins-SemiBold',
-  },
-  customerActionClose: {
-    marginTop: 10,
-    alignSelf: 'center',
-  },
-  customerActionCloseText: {
-    color: '#2F4366',
-    fontSize: 12,
-    fontFamily: 'Poppins-SemiBold',
-  },
-  qrCodeContainer: {
-    width: 280,
-    height: 280,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  cameraWrapper: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#000000',
-    position: 'relative',
-    opacity: 0.9,
-  },
-  camera: {
-    flex: 1,
-  },
-  scannerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scannerFrameContainer: {
-    width: 240,
-    height: 240,
-    position: 'relative',
-  },
-  scannerFrame: {
-    width: 240,
-    height: 240,
-    borderWidth: 3,
-    borderColor: '#2F4366',
-    borderRadius: 8,
-    backgroundColor: 'transparent',
-    position: 'relative',
-  },
-  corner: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderColor: '#2F4366',
-  },
-  topLeft: {
-    top: -3,
-    left: -3,
-    borderTopWidth: 5,
-    borderLeftWidth: 5,
-    borderTopLeftRadius: 8,
-  },
-  topRight: {
-    top: -3,
-    right: -3,
-    borderTopWidth: 5,
-    borderRightWidth: 5,
-    borderTopRightRadius: 8,
-  },
-  bottomLeft: {
-    bottom: -3,
-    left: -3,
-    borderBottomWidth: 5,
-    borderLeftWidth: 5,
-    borderBottomLeftRadius: 8,
-  },
-  bottomRight: {
-    bottom: -3,
-    right: -3,
-    borderBottomWidth: 5,
-    borderRightWidth: 5,
-    borderBottomRightRadius: 8,
-  },
-  scanningHint: {
-    position: 'absolute',
-    bottom: 20,
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'Poppins-Regular',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    textAlign: 'center',
-  },
-  idContainer: {
-    width: 240,
-    marginBottom: 20,
-  },
-  idInputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F5F5F5',
-    marginBottom: 16,
-  },
-  idIcon: {
-    marginRight: 12,
-  },
-  idInput: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: 'Poppins-Regular',
-  },
-  idActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  backButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 6,
-  },
-  backButtonText: {
-    fontSize: 14,
-    fontFamily: 'Poppins-SemiBold',
-  },
-  searchButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: 'Poppins-SemiBold',
-  },
-  fallbackButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: 'rgba(47,67,102,0.1)',
-  },
-  fallbackButtonText: {
-    color: '#2F4366',
-    fontSize: 14,
-    fontFamily: 'Poppins-SemiBold',
-  },
-  scanButtonContainer: {
-    width: 280,
-    height: 280,
-    marginBottom: 20,
-  },
-  scanButtonBox: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    borderStyle: 'dashed',
-  },
-  scanButtonText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#2F4366',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  backToScanButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: 'rgba(47,67,102,0.1)',
-    marginTop: 20,
-  },
-  backToScanButtonText: {
-    color: '#2F4366',
-    fontSize: 14,
-    fontFamily: 'Poppins-SemiBold',
-  },
-  footer: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
-    alignItems: 'center',
-  },
-  rulesContainer: {
-    width: '100%',
-    maxWidth: 400,
-    alignItems: 'center',
-  },
-  rulesHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  rulesTitle: {
-    fontSize: 12,
-    color: '#5F6368',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  rulesText: {
-    fontSize: 12,
-    color: '#5F6368',
-    textAlign: 'center',
-    fontFamily: 'Poppins-Regular',
-    lineHeight: 18,
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Poppins-Regular',
-    textAlign: 'center',
-  },
-  permissionText: {
-    fontSize: 16,
-    fontFamily: 'Poppins-Regular',
-    textAlign: 'center',
-    marginTop: 24,
-    marginBottom: 32,
-  },
-  permissionButton: {
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 10,
-  },
-  permissionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontFamily: 'Poppins-SemiBold',
-  },
+  container: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 16 },
+
+  // Header
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 8 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  logo: { width: 32, height: 32 },
+  brandName: { fontSize: 20, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
+  profileButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E0E4EA' },
+
+  pageTitle: { fontSize: 26, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold', paddingHorizontal: 24, marginTop: 20 },
+  pageSubtitle: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', paddingHorizontal: 24, marginTop: 4, marginBottom: 20 },
+  permText: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#8A94A6', textAlign: 'center' },
+
+  processingBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8, marginHorizontal: 24, backgroundColor: '#E8F4FD', borderRadius: 10, marginBottom: 12 },
+  processingText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#2F4366' },
+
+  // Customer card
+  customerCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 16 },
+  customerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  customerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F4FD', alignItems: 'center', justifyContent: 'center' },
+  customerName: { fontSize: 15, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
+  customerStamps: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 2 },
+  customerReward: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#27AE60', marginTop: 2 },
+  actionRow: { flexDirection: 'row', gap: 10 },
+  actionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderRadius: 10, paddingVertical: 10, gap: 6 },
+  actionText: { color: '#FFFFFF', fontSize: 13, fontFamily: 'Poppins-SemiBold' },
+  clearButton: { marginTop: 12, alignSelf: 'center' },
+  clearText: { color: '#8A94A6', fontSize: 12, fontFamily: 'Poppins-SemiBold' },
+
+  // Scan area
+  scanArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  scanTrigger: { width: 300, height: 300, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E0E4EA', borderStyle: 'dashed' },
+  scanTriggerText: { marginTop: 12, fontSize: 14, color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
+
+  cameraBox: { width: 320, height: 320, borderRadius: 20, overflow: 'hidden', position: 'relative' },
+  camera: { flex: 1 },
+  cameraOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  scanFrame: { width: 240, height: 240, borderWidth: 2, borderColor: '#FFFFFF', borderRadius: 14 },
+  scanHint: { position: 'absolute', bottom: 14, color: '#FFFFFF', fontSize: 11, fontFamily: 'Poppins-Regular', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10 },
+
+  idSection: { width: '100%', maxWidth: 300 },
+  inputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E4EA', borderRadius: 12, paddingHorizontal: 16, height: 54, marginBottom: 14, gap: 12 },
+  input: { flex: 1, fontSize: 15, fontFamily: 'Poppins-Regular', color: '#1A1A2E', padding: 0 },
+  idActions: { flexDirection: 'row', gap: 10 },
+  secondaryButton: { flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E0E4EA' },
+  secondaryButtonText: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
+  primaryButtonSmall: { flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2F4366' },
+
+  fallbackRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12 },
+  fallbackText: { color: '#2F4366', fontSize: 13, fontFamily: 'Poppins-SemiBold' },
+
+  // Conditions
+  conditionsCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginHorizontal: 24, marginBottom: 100, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14 },
+  conditionsText: { flex: 1, fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6', lineHeight: 16 },
+
+  primaryButton: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: 14, backgroundColor: '#2F4366' },
+  primaryButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Poppins-SemiBold' },
 });

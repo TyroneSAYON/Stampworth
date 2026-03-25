@@ -1,291 +1,118 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { ThemedView } from '@/components/themed-view';
-import { Colors } from '@/constants/theme';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { signInWithOAuth, signUp } from '@/lib/auth';
+import { signUp, signInWithOAuth } from '@/lib/auth';
+import { GoogleLogo } from '@/components/google-logo';
 
 export default function CreateAccountScreen() {
-  const colorScheme = useColorScheme();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<'google' | 'facebook' | null>(null);
 
-  const handleCreateAccount = async () => {
-    if (!username.trim() || !email.trim() || !password.trim()) {
-      Alert.alert('Missing fields', 'Please complete username, email, and password.');
-      return;
-    }
-
+  const handleCreate = async () => {
+    if (!username.trim() || !email.trim() || !password.trim()) { Alert.alert('Missing fields', 'Please complete all fields.'); return; }
     setLoading(true);
     const { error } = await signUp(email.trim(), password, username.trim());
     setLoading(false);
-
-    if (error) {
-      Alert.alert('Sign up failed', error.message);
-      return;
-    }
-
+    if (error) { Alert.alert('Sign up failed', error.message); return; }
     router.replace('/(tabs)/qrcode');
   };
 
-  const handleOAuthSignUp = async (provider: 'google' | 'facebook') => {
+  const handleOAuth = async (provider: 'google' | 'facebook') => {
     setSocialLoading(provider);
     const { error } = await signInWithOAuth(provider);
     setSocialLoading(null);
-
-    if (error) {
-      Alert.alert(`${provider === 'google' ? 'Google' : 'Facebook'} sign up failed`, error.message);
-      return;
-    }
-
+    if (error) { Alert.alert(`${provider} sign up failed`, error.message); return; }
     router.replace('/(tabs)/qrcode');
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Title */}
-        <View style={styles.titleContainer}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#2F4366" />
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={22} color="#2F4366" />
           </TouchableOpacity>
-          <Text style={[styles.title, { color: '#2F4366' }]}>
-            Create Account
-          </Text>
+          <Text style={styles.title}>Create Account</Text>
         </View>
 
-        {/* Logo and Brand */}
-        <View style={styles.logoContainer}>
-          <Image
-            source={require('@/assets/images/stampworth-logo.png')}
-            style={styles.logo}
-            contentFit="contain"
-          />
-          <Text
-            style={[
-              styles.brandName,
-              {
-                color: '#2F4366',
-                fontWeight: 'bold',
-                letterSpacing: 1,
-                textShadowColor: 'rgba(0,0,0,0.2)',
-                textShadowOffset: { width: 2, height: 2 },
-                textShadowRadius: 4,
-              },
-            ]}
-          >
-            Stampworth
-          </Text>
-          <Text style={[styles.tagline, { color: '#2F4366' }]}>
-            Your Virtual Loyalty Card
-          </Text>
+        <View style={styles.logoSection}>
+          <Image source={require('@/assets/images/stampworth-logo.png')} style={styles.logo} contentFit="contain" />
+          <Text style={styles.brand}>Stampworth</Text>
+          <Text style={styles.tagline}>Your Virtual Loyalty Card</Text>
         </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          <View style={[styles.inputContainer, { borderColor: Colors[colorScheme ?? 'light'].icon }]}>
-            <Ionicons name="person-outline" size={20} color={Colors[colorScheme ?? 'light'].icon} style={styles.inputIcon} />
-            <TextInput
-              value={username}
-              onChangeText={setUsername}
-              style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
-              placeholder="Enter username"
-              placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
-              autoCapitalize="none"
-            />
-          </View>
+        <View style={styles.inputBox}>
+          <Ionicons name="person-outline" size={18} color="#B0B8C4" />
+          <TextInput value={username} onChangeText={setUsername} style={styles.input} placeholder="Username" placeholderTextColor="#C4CAD4" autoCapitalize="none" />
+        </View>
 
-          <View style={[styles.inputContainer, { borderColor: Colors[colorScheme ?? 'light'].icon }]}>
-            <Ionicons name="mail-outline" size={20} color={Colors[colorScheme ?? 'light'].icon} style={styles.inputIcon} />
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
-              placeholder="Enter email"
-              placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
+        <View style={styles.inputBox}>
+          <Ionicons name="mail-outline" size={18} color="#B0B8C4" />
+          <TextInput value={email} onChangeText={setEmail} style={styles.input} placeholder="Email" placeholderTextColor="#C4CAD4" keyboardType="email-address" autoCapitalize="none" />
+        </View>
 
-          <View style={[styles.inputContainer, { borderColor: Colors[colorScheme ?? 'light'].icon }]}>
-            <Ionicons name="lock-closed-outline" size={20} color={Colors[colorScheme ?? 'light'].icon} style={styles.inputIcon} />
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              style={[styles.input, { color: Colors[colorScheme ?? 'light'].text }]}
-              placeholder="Set up password"
-              placeholderTextColor={Colors[colorScheme ?? 'light'].icon}
-              secureTextEntry
-            />
-          </View>
+        <View style={styles.inputBox}>
+          <Ionicons name="lock-closed-outline" size={18} color="#B0B8C4" />
+          <TextInput value={password} onChangeText={setPassword} style={styles.input} placeholder="Password" placeholderTextColor="#C4CAD4" secureTextEntry />
+        </View>
 
-          <TouchableOpacity 
-            style={styles.button}
-            onPress={handleCreateAccount}
-            disabled={loading}
-          >
-            <Text style={styles.buttonText}>{loading ? 'Creating...' : 'Create Account'}</Text>
+        <TouchableOpacity style={styles.primaryButton} onPress={handleCreate} disabled={loading}>
+          <Text style={styles.primaryButtonText}>{loading ? 'Creating...' : 'Create Account'}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.linkRow} onPress={() => router.push('/signin')}>
+          <Text style={styles.linkText}>Already have an account? <Text style={styles.linkBold}>Sign In</Text></Text>
+        </TouchableOpacity>
+
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        <View style={styles.socialRow}>
+          <TouchableOpacity style={styles.socialButton} onPress={() => handleOAuth('facebook')} disabled={loading || socialLoading !== null}>
+            <Ionicons name="logo-facebook" size={32} color="#1877F2" />
           </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.signInLink}
-            onPress={() => router.push('/signin')}
-          >
-            <Text style={[styles.signInLinkText, { color: '#2F4366' }]}>
-              Already have an account? Sign In
-            </Text>
+          <TouchableOpacity style={styles.socialButton} onPress={() => handleOAuth('google')} disabled={loading || socialLoading !== null}>
+            <GoogleLogo size={32} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.socialButton}>
+            <Ionicons name="logo-apple" size={32} color="#1A1A2E" />
           </TouchableOpacity>
         </View>
-
-        {/* Social Sign Up */}
-        <View style={styles.socialSection}>
-          <Text style={[styles.socialText, { color: '#2F4366' }]}>
-            or sign up with
-          </Text>
-          <View style={styles.socialButtons}>
-            <TouchableOpacity
-              style={[styles.socialButton, { backgroundColor: colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5' }]}
-              onPress={() => handleOAuthSignUp('facebook')}
-              disabled={loading || socialLoading !== null}
-            > 
-              <Ionicons name="logo-facebook" size={28} color="#1877F2" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.socialButton, { backgroundColor: colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5' }]}
-              onPress={() => handleOAuthSignUp('google')}
-              disabled={loading || socialLoading !== null}
-            > 
-              <Ionicons name="logo-google" size={28} color="#DB4437" />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.socialButton, { backgroundColor: colorScheme === 'dark' ? '#2A2A2A' : '#F5F5F5' }]}>
-              <Ionicons name="logo-apple" size={28} color={colorScheme === 'dark' ? '#FFFFFF' : '#000000'} />
-            </TouchableOpacity>
-          </View>
-          {socialLoading && (
-            <Text style={[styles.socialLoadingText, { color: '#2F4366' }]}>Creating account with {socialLoading}...</Text>
-          )}
-        </View>
+        {socialLoading && <Text style={styles.socialLoadingText}>Creating account with {socialLoading}...</Text>}
       </ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 80,
-  },
-  backButton: {
-    marginRight: 16,
-    padding: 4,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '600',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  logo: {
-    width: 40,
-    height: 40,
-    marginBottom: 16,
-  },
-  brandName: {
-    fontSize: 32,
-    fontWeight: '700',
-    fontFamily: 'Poppins-Bold',
-    marginBottom: 4,
-  },
-  tagline: {
-    fontSize: 14,
-    fontFamily: 'Poppins-Regular',
-  },
-  form: {
-    marginBottom: 32,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 8,
-    marginBottom: 16,
-    paddingHorizontal: 12,
-    height: 56,
-  },
-  inputIcon: {
-    marginRight: 12,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: 'Poppins-Regular',
-  },
-  button: {
-    height: 56,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    marginTop: 8,
-    backgroundColor: '#2F4366',
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  signInLink: {
-    alignItems: 'center',
-  },
-  signInLinkText: {
-    fontSize: 14,
-    fontFamily: 'Poppins-Regular',
-  },
-  socialSection: {
-    alignItems: 'center',
-  },
-  socialText: {
-    fontSize: 13,
-    fontFamily: 'Poppins-Regular',
-    marginBottom: 16,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    gap: 20,
-  },
-  socialLoadingText: {
-    marginTop: 12,
-    fontSize: 13,
-    fontFamily: 'Poppins-Regular',
-  },
-  socialButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  scroll: { paddingHorizontal: 28, paddingTop: 72, paddingBottom: 48 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 48 },
+  backButton: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F0F2F5', alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 26, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
+  logoSection: { alignItems: 'center', marginBottom: 40 },
+  logo: { width: 56, height: 56, marginBottom: 16 },
+  brand: { fontSize: 26, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
+  tagline: { fontSize: 13, color: '#8A94A6', fontFamily: 'Poppins-Regular', marginTop: 4 },
+  inputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8F9FB', borderWidth: 1, borderColor: '#E0E4EA', borderRadius: 12, paddingHorizontal: 16, height: 54, marginBottom: 14, gap: 12 },
+  input: { flex: 1, fontSize: 15, fontFamily: 'Poppins-Regular', color: '#1A1A2E', padding: 0 },
+  primaryButton: { height: 54, borderRadius: 14, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2F4366', marginTop: 14, marginBottom: 16 },
+  primaryButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', fontFamily: 'Poppins-SemiBold' },
+  linkRow: { alignItems: 'center', marginBottom: 32 },
+  linkText: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
+  linkBold: { color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 28, gap: 12 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: '#E0E4EA' },
+  dividerText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
+  socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 32 },
+  socialButton: { padding: 8, justifyContent: 'center', alignItems: 'center' },
+  socialLoadingText: { textAlign: 'center', marginTop: 16, fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
 });
-

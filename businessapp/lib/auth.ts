@@ -128,12 +128,36 @@ export const signUp = async (email: string, password: string, fullName: string) 
     };
   }
 
+  // Fallback: sign up directly via Supabase when backend is unreachable (e.g. running on a phone).
+  const { data: directSignUp, error: directSignUpError } = await supabase.auth.signUp({
+    email: normalizedEmail,
+    password,
+    options: {
+      data: {
+        full_name: fullName,
+        business_name: fullName,
+      },
+    },
+  });
+
+  if (directSignUpError) {
+    return { data: null, error: directSignUpError, requiresEmailConfirmation: false };
+  }
+
+  // If user was created but email needs confirmation
+  if (directSignUp.user && !directSignUp.session) {
+    return { data: null, error: null, requiresEmailConfirmation: true };
+  }
+
+  // User is signed in immediately (email confirmation disabled in Supabase)
+  if (directSignUp.user && directSignUp.session) {
+    await persistMerchantAuthReflection(normalizedEmail, fullName);
+    return { data: directSignUp, error: null, requiresEmailConfirmation: false };
+  }
+
   return {
     data: null,
-    error: new Error(
-      backendSignup.message ||
-        'Unable to create account via backend. Check EXPO_PUBLIC_BACKEND_URL and backend service-role key.',
-    ),
+    error: new Error('Unable to create account. Please try again.'),
     requiresEmailConfirmation: false,
   };
 };

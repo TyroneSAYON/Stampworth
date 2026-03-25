@@ -1,10 +1,5 @@
-import { useEffect } from 'react';
-import { router } from 'expo-router';
+import { Redirect } from 'expo-router';
 
 export default function HomeScreen() {
-  useEffect(() => {
-    router.replace('/(tabs)/scan');
-  }, []);
-
-  return null;
+  return <Redirect href="/(tabs)/scan" />;
 }

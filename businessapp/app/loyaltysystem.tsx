@@ -1,57 +1,51 @@
-import { useState, useEffect } from 'react';
-import { Alert, ActivityIndicator, StyleSheet, View, useColorScheme, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { useState, useCallback } from 'react';
+import { Alert, ActivityIndicator, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import {
   getCurrentMerchantProfile,
   getMerchantLoyaltyConfiguration,
   saveMerchantLoyaltyConfiguration,
+  saveMerchantStampProgramConfiguration,
 } from '@/lib/database';
 
-// Expanded color wheel/palette
 const COLOR_SCHEMES = [
-  // Primary Colors
   { name: 'Blue', value: '#2F4366' },
   { name: 'Navy', value: '#1A237E' },
   { name: 'Sky Blue', value: '#03A9F4' },
   { name: 'Cyan', value: '#00BCD4' },
-  // Green Shades
   { name: 'Green', value: '#27AE60' },
   { name: 'Emerald', value: '#2ECC71' },
-  { name: 'Lime', value: '#CDDC39' },
   { name: 'Teal', value: '#1ABC9C' },
-  // Purple/Pink Shades
   { name: 'Purple', value: '#9B59B6' },
   { name: 'Violet', value: '#673AB7' },
   { name: 'Pink', value: '#E91E63' },
-  { name: 'Rose', value: '#F06292' },
-  // Warm Colors
   { name: 'Orange', value: '#E67E22' },
-  { name: 'Amber', value: '#FFC107' },
   { name: 'Red', value: '#E74C3C' },
-  { name: 'Coral', value: '#FF5722' },
-  // Neutral/Dark
   { name: 'Brown', value: '#795548' },
   { name: 'Grey', value: '#607D8B' },
   { name: 'Indigo', value: '#3F51B5' },
   { name: 'Deep Purple', value: '#512DA8' },
 ];
 
-// Predefined stamp icons
 const STAMP_ICONS = [
-  { name: 'Coffee Cup', icon: 'cafe' },
+  { name: 'Coffee', icon: 'cafe' },
   { name: 'Star', icon: 'star' },
-  { name: 'Checkmark', icon: 'checkmark-circle' },
+  { name: 'Check', icon: 'checkmark-circle' },
   { name: 'Heart', icon: 'heart' },
   { name: 'Trophy', icon: 'trophy' },
   { name: 'Gift', icon: 'gift' },
+  { name: 'Pizza', icon: 'pizza' },
+  { name: 'Ice Cream', icon: 'ice-cream' },
 ];
 
 export default function LoyaltySystemScreen() {
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const isEditMode = mode === 'edit';
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? 'light'];
 
@@ -59,77 +53,117 @@ export default function LoyaltySystemScreen() {
   const [selectedIcon, setSelectedIcon] = useState(STAMP_ICONS[0]);
   const [customIconUri, setCustomIconUri] = useState<string | null>(null);
   const [businessName, setBusinessName] = useState('Your Business');
+
+  const [numberOfStamps, setNumberOfStamps] = useState('10');
+  const [reward, setReward] = useState('');
+  const [conditions, setConditions] = useState('');
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const loadConfig = async () => {
-      setLoading(true);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-      const { data: merchant, error: merchantError } = await getCurrentMerchantProfile();
-      if (merchantError || !merchant) {
-        setLoading(false);
-        const errorMessage = merchantError?.message || '';
-        if (errorMessage === 'AUTH_SESSION_MISSING') {
-          Alert.alert('Session expired', 'Please sign in again.');
-          router.replace('/signin');
+      const loadConfig = async () => {
+        setLoading(true);
+
+        const { data: merchant, error: merchantError } = await getCurrentMerchantProfile();
+        if (cancelled) return;
+        if (merchantError || !merchant) {
+          setLoading(false);
+          if (merchantError?.message === 'AUTH_SESSION_MISSING') {
+            Alert.alert('Session expired', 'Please sign in again.');
+            router.replace('/signin');
+            return;
+          }
+          Alert.alert('Merchant account not found', merchantError?.message || 'Please sign in with your business account.');
           return;
         }
 
-        Alert.alert('Merchant account not found', errorMessage || 'Please sign in with your business account.');
-        return;
-      }
+        setBusinessName(merchant.business_name || 'Your Business');
 
-      setBusinessName(merchant.business_name || 'Your Business');
+        const { data: settings } = await getMerchantLoyaltyConfiguration();
+        if (cancelled) return;
+        if (settings) {
+          setSelectedColor(settings.card_color || COLOR_SCHEMES[0].value);
+          setNumberOfStamps(String(settings.stamps_per_redemption || 10));
+          setReward(settings.redemption_reward_description || '');
+          setConditions(settings.promotion_text || '');
 
-      const { data: existingSettings } = await getMerchantLoyaltyConfiguration();
-      if (existingSettings) {
-        setSelectedColor(existingSettings.card_color || COLOR_SCHEMES[0].value);
-
-        const matchedIcon = STAMP_ICONS.find((item) => item.icon === existingSettings.stamp_icon_name);
-        if (matchedIcon) {
-          setSelectedIcon(matchedIcon);
-          setCustomIconUri(null);
-        } else if (existingSettings.stamp_icon_image_url) {
-          setCustomIconUri(existingSettings.stamp_icon_image_url);
-          setSelectedIcon({ name: 'Custom', icon: 'image' });
+          const matchedIcon = STAMP_ICONS.find((item) => item.icon === settings.stamp_icon_name);
+          if (matchedIcon) {
+            setSelectedIcon(matchedIcon);
+            setCustomIconUri(null);
+          } else if (settings.stamp_icon_image_url) {
+            setCustomIconUri(settings.stamp_icon_image_url);
+            setSelectedIcon({ name: 'Custom', icon: 'image' });
+          }
         }
-      }
 
-      setLoading(false);
-    };
+        setLoading(false);
+      };
 
-    loadConfig();
-  }, []);
+      loadConfig();
+
+      return () => { cancelled = true; };
+    }, [])
+  );
 
   const handleSave = async () => {
+    if (!numberOfStamps || parseInt(numberOfStamps, 10) < 1) {
+      Alert.alert('Invalid Input', 'Please enter a valid number of stamps (minimum 1).');
+      return;
+    }
+    if (!reward.trim()) {
+      Alert.alert('Required Field', 'Please enter a reward description.');
+      return;
+    }
+
     setSaving(true);
-    const { error } = await saveMerchantLoyaltyConfiguration({
+
+    const { error: styleError } = await saveMerchantLoyaltyConfiguration({
       cardColor: selectedColor,
       stampIconName: selectedIcon.icon,
       customIconUri,
     });
-    setSaving(false);
 
-    if (error) {
-      if (error.message === 'AUTH_SESSION_MISSING') {
+    if (styleError) {
+      setSaving(false);
+      if (styleError.message === 'AUTH_SESSION_MISSING') {
         Alert.alert('Session expired', 'Please sign in again.');
         router.replace('/signin');
         return;
       }
-
-      Alert.alert('Failed to save loyalty settings', error.message);
+      Alert.alert('Failed to save card style', styleError.message);
       return;
     }
 
-    Alert.alert('Saved', 'Card style configuration has been saved.', [
-      {
-        text: 'Continue',
-        onPress: () => {
-          router.push('/stampsetup');
-        },
-      },
-    ]);
+    const { error: programError } = await saveMerchantStampProgramConfiguration({
+      stampsPerRedemption: parseInt(numberOfStamps, 10),
+      rewardDescription: reward,
+      conditions,
+    });
+
+    setSaving(false);
+
+    if (programError) {
+      if (programError.message === 'AUTH_SESSION_MISSING') {
+        Alert.alert('Session expired', 'Please sign in again.');
+        router.replace('/signin');
+        return;
+      }
+      Alert.alert('Failed to save stamp program', programError.message);
+      return;
+    }
+
+    if (isEditMode) {
+      Alert.alert('Saved', 'Loyalty system updated successfully.', [{ text: 'OK', onPress: () => router.back() }]);
+    } else {
+      Alert.alert('Saved', 'Loyalty system configuration saved successfully.', [
+        { text: 'Go to Scan', onPress: () => router.push('/(tabs)/scan') },
+      ]);
+    }
   };
 
   const pickCustomIcon = async () => {
@@ -140,7 +174,7 @@ export default function LoyaltySystemScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.9,
@@ -152,11 +186,12 @@ export default function LoyaltySystemScreen() {
     }
   };
 
-  const totalStamps = 10;
-  const collectedStamps = 3;
-  const stamps = Array.from({ length: totalStamps }, (_, i) => ({
+  const stampsNum = parseInt(numberOfStamps, 10) || 10;
+  const previewCollected = Math.min(3, stampsNum - 1); // leave last for FREE
+  const stamps = Array.from({ length: stampsNum }, (_, i) => ({
     id: i,
-    collected: i < collectedStamps,
+    collected: i < previewCollected,
+    isFree: i === stampsNum - 1,
   }));
 
   return (
@@ -164,38 +199,34 @@ export default function LoyaltySystemScreen() {
       {loading ? (
         <View style={styles.loadingState}>
           <ActivityIndicator size="large" color="#2F4366" />
-          <Text style={[styles.loadingText, { color: theme.text }]}>Loading loyalty settings...</Text>
+          <Text style={[styles.loadingText, { color: theme.text }]}>Loading settings...</Text>
         </View>
       ) : (
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: '#2F4366' }]}>Loyalty System</Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={24} color="#2F4366" />
+            </TouchableOpacity>
+            <View>
+              <Text style={styles.title}>Loyalty System</Text>
+              <Text style={[styles.subtitle, { color: theme.icon }]}>
+                Card style, stamps, and rewards
+              </Text>
+            </View>
+          </View>
 
-        <Text style={[styles.subtitle, { color: theme.icon }]}>
-          Configure your stamp-based loyalty program
-        </Text>
-
-        {/* Stamp Card Preview */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: '#2F4366' }]}>Card Preview</Text>
+          {/* Card Preview */}
           <View style={[styles.cardPreview, { backgroundColor: selectedColor }]}>
-            <View style={styles.cardHeader}>
+            <View style={styles.cardRow}>
               <View style={styles.cardLogoPlaceholder}>
-                <Ionicons name="business" size={24} color="#FFFFFF" />
+                <Ionicons name="business" size={22} color="#FFFFFF" />
               </View>
-              <View>
-                <Text style={styles.cardBusinessName}>{businessName}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardBusinessName} numberOfLines={1}>{businessName}</Text>
                 <Text style={styles.cardSubtitle}>Loyalty Card</Text>
               </View>
-            </View>
-            <View style={styles.cardDivider} />
-            <View style={styles.cardFooter}>
-              <Text style={styles.cardStampsLabel}>Stamps</Text>
-              <Text style={styles.cardStampsValue}>
-                {collectedStamps} / {totalStamps}
-              </Text>
+              <Text style={styles.cardStampsValue}>{previewCollected}/{stampsNum}</Text>
             </View>
             <View style={styles.stampGrid}>
               {stamps.map((stamp) => (
@@ -203,76 +234,110 @@ export default function LoyaltySystemScreen() {
                   key={stamp.id}
                   style={[
                     styles.stampPreview,
-                    {
-                      backgroundColor: stamp.collected ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
-                      borderColor: stamp.collected ? '#FFFFFF' : 'rgba(255,255,255,0.5)',
-                    },
+                    stamp.isFree
+                      ? { backgroundColor: 'rgba(255,255,255,0.9)', borderColor: '#FFFFFF', borderWidth: 2 }
+                      : {
+                          backgroundColor: stamp.collected ? '#FFFFFF' : 'rgba(255,255,255,0.2)',
+                          borderColor: stamp.collected ? '#FFFFFF' : 'rgba(255,255,255,0.4)',
+                        },
                   ]}
                 >
-                  {stamp.collected
-                    ? customIconUri
-                      ? <Image source={{ uri: customIconUri }} style={styles.stampIconPreview} contentFit="contain" />
-                      : <Ionicons name={selectedIcon.icon as any} size={20} color={selectedColor} />
-                    : null}
+                  {stamp.isFree
+                    ? <Text style={{ fontSize: 8, fontFamily: 'Poppins-SemiBold', color: selectedColor, textAlign: 'center' }}>FREE</Text>
+                    : stamp.collected
+                      ? customIconUri
+                        ? <Image source={{ uri: customIconUri }} style={styles.stampIconPreview} contentFit="contain" />
+                        : <Ionicons name={selectedIcon.icon as any} size={18} color={selectedColor} />
+                      : null}
                 </View>
               ))}
             </View>
           </View>
-        </View>
 
-        {/* Card Color Scheme */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: '#2F4366' }]}>Card Color Scheme</Text>
+          {/* Stamp Program */}
+          <Text style={styles.sectionTitle}>Stamp Program</Text>
+
+          <View style={styles.fieldRow}>
+            <View style={[styles.fieldSmall, styles.inputBox, { borderColor: '#E0E4EA' }]}>
+              <Text style={styles.fieldLabel}>Stamps Required</Text>
+              <TextInput
+                value={numberOfStamps}
+                onChangeText={setNumberOfStamps}
+                style={styles.fieldInput}
+                keyboardType="number-pad"
+                placeholder="10"
+                placeholderTextColor="#B0B8C4"
+              />
+            </View>
+            <View style={[styles.fieldLarge, styles.inputBox, { borderColor: '#E0E4EA' }]}>
+              <Text style={styles.fieldLabel}>Reward</Text>
+              <TextInput
+                value={reward}
+                onChangeText={setReward}
+                style={styles.fieldInput}
+                placeholder="e.g., Free coffee"
+                placeholderTextColor="#B0B8C4"
+              />
+            </View>
+          </View>
+
+          <View style={[styles.inputBox, { borderColor: '#E0E4EA' }]}>
+            <Text style={styles.fieldLabel}>Conditions & Redemption Rules</Text>
+            <TextInput
+              value={conditions}
+              onChangeText={setConditions}
+              style={[styles.fieldInput, { minHeight: 60 }]}
+              placeholder="Describe earning and redemption conditions..."
+              placeholderTextColor="#B0B8C4"
+              multiline
+              textAlignVertical="top"
+            />
+          </View>
+
+          {/* Card Color */}
+          <Text style={styles.sectionTitle}>Card Color</Text>
           <View style={styles.colorGrid}>
             {COLOR_SCHEMES.map((color) => (
               <TouchableOpacity
                 key={color.value}
                 style={[
                   styles.colorOption,
-                  {
-                    backgroundColor: color.value,
-                    borderWidth: selectedColor === color.value ? 3 : 1,
-                    borderColor: selectedColor === color.value ? '#2F4366' : theme.icon,
-                  },
+                  { backgroundColor: color.value },
+                  selectedColor === color.value && styles.colorOptionSelected,
                 ]}
                 onPress={() => setSelectedColor(color.value)}
               >
                 {selectedColor === color.value && (
-                  <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                  <Ionicons name="checkmark" size={18} color="#FFFFFF" />
                 )}
               </TouchableOpacity>
             ))}
           </View>
-        </View>
 
-        {/* Stamp Icon Customization */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: '#2F4366' }]}>Stamp Icon</Text>
+          {/* Stamp Icon */}
+          <Text style={styles.sectionTitle}>Stamp Icon</Text>
           <View style={styles.iconGrid}>
-            {STAMP_ICONS.map((icon) => (
-              <TouchableOpacity
-                key={icon.name}
-                style={[
-                  styles.iconOption,
-                  {
-                    borderColor: selectedIcon.name === icon.name && !customIconUri ? '#2F4366' : theme.icon,
-                    borderWidth: selectedIcon.name === icon.name && !customIconUri ? 2 : 1,
-                    backgroundColor: selectedIcon.name === icon.name && !customIconUri ? 'rgba(47,67,102,0.1)' : 'transparent',
-                  },
-                ]}
-                onPress={() => {
-                  setSelectedIcon(icon);
-                  setCustomIconUri(null);
-                }}
-              >
-                <Ionicons name={icon.icon as any} size={28} color={selectedColor} />
-                <Text style={[styles.iconLabel, { color: theme.text }]}>{icon.name}</Text>
-              </TouchableOpacity>
-            ))}
+            {STAMP_ICONS.map((icon) => {
+              const isActive = selectedIcon.name === icon.name && !customIconUri;
+              return (
+                <TouchableOpacity
+                  key={icon.name}
+                  style={[
+                    styles.iconOption,
+                    isActive && styles.iconOptionActive,
+                  ]}
+                  onPress={() => { setSelectedIcon(icon); setCustomIconUri(null); }}
+                >
+                  <Ionicons name={icon.icon as any} size={26} color={isActive ? '#2F4366' : '#8A94A6'} />
+                  <Text style={[styles.iconLabel, isActive && { color: '#2F4366' }]}>{icon.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
+
           <TouchableOpacity style={styles.customIconButton} onPress={pickCustomIcon}>
-            <Ionicons name="image-outline" size={24} color="#2F4366" />
-            <Text style={[styles.customIconText, { color: '#2F4366' }]}>
+            <Ionicons name="image-outline" size={20} color="#2F4366" />
+            <Text style={styles.customIconText}>
               {customIconUri ? 'Change Custom Icon' : 'Upload Custom Icon'}
             </Text>
           </TouchableOpacity>
@@ -281,210 +346,71 @@ export default function LoyaltySystemScreen() {
               <Image source={{ uri: customIconUri }} style={styles.uploadedIcon} contentFit="contain" />
             </View>
           )}
-        </View>
 
-        {/* Save Button */}
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: '#2F4366' }]}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save Configuration'}</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          {/* Save */}
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            <Text style={styles.saveButtonText}>{saving ? 'Saving...' : isEditMode ? 'Save Changes' : 'Save Configuration'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
       )}
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
-  loadingState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-    fontFamily: 'Poppins-Regular',
-  },
-  header: {
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '600',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: 'Poppins-Regular',
-    marginBottom: 32,
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontFamily: 'Poppins-SemiBold',
-    marginBottom: 16,
-  },
-  // Card Preview Styles
-  cardPreview: {
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  cardLogoPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  cardBusinessName: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  cardSubtitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    fontFamily: 'Poppins-Regular',
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    marginBottom: 16,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  cardStampsLabel: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    fontFamily: 'Poppins-Regular',
-  },
-  cardStampsValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    fontFamily: 'Poppins-SemiBold',
-  },
-  stampGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  stampPreview: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stampIconPreview: {
-    width: 24,
-    height: 24,
-  },
-  // Color Scheme Styles
-  colorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    justifyContent: 'center',
-  },
-  colorOption: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Icon Customization Styles
-  iconGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 16,
-    justifyContent: 'center',
-  },
-  iconOption: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  iconLabel: {
-    fontSize: 11,
-    fontFamily: 'Poppins-Regular',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  customIconButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#2F4366',
-    borderStyle: 'dashed',
-    marginBottom: 12,
-  },
-  customIconText: {
-    marginLeft: 8,
-    fontSize: 14,
-    fontFamily: 'Poppins-Regular',
-  },
-  uploadedIcon: {
-    width: 60,
-    height: 60,
-  },
-  customIconPreview: {
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  // Save Button
-  saveButton: {
-    height: 56,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: 'Poppins-SemiBold',
-  },
-});
+  container: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 56, paddingBottom: 48 },
+  loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { fontSize: 14, fontFamily: 'Poppins-Regular' },
 
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 28 },
+  backButton: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F0F2F5', alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 24, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
+  subtitle: { fontSize: 13, fontFamily: 'Poppins-Regular', marginTop: 2 },
+
+  // Card Preview
+  cardPreview: { borderRadius: 16, padding: 18, marginBottom: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 6 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 10 },
+  cardLogoPlaceholder: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  cardBusinessName: { fontSize: 17, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
+  cardSubtitle: { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontFamily: 'Poppins-Regular' },
+  cardStampsValue: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
+  stampGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  stampPreview: { width: 36, height: 36, borderRadius: 18, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  stampIconPreview: { width: 20, height: 20 },
+
+  // Sections
+  sectionTitle: { fontSize: 15, fontFamily: 'Poppins-SemiBold', color: '#2F4366', marginBottom: 14, marginTop: 4 },
+
+  // Stamp program fields
+  fieldRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  fieldSmall: { flex: 1 },
+  fieldLarge: { flex: 2 },
+  inputBox: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#F8F9FB', marginBottom: 12 },
+  fieldLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#8A94A6', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
+  fieldInput: { fontSize: 15, fontFamily: 'Poppins-Regular', color: '#1A1A2E', minHeight: 22, padding: 0 },
+
+  // Colors
+  colorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
+  colorOption: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'transparent' },
+  colorOptionSelected: { borderColor: '#1A1A2E', borderWidth: 3 },
+
+  // Icons
+  iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },
+  iconOption: { width: 72, height: 72, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0F2F5' },
+  iconOptionActive: { backgroundColor: 'rgba(47,67,102,0.1)', borderWidth: 2, borderColor: '#2F4366' },
+  iconLabel: { fontSize: 10, fontFamily: 'Poppins-Regular', marginTop: 4, color: '#8A94A6' },
+
+  customIconButton: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: '#2F4366', borderStyle: 'dashed', marginBottom: 12 },
+  customIconText: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#2F4366' },
+  uploadedIcon: { width: 52, height: 52 },
+  customIconPreview: { alignItems: 'center', marginBottom: 12 },
+
+  // Save
+  saveButton: { height: 54, borderRadius: 14, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2F4366', marginTop: 8 },
+  saveButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', fontFamily: 'Poppins-SemiBold' },
+});

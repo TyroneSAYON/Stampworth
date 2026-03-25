@@ -5,6 +5,8 @@ import { useFonts } from 'expo-font';
 import { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
+import { LogBox } from 'react-native';
+LogBox.ignoreLogs(['shared value']);
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
