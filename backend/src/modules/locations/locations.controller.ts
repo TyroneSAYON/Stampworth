@@ -26,9 +26,10 @@ export class LocationsController {
   checkGeofence(
     @Body('latitude') latitude: number,
     @Body('longitude') longitude: number,
+    @Body('customerId') customerId: string,
     @Body('merchantId') merchantId: string,
   ) {
-    return this.locationsService.checkGeofence(latitude, longitude, merchantId);
+    return this.locationsService.checkGeofence(customerId, merchantId);
   }
 
   @Post('update-location')

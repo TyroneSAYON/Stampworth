@@ -3,7 +3,7 @@ region: sgp
 services:
   - name: api
     github:
-      repo: https://github.com/TyroneSAYON/Stampworth.git
+      repo: TyroneSAYON/Stampworth
       branch: main
       deploy_on_push: true
     dockerfile_path: /Dockerfile
@@ -27,12 +27,12 @@ services:
       - key: SUPABASE_URL
         scope: RUN_TIME
         type: SECRET
-        value: https://qjidbjmcvmsunrjufomz.supabase.co
-      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqaWRiam1jdm1zdW5yanVmb216Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyOTI3MTksImV4cCI6MjA4ODg2ODcxOX0.hVFELaMtjgtYVwhYEvG4uX9H25sI_SfMDp_TsvE8OTM
+        value: REPLACE_WITH_SUPABASE_URL
+      - key: SUPABASE_ANON_KEY
         scope: RUN_TIME
         type: SECRET
         value: REPLACE_WITH_SUPABASE_ANON_KEY
-      - key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqaWRiam1jdm1zdW5yanVmb216Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzI5MjcxOSwiZXhwIjoyMDg4ODY4NzE5fQ.PtgaxQwYrTK59TUv1_mqtdzf59tMZZYtC3rA4ZyBdZY
+      - key: SUPABASE_SERVICE_ROLE_KEY
         scope: RUN_TIME
         type: SECRET
         value: REPLACE_WITH_SUPABASE_SERVICE_ROLE_KEY

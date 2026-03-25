@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
-import { Alert, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { Alert, ActivityIndicator, StyleSheet, View, useColorScheme, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import {
+  getCurrentMerchantProfile,
+  getMerchantLoyaltyConfiguration,
+  saveMerchantLoyaltyConfiguration,
+} from '@/lib/database';
 
 // Expanded color wheel/palette
 const COLOR_SCHEMES = [
@@ -53,18 +58,79 @@ export default function LoyaltySystemScreen() {
   const [selectedColor, setSelectedColor] = useState(COLOR_SCHEMES[0].value);
   const [selectedIcon, setSelectedIcon] = useState(STAMP_ICONS[0]);
   const [customIconUri, setCustomIconUri] = useState<string | null>(null);
-  const [numberOfStamps, setNumberOfStamps] = useState('10');
-  const [reward, setReward] = useState('');
-  const [conditions, setConditions] = useState('Buy 10 coffees and get your 11th coffee free.');
-  const [collectedStamps, setCollectedStamps] = useState(3); // Show 3 collected stamps in preview
+  const [businessName, setBusinessName] = useState('Your Business');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  // Update collected stamps when total changes to keep preview valid
   useEffect(() => {
-    const total = parseInt(numberOfStamps) || 10;
-    if (collectedStamps > total) {
-      setCollectedStamps(Math.max(0, total - 1));
+    const loadConfig = async () => {
+      setLoading(true);
+
+      const { data: merchant, error: merchantError } = await getCurrentMerchantProfile();
+      if (merchantError || !merchant) {
+        setLoading(false);
+        const errorMessage = merchantError?.message || '';
+        if (errorMessage === 'AUTH_SESSION_MISSING') {
+          Alert.alert('Session expired', 'Please sign in again.');
+          router.replace('/signin');
+          return;
+        }
+
+        Alert.alert('Merchant account not found', errorMessage || 'Please sign in with your business account.');
+        return;
+      }
+
+      setBusinessName(merchant.business_name || 'Your Business');
+
+      const { data: existingSettings } = await getMerchantLoyaltyConfiguration();
+      if (existingSettings) {
+        setSelectedColor(existingSettings.card_color || COLOR_SCHEMES[0].value);
+
+        const matchedIcon = STAMP_ICONS.find((item) => item.icon === existingSettings.stamp_icon_name);
+        if (matchedIcon) {
+          setSelectedIcon(matchedIcon);
+          setCustomIconUri(null);
+        } else if (existingSettings.stamp_icon_image_url) {
+          setCustomIconUri(existingSettings.stamp_icon_image_url);
+          setSelectedIcon({ name: 'Custom', icon: 'image' });
+        }
+      }
+
+      setLoading(false);
+    };
+
+    loadConfig();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    const { error } = await saveMerchantLoyaltyConfiguration({
+      cardColor: selectedColor,
+      stampIconName: selectedIcon.icon,
+      customIconUri,
+    });
+    setSaving(false);
+
+    if (error) {
+      if (error.message === 'AUTH_SESSION_MISSING') {
+        Alert.alert('Session expired', 'Please sign in again.');
+        router.replace('/signin');
+        return;
+      }
+
+      Alert.alert('Failed to save loyalty settings', error.message);
+      return;
     }
-  }, [numberOfStamps]);
+
+    Alert.alert('Saved', 'Card style configuration has been saved.', [
+      {
+        text: 'Continue',
+        onPress: () => {
+          router.push('/stampsetup');
+        },
+      },
+    ]);
+  };
 
   const pickCustomIcon = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -86,27 +152,8 @@ export default function LoyaltySystemScreen() {
     }
   };
 
-  const handleSave = () => {
-    if (!reward.trim()) {
-      Alert.alert('Required Field', 'Please enter a reward for completing the stamp card.');
-      return;
-    }
-    if (!numberOfStamps || parseInt(numberOfStamps) < 1) {
-      Alert.alert('Invalid Input', 'Please enter a valid number of stamps (minimum 1).');
-      return;
-    }
-
-    Alert.alert('Success', 'Loyalty system configured successfully!', [
-      {
-        text: 'OK',
-        onPress: () => {
-          router.push('/(tabs)/scan');
-        },
-      },
-    ]);
-  };
-
-  const totalStamps = parseInt(numberOfStamps) || 10;
+  const totalStamps = 10;
+  const collectedStamps = 3;
   const stamps = Array.from({ length: totalStamps }, (_, i) => ({
     id: i,
     collected: i < collectedStamps,
@@ -114,6 +161,12 @@ export default function LoyaltySystemScreen() {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
+      {loading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color="#2F4366" />
+          <Text style={[styles.loadingText, { color: theme.text }]}>Loading loyalty settings...</Text>
+        </View>
+      ) : (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -133,7 +186,7 @@ export default function LoyaltySystemScreen() {
                 <Ionicons name="business" size={24} color="#FFFFFF" />
               </View>
               <View>
-                <Text style={styles.cardBusinessName}>Your Business</Text>
+                <Text style={styles.cardBusinessName}>{businessName}</Text>
                 <Text style={styles.cardSubtitle}>Loyalty Card</Text>
               </View>
             </View>
@@ -145,41 +198,25 @@ export default function LoyaltySystemScreen() {
               </Text>
             </View>
             <View style={styles.stampGrid}>
-              {stamps.map((stamp, index) => {
-                const isLastSlot = index === stamps.length - 1;
-                const isRewardSlot = isLastSlot && reward.trim();
-                return (
-                  <View
-                    key={stamp.id}
-                    style={[
-                      styles.stampPreview,
-                      {
-                        backgroundColor: stamp.collected || isRewardSlot ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
-                        borderColor: stamp.collected || isRewardSlot ? '#FFFFFF' : 'rgba(255,255,255,0.5)',
-                      },
-                    ]}
-                  >
-                    {isRewardSlot ? (
-                      <Ionicons name="gift" size={20} color={selectedColor} />
-                    ) : stamp.collected ? (
-                      <>
-                        {customIconUri ? (
-                          <Image source={{ uri: customIconUri }} style={styles.customIconPreview} contentFit="contain" />
-                        ) : (
-                          <Ionicons name={selectedIcon.icon as any} size={20} color={selectedColor} />
-                        )}
-                      </>
-                    ) : null}
-                  </View>
-                );
-              })}
+              {stamps.map((stamp) => (
+                <View
+                  key={stamp.id}
+                  style={[
+                    styles.stampPreview,
+                    {
+                      backgroundColor: stamp.collected ? '#FFFFFF' : 'rgba(255,255,255,0.3)',
+                      borderColor: stamp.collected ? '#FFFFFF' : 'rgba(255,255,255,0.5)',
+                    },
+                  ]}
+                >
+                  {stamp.collected
+                    ? customIconUri
+                      ? <Image source={{ uri: customIconUri }} style={styles.stampIconPreview} contentFit="contain" />
+                      : <Ionicons name={selectedIcon.icon as any} size={20} color={selectedColor} />
+                    : null}
+                </View>
+              ))}
             </View>
-            {reward.trim() && (
-              <View style={styles.rewardPreview}>
-                <Ionicons name="gift" size={16} color="#FFFFFF" />
-                <Text style={styles.rewardPreviewText}>{reward}</Text>
-              </View>
-            )}
           </View>
         </View>
 
@@ -246,60 +283,16 @@ export default function LoyaltySystemScreen() {
           )}
         </View>
 
-        {/* Number of Stamps */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: '#2F4366' }]}>Number of Stamps *</Text>
-          <View style={[styles.inputContainer, { borderColor: theme.icon }]}>
-            <Ionicons name="hash-outline" size={20} color={theme.icon} style={styles.inputIcon} />
-            <TextInput
-              value={numberOfStamps}
-              onChangeText={setNumberOfStamps}
-              style={[styles.input, { color: theme.text }]}
-              placeholder="Enter total stamps required"
-              placeholderTextColor={theme.icon}
-              keyboardType="number-pad"
-            />
-          </View>
-        </View>
-
-        {/* Rewards Configuration */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: '#2F4366' }]}>Reward *</Text>
-          <View style={[styles.inputContainer, { borderColor: theme.icon }]}>
-            <Ionicons name="gift-outline" size={20} color={theme.icon} style={styles.inputIcon} />
-            <TextInput
-              value={reward}
-              onChangeText={setReward}
-              style={[styles.input, { color: theme.text }]}
-              placeholder="e.g., Free coffee, 10% discount"
-              placeholderTextColor={theme.icon}
-            />
-          </View>
-        </View>
-
-        {/* Conditions & Redemption Rules */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: '#2F4366' }]}>Conditions & Redemption Rules</Text>
-          <View style={[styles.inputContainer, styles.textAreaContainer, { borderColor: theme.icon }]}>
-            <Ionicons name="document-text-outline" size={20} color={theme.icon} style={styles.inputIcon} />
-            <TextInput
-              value={conditions}
-              onChangeText={setConditions}
-              style={[styles.input, styles.textArea, { color: theme.text }]}
-              placeholder="Describe earning and redemption conditions..."
-              placeholderTextColor={theme.icon}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          </View>
-        </View>
-
         {/* Save Button */}
-        <TouchableOpacity style={[styles.saveButton, { backgroundColor: '#2F4366' }]} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Configuration</Text>
+        <TouchableOpacity
+          style={[styles.saveButton, { backgroundColor: '#2F4366' }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save Configuration'}</Text>
         </TouchableOpacity>
       </ScrollView>
+      )}
     </ThemedView>
   );
 }
@@ -312,6 +305,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 60,
     paddingBottom: 40,
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontFamily: 'Poppins-Regular',
   },
   header: {
     marginBottom: 8,
@@ -406,24 +409,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  customIconPreview: {
+  stampIconPreview: {
     width: 24,
     height: 24,
-  },
-  rewardPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 8,
-    gap: 8,
-  },
-  rewardPreviewText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    fontFamily: 'Poppins-SemiBold',
-    flex: 1,
   },
   // Color Scheme Styles
   colorGrid: {
@@ -483,33 +471,6 @@ const styles = StyleSheet.create({
   customIconPreview: {
     alignItems: 'center',
     marginTop: 8,
-  },
-  // Input Styles
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    minHeight: 56,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-  },
-  textAreaContainer: {
-    minHeight: 120,
-  },
-  inputIcon: {
-    marginRight: 10,
-    marginTop: 2,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    fontFamily: 'Poppins-Regular',
-    minHeight: 20,
-  },
-  textArea: {
-    minHeight: 80,
   },
   // Save Button
   saveButton: {

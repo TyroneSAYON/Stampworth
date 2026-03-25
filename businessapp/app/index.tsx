@@ -3,6 +3,8 @@ import { StyleSheet, Pressable, Animated, Easing } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 
+const SKIP_AUTH_MODE = process.env.EXPO_PUBLIC_SKIP_AUTH === 'true';
+
 export default function LandingScreen() {
   // Animation values
   const translateY = useRef(new Animated.Value(300)).current; // start below
@@ -25,7 +27,7 @@ export default function LandingScreen() {
       duration: 400,
       useNativeDriver: true,
     }).start(() => {
-      router.replace('/signin');
+      router.replace(SKIP_AUTH_MODE ? '/(tabs)' : '/signin');
     });
   };
 

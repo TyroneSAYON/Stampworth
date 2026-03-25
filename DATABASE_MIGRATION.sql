@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS merchants (
   website_url VARCHAR,
   phone_number VARCHAR,
   logo_url VARCHAR,
+  last_login_at TIMESTAMP WITH TIME ZONE,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
@@ -165,6 +166,7 @@ CREATE TABLE IF NOT EXISTS store_visits (
 -- ============================================================================
 
 ALTER TABLE merchants ADD COLUMN IF NOT EXISTS website_url VARCHAR;
+ALTER TABLE merchants ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;
 
 ALTER TABLE stamp_settings ADD COLUMN IF NOT EXISTS card_color VARCHAR DEFAULT '#2F4366';
 ALTER TABLE stamp_settings ADD COLUMN IF NOT EXISTS stamp_icon_name VARCHAR DEFAULT 'star';
@@ -324,9 +326,16 @@ DROP POLICY IF EXISTS merchants_select_own ON merchants;
 CREATE POLICY merchants_select_own ON merchants
   FOR SELECT USING (auth.uid() = auth_id);
 
+DROP POLICY IF EXISTS merchants_insert_own ON merchants;
+CREATE POLICY merchants_insert_own ON merchants
+  FOR INSERT
+  WITH CHECK (auth.uid() = auth_id);
+
 DROP POLICY IF EXISTS merchants_update_own ON merchants;
 CREATE POLICY merchants_update_own ON merchants
-  FOR UPDATE USING (auth.uid() = auth_id);
+  FOR UPDATE
+  USING (auth.uid() = auth_id)
+  WITH CHECK (auth.uid() = auth_id);
 
 DROP POLICY IF EXISTS loyalty_cards_customer_view ON loyalty_cards;
 CREATE POLICY loyalty_cards_customer_view ON loyalty_cards
@@ -414,6 +423,26 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'merchant-logos',
+  'merchant-logos',
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/png']
+)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'merchant-stamp-icons',
+  'merchant-stamp-icons',
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/png']
+)
+ON CONFLICT (id) DO NOTHING;
+
 DROP POLICY IF EXISTS customer_avatars_public_read ON storage.objects;
 CREATE POLICY customer_avatars_public_read ON storage.objects
   FOR SELECT
@@ -447,6 +476,80 @@ CREATE POLICY customer_avatars_delete_own ON storage.objects
   FOR DELETE
   USING (
     bucket_id = 'customer-avatars'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS merchant_logos_public_read ON storage.objects;
+CREATE POLICY merchant_logos_public_read ON storage.objects
+  FOR SELECT
+  USING (bucket_id = 'merchant-logos');
+
+DROP POLICY IF EXISTS merchant_logos_insert_own ON storage.objects;
+CREATE POLICY merchant_logos_insert_own ON storage.objects
+  FOR INSERT
+  WITH CHECK (
+    bucket_id = 'merchant-logos'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS merchant_logos_update_own ON storage.objects;
+CREATE POLICY merchant_logos_update_own ON storage.objects
+  FOR UPDATE
+  USING (
+    bucket_id = 'merchant-logos'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'merchant-logos'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS merchant_logos_delete_own ON storage.objects;
+CREATE POLICY merchant_logos_delete_own ON storage.objects
+  FOR DELETE
+  USING (
+    bucket_id = 'merchant-logos'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS merchant_stamp_icons_public_read ON storage.objects;
+CREATE POLICY merchant_stamp_icons_public_read ON storage.objects
+  FOR SELECT
+  USING (bucket_id = 'merchant-stamp-icons');
+
+DROP POLICY IF EXISTS merchant_stamp_icons_insert_own ON storage.objects;
+CREATE POLICY merchant_stamp_icons_insert_own ON storage.objects
+  FOR INSERT
+  WITH CHECK (
+    bucket_id = 'merchant-stamp-icons'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS merchant_stamp_icons_update_own ON storage.objects;
+CREATE POLICY merchant_stamp_icons_update_own ON storage.objects
+  FOR UPDATE
+  USING (
+    bucket_id = 'merchant-stamp-icons'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'merchant-stamp-icons'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS merchant_stamp_icons_delete_own ON storage.objects;
+CREATE POLICY merchant_stamp_icons_delete_own ON storage.objects
+  FOR DELETE
+  USING (
+    bucket_id = 'merchant-stamp-icons'
     AND auth.uid() IS NOT NULL
     AND (storage.foldername(name))[1] = auth.uid()::text
   );

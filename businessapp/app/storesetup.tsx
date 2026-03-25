@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { Alert, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, ActivityIndicator, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { getCurrentMerchantProfile, saveMerchantStoreSetup } from '@/lib/database';
 
 export default function StoreSetupScreen() {
   const colorScheme = useColorScheme();
@@ -15,6 +16,36 @@ export default function StoreSetupScreen() {
   const [businessName, setBusinessName] = useState('');
   const [address, setAddress] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const loadStoreSetup = async () => {
+      setLoading(true);
+      const { data: merchant, error } = await getCurrentMerchantProfile();
+
+      if (error || !merchant) {
+        setLoading(false);
+        const errorMessage = error?.message || '';
+        if (errorMessage === 'AUTH_SESSION_MISSING') {
+          Alert.alert('Session expired', 'Please sign in again.');
+          router.replace('/signin');
+          return;
+        }
+
+        Alert.alert('Merchant account not found', errorMessage || 'Please sign in with your business account.');
+        return;
+      }
+
+      setBusinessName(merchant.business_name || '');
+      setAddress(merchant.address || '');
+      setWebsiteUrl(merchant.website_url || '');
+      setLogoUri(merchant.logo_url || null);
+      setLoading(false);
+    };
+
+    loadStoreSetup();
+  }, []);
 
   const pickLogo = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -35,7 +66,7 @@ export default function StoreSetupScreen() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!businessName.trim()) {
       Alert.alert('Required Field', 'Please enter your business name.');
       return;
@@ -45,7 +76,26 @@ export default function StoreSetupScreen() {
       return;
     }
 
-    // Here you would typically save to backend/state management
+    setSaving(true);
+    const { error } = await saveMerchantStoreSetup({
+      businessName: businessName.trim(),
+      address: address.trim(),
+      websiteUrl: websiteUrl.trim(),
+      logoUri,
+    });
+    setSaving(false);
+
+    if (error) {
+      if (error.message === 'AUTH_SESSION_MISSING') {
+        Alert.alert('Session expired', 'Please sign in again.');
+        router.replace('/signin');
+        return;
+      }
+
+      Alert.alert('Failed to save store setup', error.message);
+      return;
+    }
+
     Alert.alert('Success', 'Store setup completed!', [
       {
         text: 'OK',
@@ -59,6 +109,12 @@ export default function StoreSetupScreen() {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
+      {loading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color="#2F4366" />
+          <Text style={[styles.loadingText, { color: theme.text }]}>Loading store setup...</Text>
+        </View>
+      ) : (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -139,10 +195,15 @@ export default function StoreSetupScreen() {
         </View>
 
         {/* Save Button */}
-        <TouchableOpacity style={[styles.saveButton, { backgroundColor: '#2F4366' }]} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save</Text>
+        <TouchableOpacity
+          style={[styles.saveButton, { backgroundColor: '#2F4366' }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          <Text style={styles.saveButtonText}>{saving ? 'Saving...' : 'Save'}</Text>
         </TouchableOpacity>
       </ScrollView>
+      )}
     </ThemedView>
   );
 }
@@ -155,6 +216,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 60,
     paddingBottom: 40,
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontFamily: 'Poppins-Regular',
   },
   header: {
     marginBottom: 8,

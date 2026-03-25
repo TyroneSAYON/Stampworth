@@ -53,10 +53,28 @@ export class UpdateBusinessDto {
   businessName?: string;
 
   @IsOptional()
+  address?: string;
+
+  @IsOptional()
+  city?: string;
+
+  @IsOptional()
+  state?: string;
+
+  @IsOptional()
+  country?: string;
+
+  @IsOptional()
+  postalCode?: string;
+
+  @IsOptional()
   websiteUrl?: string;
 
   @IsOptional()
   phone?: string;
+
+  @IsOptional()
+  logoUrl?: string;
 
   @IsNumber()
   @IsOptional()

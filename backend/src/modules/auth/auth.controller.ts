@@ -1,6 +1,6 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, Headers } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { BusinessSignUpDto, BusinessSignInDto } from './dto/business-signup.dto';
+import { BusinessSignUpDto, BusinessSignInDto, EnsureBusinessProfileDto } from './dto/business-signup.dto';
 
 @Controller('api/auth')
 export class AuthController {
@@ -19,5 +19,13 @@ export class AuthController {
   @Post('business/signout')
   businessSignOut() {
     return this.authService.businessSignOut();
+  }
+
+  @Post('business/ensure-profile')
+  businessEnsureProfile(
+    @Headers('authorization') authorization: string,
+    @Body() payload: EnsureBusinessProfileDto,
+  ) {
+    return this.authService.ensureBusinessProfile(authorization, payload.businessName);
   }
 }

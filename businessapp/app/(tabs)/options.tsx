@@ -1,30 +1,83 @@
-import { useState } from 'react';
-import { StyleSheet, View, useColorScheme, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, StyleSheet, View, useColorScheme, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
+import { signOut } from '@/lib/auth';
+import { getMerchantDashboardSnapshot } from '@/lib/database';
 
 export default function OptionsScreen() {
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? 'light'];
 
-  // Sample data - in real app, this would come from state/backend
-  const cardColor = '#2F4366';
-  const totalStamps = 10;
-  const collectedStamps = 3;
-  const activeUsers = 125;
-  const stampsIssued = 342;
-  const rewardsRedeemed = 28;
+  const [loading, setLoading] = useState(true);
+  const [businessName, setBusinessName] = useState('Your Business');
+  const [cardColor, setCardColor] = useState('#2F4366');
+  const [totalStamps, setTotalStamps] = useState(10);
+  const [activeUsers, setActiveUsers] = useState(0);
+  const [stampsIssued, setStampsIssued] = useState(0);
+  const [rewardsRedeemed, setRewardsRedeemed] = useState(0);
+
+  useEffect(() => {
+    const loadDashboard = async () => {
+      setLoading(true);
+      const { data, error } = await getMerchantDashboardSnapshot();
+
+      if (error || !data) {
+        setLoading(false);
+        if (error?.message === 'AUTH_SESSION_MISSING') {
+          Alert.alert('Session expired', 'Please sign in again.');
+          router.replace('/signin');
+          return;
+        }
+
+        Alert.alert('Unable to load dashboard', error?.message || 'Please try again.');
+        return;
+      }
+
+      setBusinessName(data.merchant.business_name || 'Your Business');
+      setCardColor(data.settings?.card_color || '#2F4366');
+      setTotalStamps(data.settings?.stamps_per_redemption || 10);
+      setActiveUsers(data.stats.activeUsers);
+      setStampsIssued(data.stats.stampsIssued);
+      setRewardsRedeemed(data.stats.rewardsRedeemed);
+      setLoading(false);
+    };
+
+    loadDashboard();
+  }, []);
+
+  const collectedStamps = Math.min(3, totalStamps);
 
   const stamps = Array.from({ length: totalStamps }, (_, i) => ({
     id: i,
     collected: i < collectedStamps,
   }));
 
+  const handleLogout = () => {
+    Alert.alert('Log out', 'Do you want to log out of your business account?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log out',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut();
+          router.replace('/signin');
+        },
+      },
+    ]);
+  };
+
   return (
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
+      {loading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color="#2F4366" />
+          <Text style={[styles.loadingText, { color: theme.text }]}>Loading business data...</Text>
+        </View>
+      ) : (
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -53,7 +106,7 @@ export default function OptionsScreen() {
                 <Ionicons name="business" size={24} color="#FFFFFF" />
               </View>
               <View>
-                <Text style={styles.cardBusinessName}>Your Business</Text>
+                <Text style={styles.cardBusinessName}>{businessName}</Text>
                 <Text style={styles.cardSubtitle}>Loyalty Card</Text>
               </View>
             </View>
@@ -116,10 +169,7 @@ export default function OptionsScreen() {
 
           <TouchableOpacity
             style={[styles.configButton, { backgroundColor: '#F5F5F5' }]}
-            onPress={() => {
-              // Navigate to stamp setup page (to be created)
-              router.push('/loyaltysystem');
-            }}
+            onPress={() => router.push('/stampsetup')}
           >
             <Ionicons name="pricetag-outline" size={24} color="#2F4366" />
             <View style={styles.configButtonText}>
@@ -131,6 +181,11 @@ export default function OptionsScreen() {
             <Ionicons name="chevron-forward" size={24} color={theme.icon} />
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={20} color="#FFFFFF" />
+          <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
 
         {/* Statistics & Analytics */}
         <View style={styles.section}>
@@ -154,6 +209,7 @@ export default function OptionsScreen() {
           </View>
         </View>
       </ScrollView>
+      )}
     </ThemedView>
   );
 }
@@ -166,6 +222,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 0,
     paddingBottom: 40,
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    fontFamily: 'Poppins-Regular',
   },
   header: {
     flexDirection: 'row',
@@ -349,6 +415,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Poppins-Regular',
     textAlign: 'center',
+  },
+  logoutButton: {
+    marginBottom: 24,
+    backgroundColor: '#B33434',
+    borderRadius: 12,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  logoutText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: 'Poppins-SemiBold',
   },
 });
 

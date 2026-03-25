@@ -7,12 +7,28 @@ import { router } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import {
+  getCustomerLoyaltyCardProgress,
   getCurrentMerchantProfile,
   getMerchantStampRules,
   issueStampForCustomer,
+  removeLatestStampForCustomer,
   resolveCustomerById,
   resolveCustomerFromScannedQR,
 } from '@/lib/database';
+
+type CustomerProgress = {
+  customer: {
+    id: string;
+    full_name?: string | null;
+    username?: string | null;
+    email?: string | null;
+  };
+  stampCount: number;
+  stampsPerRedemption: number;
+  rewardDescription?: string | null;
+  conditions?: string | null;
+  freeRedemptionReached: boolean;
+};
 
 export default function ScanScreen() {
   const colorScheme = useColorScheme();
@@ -26,11 +42,20 @@ export default function ScanScreen() {
   const [merchantId, setMerchantId] = useState<string | null>(null);
   const [conditions, setConditions] = useState('Buy 10 coffees and get your 11th coffee free.');
   const [issuingStamp, setIssuingStamp] = useState(false);
+  const [selectedCustomerProgress, setSelectedCustomerProgress] = useState<CustomerProgress | null>(null);
+  const [selectedSource, setSelectedSource] = useState<'QR' | 'MANUAL'>('QR');
+  const [selectedReference, setSelectedReference] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const loadMerchantContext = async () => {
       const { data: merchant, error } = await getCurrentMerchantProfile();
       if (error || !merchant) {
+        if (error?.message === 'AUTH_SESSION_MISSING') {
+          Alert.alert('Session expired', 'Please sign in again.');
+          router.replace('/signin');
+          return;
+        }
+
         Alert.alert('Merchant account not found', 'Please sign in with your business account.');
         return;
       }
@@ -45,6 +70,28 @@ export default function ScanScreen() {
 
     loadMerchantContext();
   }, []);
+
+  const loadCustomerProgress = async (resolvedCustomerId: string, source: 'QR' | 'MANUAL', reference?: string) => {
+    if (!merchantId) {
+      Alert.alert('Merchant not loaded', 'Please sign in again before managing customer stamps.');
+      return;
+    }
+
+    const { data, error } = await getCustomerLoyaltyCardProgress(merchantId, resolvedCustomerId);
+
+    if (error || !data) {
+      Alert.alert('Unable to load loyalty card', error?.message || 'Please try scanning again.');
+      return;
+    }
+
+    setSelectedCustomerProgress(data);
+    setSelectedSource(source);
+    setSelectedReference(reference);
+
+    if (data.conditions) {
+      setConditions(data.conditions);
+    }
+  };
 
   const issueStampToCustomer = async (resolvedCustomerId: string, source: 'QR' | 'MANUAL', reference?: string) => {
     if (!merchantId) {
@@ -67,7 +114,29 @@ export default function ScanScreen() {
       ? '\nCustomer has reached FREE REDEMPTION.'
       : '';
 
+    await loadCustomerProgress(resolvedCustomerId, source, reference);
     Alert.alert('Stamp Issued', `Stamp count is now ${data.stampCount}.${redemptionText}`);
+  };
+
+  const removeStampFromCustomer = async (resolvedCustomerId: string, source: 'QR' | 'MANUAL', reference?: string) => {
+    if (!merchantId) {
+      Alert.alert('Merchant not loaded', 'Please sign in again before deleting a stamp.');
+      return;
+    }
+
+    setIssuingStamp(true);
+
+    const { data, error } = await removeLatestStampForCustomer(merchantId, resolvedCustomerId, source, reference);
+
+    setIssuingStamp(false);
+
+    if (error || !data) {
+      Alert.alert('Failed to delete stamp', error?.message || 'Please try again.');
+      return;
+    }
+
+    await loadCustomerProgress(resolvedCustomerId, source, reference);
+    Alert.alert('Stamp Deleted', `Stamp count is now ${data.stampCount}.`);
   };
 
   const handleBarCodeScanned = async ({ data }: BarcodeScanningResult) => {
@@ -83,10 +152,10 @@ export default function ScanScreen() {
       return;
     }
 
-    await issueStampToCustomer(resolved.customer.id, 'QR', data);
+    await loadCustomerProgress(resolved.customer.id, 'QR', data);
 
     setScanned(false);
-    setShowCamera(true);
+    setShowCamera(false);
     setShowIdInput(false);
   };
 
@@ -102,11 +171,11 @@ export default function ScanScreen() {
       return;
     }
 
-    await issueStampToCustomer(data.id, 'MANUAL', customerId.trim());
+    await loadCustomerProgress(data.id, 'MANUAL', customerId.trim());
 
     setCustomerId('');
     setShowIdInput(false);
-    setShowCamera(true);
+    setShowCamera(false);
   };
 
   const handleQrScanFailed = () => {
@@ -193,6 +262,60 @@ export default function ScanScreen() {
             </View>
           )}
         </View>
+
+        {selectedCustomerProgress && (
+          <View style={styles.customerCardContainer}>
+            <Text style={styles.customerName}>
+              {selectedCustomerProgress.customer.full_name || selectedCustomerProgress.customer.username || 'Customer'}
+            </Text>
+            <Text style={styles.customerSubtext}>
+              {selectedCustomerProgress.stampCount} / {selectedCustomerProgress.stampsPerRedemption} stamps
+            </Text>
+            {selectedCustomerProgress.rewardDescription ? (
+              <Text style={styles.customerSubtext}>{selectedCustomerProgress.rewardDescription}</Text>
+            ) : null}
+            <View style={styles.customerActionsRow}>
+              <TouchableOpacity
+                style={[styles.customerActionButton, styles.addStampButton]}
+                onPress={() =>
+                  issueStampToCustomer(
+                    selectedCustomerProgress.customer.id,
+                    selectedSource,
+                    selectedReference,
+                  )
+                }
+                disabled={issuingStamp}
+              >
+                <Ionicons name="add" size={18} color="#FFFFFF" />
+                <Text style={styles.customerActionText}>Add Stamp</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.customerActionButton, styles.deleteStampButton]}
+                onPress={() =>
+                  removeStampFromCustomer(
+                    selectedCustomerProgress.customer.id,
+                    selectedSource,
+                    selectedReference,
+                  )
+                }
+                disabled={issuingStamp}
+              >
+                <Ionicons name="remove" size={18} color="#FFFFFF" />
+                <Text style={styles.customerActionText}>Delete Stamp</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={styles.customerActionClose}
+              onPress={() => {
+                setSelectedCustomerProgress(null);
+                setShowCamera(false);
+                setShowIdInput(false);
+              }}
+            >
+              <Text style={styles.customerActionCloseText}>Clear Customer</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* QR Code Scanner Container */}
         {!showCamera && !showIdInput && (
@@ -391,6 +514,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#2F4366',
     fontFamily: 'Poppins-Regular',
+  },
+  customerCardContainer: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#F5F7FB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D8E0EE',
+    padding: 14,
+    marginBottom: 20,
+  },
+  customerName: {
+    fontSize: 16,
+    fontFamily: 'Poppins-SemiBold',
+    color: '#2F4366',
+  },
+  customerSubtext: {
+    fontSize: 13,
+    fontFamily: 'Poppins-Regular',
+    color: '#4D5A70',
+    marginTop: 2,
+  },
+  customerActionsRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  customerActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  addStampButton: {
+    backgroundColor: '#2F4366',
+  },
+  deleteStampButton: {
+    backgroundColor: '#B33434',
+  },
+  customerActionText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: 'Poppins-SemiBold',
+  },
+  customerActionClose: {
+    marginTop: 10,
+    alignSelf: 'center',
+  },
+  customerActionCloseText: {
+    color: '#2F4366',
+    fontSize: 12,
+    fontFamily: 'Poppins-SemiBold',
   },
   qrCodeContainer: {
     width: 280,

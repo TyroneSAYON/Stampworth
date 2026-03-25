@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class BusinessSignUpDto {
   @IsEmail()
@@ -29,6 +29,8 @@ export class BusinessSignUpDto {
   @IsNotEmpty()
   postalCode: string;
 
+  @IsOptional()
+  @IsString()
   phone?: string;
 }
 
@@ -38,4 +40,10 @@ export class BusinessSignInDto {
 
   @IsNotEmpty()
   password: string;
+}
+
+export class EnsureBusinessProfileDto {
+  @IsOptional()
+  @IsString()
+  businessName?: string;
 }
