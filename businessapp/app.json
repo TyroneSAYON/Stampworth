@@ -12,6 +12,9 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Allow $(PRODUCT_NAME) to use your location to set up geofencing for location-based promotions."
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyC2VkT6Kj7MY1W2ilwIjXevs5cTYJU7OXIc"
       }
     },
     "android": {
@@ -28,7 +31,12 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.CAMERA"
       ],
-      "package": "com.anonymous.businessapp"
+      "package": "com.anonymous.businessapp",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC2VkT6Kj7MY1W2ilwIjXevs5cTYJU7OXIc"
+        }
+      }
     },
     "web": {
       "output": "static",

@@ -1,89 +1,169 @@
-import { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, ScrollView, Dimensions } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { getStampRecordsForCard, getCustomerPendingRewards } from '@/lib/database';
+
+const REWARD_CARD_W = 130;
 
 type Params = {
+  loyaltyCardId?: string;
+  merchantId?: string;
   merchant?: string;
   collected?: string;
   total?: string;
   color?: string;
+  iconName?: string;
+  iconImageUrl?: string;
 };
 
 export default function StampsScreen() {
-  const { merchant, collected, total, color } = useLocalSearchParams<Params>();
+  const params = useLocalSearchParams<Params>();
+  const merchantName = params.merchant || 'Store';
+  const totalSlots = Number(params.total || 10);
+  const cardColor = params.color || '#2F4366';
+  const iconName = params.iconName || 'star';
+  const iconImageUrl = params.iconImageUrl || null;
 
-  const merchantName = merchant ?? 'Merchant';
-  const collectedCount = Number(collected ?? 0);
-  const totalCount = Number(total ?? 10);
-  const cardColor = color || '#2F4366';
+  const [loading, setLoading] = useState(true);
+  const [stampCount, setStampCount] = useState(Number(params.collected || 0));
+  const [stampRecords, setStampRecords] = useState<{ id: string; earned_date: string }[]>([]);
+  const [pendingRewards, setPendingRewards] = useState<any[]>([]);
 
-  const slots = useMemo(() => {
-    const safeTotal = Number.isFinite(totalCount) && totalCount > 0 ? totalCount : 10;
-    const safeCollected = Number.isFinite(collectedCount) ? Math.min(Math.max(collectedCount, 0), safeTotal) : 0;
-    return Array.from({ length: safeTotal }, (_, i) => ({
-      id: i,
-      filled: i < safeCollected,
-      isFree: i === safeTotal - 1,
-    }));
-  }, [collectedCount, totalCount]);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const load = async () => {
+        setLoading(true);
+        if (params.loyaltyCardId) {
+          const { data } = await getStampRecordsForCard(params.loyaltyCardId);
+          if (!cancelled) {
+            setStampRecords(data || []);
+            setStampCount(data?.length || Number(params.collected || 0));
+          }
+        }
+        if (params.merchantId) {
+          const { data: rewards } = await getCustomerPendingRewards(params.merchantId);
+          if (!cancelled) setPendingRewards(rewards || []);
+        }
+        if (!cancelled) setLoading(false);
+      };
+      load();
+      return () => { cancelled = true; };
+    }, [params.loyaltyCardId, params.merchantId])
+  );
 
-  const pct = totalCount > 0 ? Math.min(100, (collectedCount / totalCount) * 100) : 0;
+  const renderIcon = (size: number, color: string) => {
+    if (iconImageUrl) return <Image source={{ uri: iconImageUrl }} style={{ width: size, height: size }} contentFit="contain" />;
+    return <Ionicons name={iconName as any} size={size} color={color} />;
+  };
+
+  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  const collectableSlots = totalSlots - 1;
+  const pct = collectableSlots > 0 ? Math.min(100, (stampCount / collectableSlots) * 100) : 0;
+
+  const slots = Array.from({ length: totalSlots }, (_, i) => ({
+    id: i,
+    isFree: i === totalSlots - 1,
+    isFilled: i < totalSlots - 1 && i < stampCount,
+    record: stampRecords[i] || null,
+  }));
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Header */}
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={22} color="#2F4366" />
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={22} color="#1A1A2E" />
           </TouchableOpacity>
-          <View>
-            <Text style={styles.title}>Stamps</Text>
-            <Text style={styles.subtitle}>{merchantName}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>{merchantName}</Text>
+            <Text style={styles.headerSub}>Loyalty Card</Text>
+          </View>
+        </View>
+
+        {/* Pending rewards carousel */}
+        {pendingRewards.length > 0 && (
+          <View style={styles.rewardsSection}>
+            <Text style={styles.rewardsLabel}>{pendingRewards.length} reward{pendingRewards.length > 1 ? 's' : ''} earned</Text>
+            <FlatList
+              data={pendingRewards}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={REWARD_CARD_W + 10}
+              decelerationRate="fast"
+              contentContainerStyle={{ gap: 10 }}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <View style={[styles.rewardCard, { borderColor: cardColor }]}>
+                  <Ionicons name="gift" size={18} color={cardColor} />
+                  <Text style={[styles.rewardCardText, { color: cardColor }]} numberOfLines={1}>Free Reward</Text>
+                  <Text style={styles.rewardCardDate}>{formatDate(item.created_at)}</Text>
+                </View>
+              )}
+            />
+          </View>
+        )}
+
+        {/* Stamp card */}
+        <View style={[styles.card, { backgroundColor: cardColor }]}>
+          <View style={styles.cardTop}>
+            <View style={styles.cardLogoCircle}>
+              <Ionicons name="business" size={16} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardName} numberOfLines={1}>{merchantName}</Text>
+              <Text style={styles.cardLabel}>Loyalty Card</Text>
+            </View>
+            <Text style={styles.cardCount}>{stampCount}/{collectableSlots}</Text>
+          </View>
+
+          <View style={styles.grid}>
+            {slots.map((slot) => (
+              <View key={slot.id} style={styles.slot}>
+                <View style={[
+                  styles.circle,
+                  slot.isFree
+                    ? { backgroundColor: 'rgba(255,255,255,0.92)' }
+                    : slot.isFilled
+                      ? { backgroundColor: '#FFFFFF' }
+                      : { backgroundColor: 'rgba(255,255,255,0.2)' },
+                ]}>
+                  {slot.isFree ? (
+                    <Text style={[styles.freeLabel, { color: cardColor }]}>FREE</Text>
+                  ) : slot.isFilled ? (
+                    renderIcon(20, cardColor)
+                  ) : null}
+                </View>
+                {slot.record && !slot.isFree ? (
+                  <Text style={styles.dateText}>{formatDate(slot.record.earned_date)}</Text>
+                ) : null}
+              </View>
+            ))}
           </View>
         </View>
 
         {/* Progress */}
-        <View style={styles.progressCard}>
+        <View style={styles.progressSection}>
           <View style={styles.progressRow}>
             <Text style={styles.progressLabel}>Progress</Text>
-            <Text style={styles.progressValue}>{collectedCount} / {totalCount}</Text>
+            <Text style={[styles.progressValue, { color: cardColor }]}>{stampCount}/{collectableSlots}</Text>
           </View>
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: `${pct}%`, backgroundColor: cardColor }]} />
           </View>
-          {collectedCount >= totalCount && (
-            <View style={[styles.freeBanner, { backgroundColor: cardColor }]}>
-              <Ionicons name="gift" size={16} color="#FFFFFF" />
-              <Text style={styles.freeText}>FREE REDEMPTION AVAILABLE</Text>
-            </View>
-          )}
         </View>
 
-        {/* Stamp grid */}
-        <View style={styles.grid}>
-          {slots.map((slot) => (
-            <View
-              key={slot.id}
-              style={[
-                styles.stampSlot,
-                slot.isFree
-                  ? { borderColor: cardColor, borderWidth: 2, backgroundColor: `${cardColor}10` }
-                  : slot.filled
-                    ? { borderColor: cardColor, backgroundColor: `${cardColor}18` }
-                    : { borderColor: '#E0E4EA', backgroundColor: '#F8F9FB' },
-              ]}
-            >
-              {slot.isFree
-                ? <Text style={[styles.freeLabel, { color: cardColor }]}>FREE</Text>
-                : slot.filled
-                  ? <Ionicons name="checkmark" size={20} color={cardColor} />
-                  : <Text style={styles.slotNumber}>{slot.id + 1}</Text>}
-            </View>
-          ))}
-        </View>
+        {loading && (
+          <View style={{ alignItems: 'center', paddingVertical: 12 }}>
+            <ActivityIndicator size="small" color={cardColor} />
+          </View>
+        )}
 
-        <Text style={styles.helper}>Collect stamps every time you purchase from this merchant.</Text>
+        <Text style={styles.helperText}>Collect stamps every time you purchase from this store.</Text>
       </ScrollView>
     </View>
   );
@@ -91,26 +171,41 @@ export default function StampsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F6F8FB' },
-  scroll: { paddingHorizontal: 28, paddingTop: 64, paddingBottom: 48 },
+  scroll: { paddingHorizontal: 24, paddingTop: 56, paddingBottom: 48 },
 
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 28 },
-  backButton: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: 24, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
-  subtitle: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 2 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24 },
+  backBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A2E', fontFamily: 'Poppins-SemiBold' },
+  headerSub: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 1 },
 
-  progressCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 28 },
-  progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  // Rewards carousel
+  rewardsSection: { marginBottom: 20 },
+  rewardsLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#8A94A6', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10 },
+  rewardCard: { width: REWARD_CARD_W, backgroundColor: '#FFFFFF', borderWidth: 1.5, borderRadius: 12, padding: 12, alignItems: 'center', gap: 6 },
+  rewardCardText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', textAlign: 'center' },
+  rewardCardDate: { fontSize: 9, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
+
+  // Card
+  card: { borderRadius: 20, padding: 18, marginBottom: 28 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  cardLogoCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  cardName: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+  cardLabel: { fontSize: 10, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.65)' },
+  cardCount: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  slot: { alignItems: 'center' },
+  circle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  freeLabel: { fontSize: 9, fontFamily: 'Poppins-SemiBold', letterSpacing: 0.5 },
+  dateText: { fontSize: 6, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.55)', marginTop: 2 },
+
+  // Progress
+  progressSection: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 24 },
+  progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   progressLabel: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
-  progressValue: { fontSize: 16, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
-  progressBar: { height: 8, backgroundColor: '#F0F2F5', borderRadius: 4, overflow: 'hidden' },
-  progressFill: { height: 8, borderRadius: 4 },
-  freeBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 14, borderRadius: 10, paddingVertical: 10 },
-  freeText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF', letterSpacing: 0.5 },
+  progressValue: { fontSize: 14, fontFamily: 'Poppins-SemiBold' },
+  progressBar: { height: 7, backgroundColor: '#F0F2F5', borderRadius: 4, overflow: 'hidden' },
+  progressFill: { height: 7, borderRadius: 4 },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 28 },
-  stampSlot: { width: 56, height: 56, borderRadius: 14, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  slotNumber: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
-  freeLabel: { fontSize: 9, fontFamily: 'Poppins-SemiBold' },
-
-  helper: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', textAlign: 'center' },
+  helperText: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', textAlign: 'center' },
 });

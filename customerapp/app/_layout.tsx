@@ -5,7 +5,7 @@ import { useFonts } from 'expo-font';
 import { useEffect } from 'react';
 import * as SplashScreen from 'expo-splash-screen';
 import 'react-native-reanimated';
-import { LogBox } from 'react-native';
+import { LogBox, Alert } from 'react-native';
 LogBox.ignoreLogs(['shared value']);
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -13,6 +13,7 @@ import {
   Poppins_400Regular,
   Poppins_600SemiBold,
 } from '@expo-google-fonts/poppins';
+import { addNotificationListeners } from '@/lib/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -32,6 +33,14 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  // Listen for push notifications
+  useEffect(() => {
+    const cleanup = addNotificationListeners((title, body) => {
+      Alert.alert(title, body);
+    });
+    return cleanup;
+  }, []);
 
   if (!fontsLoaded && !fontError) {
     return null;

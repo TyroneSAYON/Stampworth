@@ -4,7 +4,8 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
-import { saveMerchantAnnouncement, getMerchantAnnouncements } from '@/lib/database';
+import { saveMerchantAnnouncement, getMerchantAnnouncements, getCurrentMerchantProfile } from '@/lib/database';
+import { sendAnnouncementNotification } from '@/lib/notifications';
 
 interface Announcement {
   id: string;
@@ -35,17 +36,31 @@ export default function AnnouncementScreen() {
   const handleSend = async () => {
     if (!message.trim()) { Alert.alert('Required', 'Enter an announcement message.'); return; }
     setSending(true);
-    const { data, error } = await saveMerchantAnnouncement(message.trim());
-    setSending(false);
 
+    // Save to database
+    const { data, error } = await saveMerchantAnnouncement(message.trim());
     if (error) {
+      setSending(false);
       Alert.alert('Failed', error.message || 'Could not save announcement.');
       return;
     }
 
+    // Send push notifications
+    const { data: merchant } = await getCurrentMerchantProfile();
+    let notifCount = 0;
+    if (merchant) {
+      const { sent } = await sendAnnouncementNotification(
+        merchant.id,
+        merchant.business_name || 'Stampworth',
+        message.trim(),
+      );
+      notifCount = sent;
+    }
+
+    setSending(false);
     setMessage('');
     if (data) setAnnouncements([data, ...announcements]);
-    Alert.alert('Sent', 'Announcement saved and sent to all loyalty card holders!');
+    Alert.alert('Sent', `Announcement saved.${notifCount > 0 ? `\nNotified ${notifCount} customer${notifCount > 1 ? 's' : ''}.` : '\nNo customers to notify yet.'}`);
   };
 
   const formatTime = (dateStr: string) => {

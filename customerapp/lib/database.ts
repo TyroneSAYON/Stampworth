@@ -89,38 +89,77 @@ export const getCardStamps = async (loyaltyCardId: string) => {
 };
 
 export const getUserLoyaltyCards = async (customerId: string) => {
-  const { data, error } = await supabase
+  // First get the loyalty cards
+  const { data: cards, error: cardsError } = await supabase
     .from('loyalty_cards')
-    .select('*, merchants(business_name, logo_url, geofence_radius_meters, latitude, longitude), stamp_settings(*)')
+    .select('*')
     .eq('customer_id', customerId);
 
-  return { data, error };
+  if (cardsError || !cards || cards.length === 0) {
+    return { data: cards || [], error: cardsError };
+  }
+
+  // Then fetch merchants and stamp_settings separately to avoid RLS join issues
+  const merchantIds = [...new Set(cards.map((c: any) => c.merchant_id))];
+
+  const { data: merchants } = await supabase
+    .from('merchants')
+    .select('id, business_name, logo_url, latitude, longitude')
+    .in('id', merchantIds);
+
+  const { data: settings } = await supabase
+    .from('stamp_settings')
+    .select('*')
+    .in('merchant_id', merchantIds);
+
+  const merchantMap = new Map((merchants || []).map((m: any) => [m.id, m]));
+  const settingsMap = new Map((settings || []).map((s: any) => [s.merchant_id, s]));
+
+  const enriched = cards.map((card: any) => ({
+    ...card,
+    merchants: merchantMap.get(card.merchant_id) || null,
+    stamp_settings: settingsMap.get(card.merchant_id) || null,
+  }));
+
+  return { data: enriched, error: null };
 };
 
 export const getCustomerAnnouncements = async (customerId: string) => {
-  const { data: cards, error: cardsError } = await supabase
+  // Get merchant IDs the customer has loyalty cards with
+  const { data: cards } = await supabase
     .from('loyalty_cards')
     .select('merchant_id')
     .eq('customer_id', customerId);
 
-  if (cardsError) {
-    return { data: null, error: cardsError };
-  }
+  const merchantIds = [...new Set((cards || []).map((c: any) => c.merchant_id).filter(Boolean))];
+  if (merchantIds.length === 0) return { data: [], error: null };
 
-  const merchantIds = Array.from(new Set((cards || []).map((card) => card.merchant_id).filter(Boolean)));
-  if (merchantIds.length === 0) {
-    return { data: [], error: null };
-  }
-
-  const { data, error } = await supabase
+  // Get announcements
+  const { data: announcements, error } = await supabase
     .from('merchant_announcements')
-    .select('id, merchant_id, message, created_at, merchants(business_name)')
+    .select('id, merchant_id, message, created_at')
     .eq('is_active', true)
     .in('merchant_id', merchantIds)
     .order('created_at', { ascending: false })
-    .limit(10);
+    .limit(20);
 
-  return { data, error };
+  if (error || !announcements) return { data: [], error };
+
+  // Get merchant names separately to avoid RLS join issues
+  const annMerchantIds = [...new Set(announcements.map((a: any) => a.merchant_id))];
+  const { data: merchants } = await supabase
+    .from('merchants')
+    .select('id, business_name')
+    .in('id', annMerchantIds);
+
+  const merchantMap = new Map((merchants || []).map((m: any) => [m.id, m]));
+
+  const enriched = announcements.map((a: any) => ({
+    ...a,
+    merchants: merchantMap.get(a.merchant_id) || { business_name: 'Store' },
+  }));
+
+  return { data: enriched, error: null };
 };
 
 export const findNearbyStores = async (latitude: number, longitude: number, maxDistance: number = 5000) => {
@@ -282,6 +321,34 @@ export const createStoreVisit = async (customerId: string, merchantId: string, l
     });
 
   return { data, error };
+};
+
+// Get stamp records for a loyalty card (valid only, ordered by date)
+export const getStampRecordsForCard = async (loyaltyCardId: string) => {
+  const { data, error } = await supabase
+    .from('stamps')
+    .select('id, earned_date, is_valid')
+    .eq('loyalty_card_id', loyaltyCardId)
+    .eq('is_valid', true)
+    .order('earned_date', { ascending: true });
+
+  return { data: data || [], error };
+};
+
+// Get pending (unclaimed) rewards for current customer at a merchant
+export const getCustomerPendingRewards = async (merchantId: string) => {
+  const { data: customer } = await getOrCreateCustomerProfile();
+  if (!customer) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('redeemed_rewards')
+    .select('id, reward_code, stamps_used, created_at')
+    .eq('merchant_id', merchantId)
+    .eq('customer_id', customer.id)
+    .eq('is_used', false)
+    .order('created_at', { ascending: false });
+
+  return { data: data || [], error };
 };
 
 // Convenience: get current user's loyalty cards

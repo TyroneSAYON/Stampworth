@@ -1,4 +1,4 @@
-name: stampworth-backend
+name: stampworth
 region: sgp
 services:
   - name: api
@@ -19,7 +19,7 @@ services:
       success_threshold: 1
       failure_threshold: 3
     routes:
-      - path: /
+      - path: /api
     envs:
       - key: NODE_ENV
         scope: RUN_TIME
@@ -31,6 +31,34 @@ services:
       - key: SUPABASE_ANON_KEY
         scope: RUN_TIME
         type: SECRET
+        value: REPLACE_WITH_SUPABASE_ANON_KEY
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_WITH_SUPABASE_SERVICE_ROLE_KEY
+
+  - name: admin
+    github:
+      repo: TyroneSAYON/Stampworth
+      branch: main
+      deploy_on_push: true
+    build_command: npm run build
+    run_command: npm run start
+    source_dir: /admin
+    http_port: 3000
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    routes:
+      - path: /
+    envs:
+      - key: NODE_ENV
+        scope: RUN_TIME
+        value: production
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        value: REPLACE_WITH_SUPABASE_URL
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        scope: RUN_AND_BUILD_TIME
         value: REPLACE_WITH_SUPABASE_ANON_KEY
       - key: SUPABASE_SERVICE_ROLE_KEY
         scope: RUN_TIME

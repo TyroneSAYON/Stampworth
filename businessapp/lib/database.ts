@@ -602,12 +602,11 @@ export const resolveCustomerFromScannedQR = async (scannedValue: string) => {
     return { data: null, error: new Error('Invalid QR format. Only customerapp QR codes are accepted.') };
   }
 
-  const segments = scannedValue.split(':');
-  if (segments.length < 4 || !segments[1]) {
+  // Format: STAMPWORTH:<customer_id>
+  const customerIdFromPayload = scannedValue.slice(CUSTOMER_QR_PREFIX.length);
+  if (!customerIdFromPayload) {
     return { data: null, error: new Error('Malformed customer QR code.') };
   }
-
-  const customerIdFromPayload = segments[1];
 
   const { data: qrRecord, error: qrError } = await supabase
     .from('customer_qr_codes')
@@ -695,7 +694,7 @@ export const issueStampForCustomer = async (
     .maybeSingle();
 
   const stampsPerRedemption = settings?.stamps_per_redemption || 10;
-  const freeRedemptionReached = nextStampCount >= stampsPerRedemption;
+  const freeRedemptionReached = nextStampCount >= stampsPerRedemption - 1;
 
   const { data: stamp, error: stampError } = await supabase
     .from('stamps')
@@ -771,6 +770,12 @@ export const getCustomerLoyaltyCardProgress = async (merchantId: string, custome
     return { data: null, error: cardError };
   }
 
+  const { data: merchant } = await supabase
+    .from('merchants')
+    .select('business_name, logo_url')
+    .eq('id', merchantId)
+    .maybeSingle();
+
   const { data: settings, error: settingsError } = await supabase
     .from('stamp_settings')
     .select('stamps_per_redemption, redemption_reward_description, promotion_text, card_color, stamp_icon_name, stamp_icon_image_url')
@@ -790,12 +795,14 @@ export const getCustomerLoyaltyCardProgress = async (merchantId: string, custome
       card: card || null,
       stampCount,
       stampsPerRedemption,
+      merchantName: merchant?.business_name || 'Store',
+      merchantLogoUrl: merchant?.logo_url || null,
       rewardDescription: settings?.redemption_reward_description || null,
       conditions: settings?.promotion_text || null,
       cardColor: settings?.card_color || '#2F4366',
       stampIconName: settings?.stamp_icon_name || 'star',
       stampIconImageUrl: settings?.stamp_icon_image_url || null,
-      freeRedemptionReached: stampCount >= stampsPerRedemption,
+      freeRedemptionReached: stampCount >= stampsPerRedemption - 1,
     },
     error: null,
   };
@@ -864,7 +871,7 @@ export const removeLatestStampForCustomer = async (
 
   const stampsPerRedemption = settings?.stamps_per_redemption || 10;
   const nextStampCount = Math.max(0, currentStampCount - 1);
-  const freeRedemptionReached = nextStampCount >= stampsPerRedemption;
+  const freeRedemptionReached = nextStampCount >= stampsPerRedemption - 1;
 
   const { error: cardUpdateError } = await supabase
     .from('loyalty_cards')
@@ -1002,6 +1009,160 @@ export const searchCustomers = async (query: string) => {
     .limit(20);
 
   return { data: data || [], error };
+};
+
+// Get individual stamp records for a loyalty card (with dates)
+export const getStampRecords = async (merchantId: string, customerId: string) => {
+  const { data: card } = await supabase
+    .from('loyalty_cards')
+    .select('id')
+    .eq('customer_id', customerId)
+    .eq('merchant_id', merchantId)
+    .maybeSingle();
+
+  if (!card) return { data: [], error: null };
+
+  const { data, error } = await supabase
+    .from('stamps')
+    .select('id, earned_date, is_valid')
+    .eq('loyalty_card_id', card.id)
+    .eq('is_valid', true)
+    .order('earned_date', { ascending: true });
+
+  return { data: data || [], error };
+};
+
+// Redeem reward — reset stamps to 0 and create a redeemed_rewards record
+// Store a reward (stamps full → reset to 0, reward saved as unclaimed)
+export const storeCustomerReward = async (merchantId: string, customerId: string) => {
+  const { data: card, error: cardError } = await supabase
+    .from('loyalty_cards')
+    .select('*')
+    .eq('customer_id', customerId)
+    .eq('merchant_id', merchantId)
+    .maybeSingle();
+
+  if (cardError || !card) return { data: null, error: cardError || new Error('No loyalty card found.') };
+
+  const { data: settings } = await supabase
+    .from('stamp_settings')
+    .select('stamps_per_redemption, redemption_reward_description')
+    .eq('merchant_id', merchantId)
+    .maybeSingle();
+
+  const required = settings?.stamps_per_redemption || 10;
+
+  const rewardCode = `RW-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  await supabase.from('redeemed_rewards').insert({
+    loyalty_card_id: card.id,
+    merchant_id: merchantId,
+    customer_id: customerId,
+    stamps_used: required,
+    reward_code: rewardCode,
+    is_used: false,
+  });
+
+  // Invalidate all current stamps
+  await supabase.from('stamps').update({ is_valid: false }).eq('loyalty_card_id', card.id).eq('is_valid', true);
+
+  // Reset stamp count
+  await supabase.from('loyalty_cards').update({ stamp_count: 0, is_free_redemption: false, status: 'ACTIVE' }).eq('id', card.id);
+
+  await supabase.from('transactions').insert({
+    merchant_id: merchantId,
+    customer_id: customerId,
+    loyalty_card_id: card.id,
+    transaction_type: 'REWARD_STORED',
+    stamp_count_after: 0,
+    notes: `Reward stored: ${settings?.redemption_reward_description || 'Reward'}. Code: ${rewardCode}`,
+  });
+
+  return { data: { rewardCode, rewardDescription: settings?.redemption_reward_description || 'Reward' }, error: null };
+};
+
+// Get unclaimed rewards for a customer at a merchant
+export const getPendingRewards = async (merchantId: string, customerId: string) => {
+  const { data, error } = await supabase
+    .from('redeemed_rewards')
+    .select('id, reward_code, stamps_used, created_at')
+    .eq('merchant_id', merchantId)
+    .eq('customer_id', customerId)
+    .eq('is_used', false)
+    .order('created_at', { ascending: false });
+
+  return { data: data || [], error };
+};
+
+// Claim (use) a stored reward
+export const claimReward = async (rewardId: string) => {
+  const { data, error } = await supabase
+    .from('redeemed_rewards')
+    .update({ is_used: true, used_at: new Date().toISOString() })
+    .eq('id', rewardId)
+    .select('*')
+    .single();
+
+  return { data, error };
+};
+
+// Save merchant's GPS location to database
+export const saveMerchantLocation = async (latitude: number, longitude: number) => {
+  const { data: merchant, error: merchantError } = await ensureCurrentMerchantProfile();
+  if (merchantError || !merchant) return { data: null, error: merchantError };
+
+  const { data, error } = await supabase
+    .from('merchants')
+    .update({ latitude, longitude })
+    .eq('id', merchant.id)
+    .select('*')
+    .single();
+
+  return { data, error };
+};
+
+// Get nearby customers who have location data
+export const getNearbyCustomersWithLocation = async (merchantId: string) => {
+  // Get all customers with loyalty cards at this merchant
+  const { data: cards } = await supabase
+    .from('loyalty_cards')
+    .select('customer_id')
+    .eq('merchant_id', merchantId);
+
+  if (!cards || cards.length === 0) return { data: [], error: null };
+
+  const customerIds = [...new Set(cards.map((c: any) => c.customer_id))];
+
+  // Get customer details
+  const { data: customers } = await supabase
+    .from('customers')
+    .select('id, full_name, username, email')
+    .in('id', customerIds);
+
+  // Get latest location for each customer
+  const { data: locations } = await supabase
+    .from('user_locations')
+    .select('customer_id, latitude, longitude, created_at')
+    .in('customer_id', customerIds)
+    .order('created_at', { ascending: false });
+
+  // Build map of latest location per customer
+  const locationMap = new Map<string, { latitude: number; longitude: number }>();
+  for (const loc of locations || []) {
+    if (!locationMap.has(loc.customer_id)) {
+      locationMap.set(loc.customer_id, { latitude: loc.latitude, longitude: loc.longitude });
+    }
+  }
+
+  const result = (customers || [])
+    .filter((c: any) => locationMap.has(c.id))
+    .map((c: any) => ({
+      id: c.id,
+      name: c.full_name || c.username || 'Customer',
+      email: c.email,
+      ...locationMap.get(c.id)!,
+    }));
+
+  return { data: result, error: null };
 };
 
 export const getMerchantDashboardSnapshot = async () => {

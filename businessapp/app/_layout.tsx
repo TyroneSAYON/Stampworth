@@ -47,6 +47,7 @@ export default function RootLayout() {
         <Stack.Screen name="loyaltysystem" options={{ headerShown: false }} />
         <Stack.Screen name="stampsetup" options={{ headerShown: false }} />
         <Stack.Screen name="forgotpassword" options={{ headerShown: false }} />
+        <Stack.Screen name="customercard" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack>

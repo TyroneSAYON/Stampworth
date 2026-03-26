@@ -6,23 +6,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import {
-  getCustomerLoyaltyCardProgress,
   getCurrentMerchantProfile,
   getMerchantStampRules,
-  issueStampForCustomer,
-  removeLatestStampForCustomer,
   resolveCustomerById,
   resolveCustomerFromScannedQR,
 } from '@/lib/database';
-
-type CustomerProgress = {
-  customer: { id: string; full_name?: string | null; username?: string | null; email?: string | null };
-  stampCount: number;
-  stampsPerRedemption: number;
-  rewardDescription?: string | null;
-  conditions?: string | null;
-  freeRedemptionReached: boolean;
-};
 
 export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -32,10 +20,6 @@ export default function ScanScreen() {
   const [customerId, setCustomerId] = useState('');
   const [merchantId, setMerchantId] = useState<string | null>(null);
   const [conditions, setConditions] = useState('');
-  const [issuingStamp, setIssuingStamp] = useState(false);
-  const [progress, setProgress] = useState<CustomerProgress | null>(null);
-  const [source, setSource] = useState<'QR' | 'MANUAL'>('QR');
-  const [reference, setReference] = useState<string | undefined>(undefined);
 
   useFocusEffect(
     useCallback(() => {
@@ -56,48 +40,27 @@ export default function ScanScreen() {
     }, [])
   );
 
-  const loadProgress = async (cid: string, src: 'QR' | 'MANUAL', ref?: string) => {
-    if (!merchantId) return;
-    const { data, error } = await getCustomerLoyaltyCardProgress(merchantId, cid);
-    if (error || !data) { Alert.alert('Error', error?.message || 'Try again.'); return; }
-    setProgress(data); setSource(src); setReference(ref);
-    if (data.conditions) setConditions(data.conditions);
-  };
-
-  const issueStamp = async () => {
-    if (!merchantId || !progress) return;
-    setIssuingStamp(true);
-    const { data, error } = await issueStampForCustomer(merchantId, progress.customer.id, source, reference);
-    setIssuingStamp(false);
-    if (error || !data) { Alert.alert('Failed', error?.message || 'Try again.'); return; }
-    await loadProgress(progress.customer.id, source, reference);
-    Alert.alert('Stamp Issued', `Count: ${data.stampCount}${data.freeRedemptionReached ? '\nFREE REDEMPTION reached!' : ''}`);
-  };
-
-  const removeStamp = async () => {
-    if (!merchantId || !progress) return;
-    setIssuingStamp(true);
-    const { data, error } = await removeLatestStampForCustomer(merchantId, progress.customer.id, source, reference);
-    setIssuingStamp(false);
-    if (error || !data) { Alert.alert('Failed', error?.message || 'Try again.'); return; }
-    await loadProgress(progress.customer.id, source, reference);
-    Alert.alert('Stamp Removed', `Count: ${data.stampCount}`);
+  const navigateToCard = (resolvedCustomerId: string, src: 'QR' | 'MANUAL', ref?: string) => {
+    router.push({
+      pathname: '/customercard',
+      params: { customerId: resolvedCustomerId, merchantId: merchantId!, source: src, reference: ref || '' },
+    });
   };
 
   const handleBarCode = async ({ data }: BarcodeScanningResult) => {
     setScanned(true); setShowCamera(false);
     const { data: resolved, error } = await resolveCustomerFromScannedQR(data);
     if (error || !resolved?.customer?.id) { Alert.alert('Invalid QR', error?.message || 'Only customerapp QR codes accepted.'); setScanned(false); setShowCamera(true); return; }
-    await loadProgress(resolved.customer.id, 'QR', data);
-    setScanned(false); setShowIdInput(false);
+    setScanned(false); setShowCamera(false); setShowIdInput(false);
+    navigateToCard(resolved.customer.id, 'QR', data);
   };
 
   const handleIdSearch = async () => {
     if (!customerId.trim()) { Alert.alert('Required', 'Enter a customer ID.'); return; }
     const { data, error } = await resolveCustomerById(customerId.trim());
     if (error || !data?.id) { Alert.alert('Not found', 'Enter a valid customer ID.'); return; }
-    await loadProgress(data.id, 'MANUAL', customerId.trim());
     setCustomerId(''); setShowIdInput(false); setShowCamera(false);
+    navigateToCard(data.id, 'MANUAL', customerId.trim());
   };
 
   // Permission states
@@ -143,46 +106,10 @@ export default function ScanScreen() {
       <Text style={styles.pageTitle}>Scan</Text>
       <Text style={styles.pageSubtitle}>Scan customer QR code to manage stamps</Text>
 
-      {issuingStamp && (
-        <View style={styles.processingBar}>
-          <ActivityIndicator size="small" color="#2F4366" />
-          <Text style={styles.processingText}>Processing...</Text>
-        </View>
-      )}
-
-      {/* Customer Card */}
-      {progress && (
-        <View style={styles.customerCard}>
-          <View style={styles.customerRow}>
-            <View style={styles.customerAvatar}>
-              <Ionicons name="person" size={18} color="#2F4366" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.customerName}>{progress.customer.full_name || progress.customer.username || 'Customer'}</Text>
-              <Text style={styles.customerStamps}>{progress.stampCount} / {progress.stampsPerRedemption} stamps</Text>
-              {progress.rewardDescription ? <Text style={styles.customerReward}>{progress.rewardDescription}</Text> : null}
-            </View>
-          </View>
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#2F4366' }]} onPress={issueStamp} disabled={issuingStamp}>
-              <Ionicons name="add" size={16} color="#FFF" />
-              <Text style={styles.actionText}>Add Stamp</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#E74C3C' }]} onPress={removeStamp} disabled={issuingStamp}>
-              <Ionicons name="remove" size={16} color="#FFF" />
-              <Text style={styles.actionText}>Remove</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={styles.clearButton} onPress={() => { setProgress(null); setShowCamera(false); setShowIdInput(false); }}>
-            <Text style={styles.clearText}>Clear Customer</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {/* Scan Area */}
       <View style={styles.scanArea}>
         {!showCamera && !showIdInput && (
-          <TouchableOpacity style={styles.scanTrigger} onPress={() => setShowCamera(true)} disabled={issuingStamp}>
+          <TouchableOpacity style={styles.scanTrigger} onPress={() => setShowCamera(true)} disabled={false}>
             <Ionicons name="qr-code-outline" size={52} color="#2F4366" />
             <Text style={styles.scanTriggerText}>Tap to scan</Text>
           </TouchableOpacity>
@@ -212,7 +139,7 @@ export default function ScanScreen() {
               <TouchableOpacity style={styles.secondaryButton} onPress={() => { setShowIdInput(false); setShowCamera(true); setCustomerId(''); }}>
                 <Text style={styles.secondaryButtonText}>Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryButtonSmall} onPress={handleIdSearch} disabled={issuingStamp}>
+              <TouchableOpacity style={styles.primaryButtonSmall} onPress={handleIdSearch} disabled={false}>
                 <Text style={styles.primaryButtonText}>Search</Text>
               </TouchableOpacity>
             </View>

@@ -13,6 +13,9 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "This app uses your location to show nearby merchants and provide navigation.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location to show nearby merchants and provide navigation."
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyC2VkT6Kj7MY1W2ilwIjXevs5cTYJU7OXIc"
       }
     },
     "android": {
@@ -28,7 +31,12 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC2VkT6Kj7MY1W2ilwIjXevs5cTYJU7OXIc"
+        }
+      }
     },
     "web": {
       "output": "static",

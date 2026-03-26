@@ -5,28 +5,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { getCustomerLoyaltyCards } from '@/lib/database';
 
-type LoyaltyCard = {
-  id: string;
-  merchant_id: string;
-  stamp_count: number;
-  total_stamps_earned: number;
-  status: string;
-  is_free_redemption: boolean;
-  merchants: { business_name: string; logo_url: string | null } | null;
-  stamp_settings: { stamps_per_redemption: number; card_color: string } | null;
-};
-
 export default function CardsScreen() {
   const [loading, setLoading] = useState(true);
-  const [cards, setCards] = useState<LoyaltyCard[]>([]);
+  const [cards, setCards] = useState<any[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       const load = async () => {
         setLoading(true);
-        const { data } = await getCustomerLoyaltyCards();
+        const { data, error } = await getCustomerLoyaltyCards();
         if (!cancelled) {
+          if (error) console.warn('Cards load error:', error.message);
           setCards(data || []);
           setLoading(false);
         }
@@ -38,7 +28,6 @@ export default function CardsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image source={require('@/assets/images/stampworth-logo.png')} style={styles.logo} contentFit="contain" />
@@ -63,32 +52,75 @@ export default function CardsScreen() {
             const merchantName = card.merchants?.business_name || 'Store';
             const color = card.stamp_settings?.card_color || '#2F4366';
             const total = card.stamp_settings?.stamps_per_redemption || 10;
+            const iconName = card.stamp_settings?.stamp_icon_name || 'star';
+            const iconImageUrl = card.stamp_settings?.stamp_icon_image_url || null;
             const collected = card.stamp_count || 0;
-            const pct = Math.min(100, (collected / total) * 100);
+            const collectableSlots = total - 1;
+            const pct = collectableSlots > 0 ? Math.min(100, (collected / collectableSlots) * 100) : 0;
 
             return (
               <TouchableOpacity
                 key={card.id}
                 style={[styles.card, { backgroundColor: color }]}
-                onPress={() => router.push({ pathname: '/stamps', params: { merchant: merchantName, collected: String(collected), total: String(total), color } })}
+                onPress={() => router.push({
+                  pathname: '/stamps',
+                  params: {
+                    loyaltyCardId: card.id,
+                    merchantId: card.merchant_id,
+                    merchant: merchantName,
+                    collected: String(collected),
+                    total: String(total),
+                    color,
+                    iconName,
+                    iconImageUrl: iconImageUrl || '',
+                  },
+                })}
               >
                 <View style={styles.cardRow}>
                   <View style={styles.cardIcon}>
-                    <Ionicons name="business" size={20} color="#FFFFFF" />
+                    <Ionicons name="business" size={18} color="#FFFFFF" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardMerchant} numberOfLines={1}>{merchantName}</Text>
                     <Text style={styles.cardSub}>Loyalty Card</Text>
                   </View>
-                  <Text style={styles.cardStamps}>{collected}/{total}</Text>
+                  <Text style={styles.cardStamps}>{collected}/{collectableSlots}</Text>
                 </View>
+
+                {/* Mini stamp preview */}
+                <View style={styles.miniGrid}>
+                  {Array.from({ length: total }, (_, i) => {
+                    const isFree = i === total - 1;
+                    const isFilled = !isFree && i < collected;
+                    return (
+                      <View key={i} style={[
+                        styles.miniCircle,
+                        isFree ? { backgroundColor: 'rgba(255,255,255,0.85)' }
+                          : isFilled ? { backgroundColor: '#FFFFFF' }
+                          : { backgroundColor: 'rgba(255,255,255,0.2)' },
+                      ]}>
+                        {isFree ? (
+                          <Text style={[styles.miniFree, { color }]}>F</Text>
+                        ) : isFilled ? (
+                          iconImageUrl ? (
+                            <Image source={{ uri: iconImageUrl }} style={{ width: 10, height: 10 }} contentFit="contain" />
+                          ) : (
+                            <Ionicons name={iconName as any} size={10} color={color} />
+                          )
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+
                 <View style={styles.progressBg}>
                   <View style={[styles.progressFill, { width: `${pct}%` }]} />
                 </View>
+
                 {card.is_free_redemption && (
                   <View style={styles.freeBadge}>
                     <Ionicons name="gift" size={12} color="#FFFFFF" />
-                    <Text style={styles.freeText}>FREE REDEMPTION</Text>
+                    <Text style={styles.freeText}>REWARD AVAILABLE</Text>
                   </View>
                 )}
               </TouchableOpacity>
@@ -112,14 +144,21 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 16, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
   emptySubtext: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
   scroll: { paddingHorizontal: 24, paddingBottom: 120 },
-  card: { borderRadius: 16, padding: 18, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 6 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
-  cardIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
-  cardMerchant: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
-  cardSub: { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontFamily: 'Poppins-Regular' },
-  cardStamps: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
-  progressBg: { height: 6, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: 6, backgroundColor: '#FFFFFF', borderRadius: 3 },
-  freeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  freeText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF', letterSpacing: 0.5 },
+
+  card: { borderRadius: 18, padding: 18, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  cardIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  cardMerchant: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
+  cardSub: { fontSize: 10, color: 'rgba(255,255,255,0.65)', fontFamily: 'Poppins-Regular' },
+  cardStamps: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
+
+  miniGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 12 },
+  miniCircle: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  miniFree: { fontSize: 7, fontFamily: 'Poppins-SemiBold' },
+
+  progressBg: { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: 5, backgroundColor: '#FFFFFF', borderRadius: 3 },
+
+  freeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  freeText: { fontSize: 9, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF', letterSpacing: 0.5 },
 });
