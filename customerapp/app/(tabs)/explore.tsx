@@ -38,27 +38,32 @@ export default function ExploreScreen() {
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
-    }, [])
+      if (!loaded) loadData();
+    }, [loaded])
   );
 
   const loadData = async () => {
     setLoading(true);
-    if (Location) {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({});
-          setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-        }
-      } catch {}
+
+    // Run location + merchants in parallel
+    const [locationResult, merchantsResult] = await Promise.all([
+      Location ? Location.requestForegroundPermissionsAsync().then(async ({ status }) => {
+        if (status === 'granted') return Location!.getCurrentPositionAsync({});
+        return null;
+      }).catch(() => null) : Promise.resolve(null),
+      getAllMerchants(),
+    ]);
+
+    if (locationResult?.coords) {
+      setUserLocation({ latitude: locationResult.coords.latitude, longitude: locationResult.coords.longitude });
     }
-    const { data } = await getAllMerchants();
-    setMerchants(data || []);
+    setMerchants(merchantsResult.data || []);
     setLoading(false);
+    setLoaded(true);
   };
 
   const getDistance = (m: Merchant) => {

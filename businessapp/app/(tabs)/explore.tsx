@@ -37,6 +37,7 @@ export default function ExploreScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [geofenceRadius, setGeofenceRadius] = useState(500);
   const [savingLocation, setSavingLocation] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,11 +49,24 @@ export default function ExploreScreen() {
   const [cardModalVisible, setCardModalVisible] = useState(false);
   const [loadingCard, setLoadingCard] = useState(false);
 
-  useFocusEffect(useCallback(() => { init(); }, []));
+  useFocusEffect(useCallback(() => {
+    if (!loaded) init();
+  }, [loaded]));
 
   const init = async () => {
     setLoading(true);
-    const { data: merchant } = await getCurrentMerchantProfile();
+
+    // Run all queries in parallel
+    const [merchantResult, analyticsResult, locationResult] = await Promise.all([
+      getCurrentMerchantProfile(),
+      getMerchantExploreAnalytics(),
+      Location ? Location.requestForegroundPermissionsAsync().then(async ({ status }) => {
+        if (status === 'granted') return Location!.getCurrentPositionAsync({});
+        return null;
+      }).catch(() => null) : Promise.resolve(null),
+    ]);
+
+    const merchant = merchantResult.data;
     if (merchant) {
       setMerchantId(merchant.id);
       setMerchantName(merchant.business_name || 'Your Store');
@@ -63,29 +77,26 @@ export default function ExploreScreen() {
       }
     }
 
-    const { data } = await getMerchantExploreAnalytics();
-    if (data) {
-      setTotalRedeemed(data.totalRedeemed);
-      setMostLoyal(data.mostLoyal);
-      setCardHolders(data.cardHolders);
+    if (analyticsResult.data) {
+      setTotalRedeemed(analyticsResult.data.totalRedeemed);
+      setMostLoyal(analyticsResult.data.mostLoyal);
+      setCardHolders(analyticsResult.data.cardHolders);
     }
 
+    if (locationResult?.coords) {
+      setUserLocation({ latitude: locationResult.coords.latitude, longitude: locationResult.coords.longitude });
+    }
+
+    // Nearby customers in background (don't block render)
     if (merchant) {
-      const { data: nearby } = await getNearbyCustomersWithLocation(merchant.id);
-      setNearbyCustomers(nearby || []);
+      getNearbyCustomersWithLocation(merchant.id).then(({ data }) => setNearbyCustomers(data || []));
     }
 
-    if (Location) {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status === 'granted') {
-          const loc = await Location.getCurrentPositionAsync({});
-          setUserLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
-        }
-      } catch {}
-    }
     setLoading(false);
+    setLoaded(true);
   };
+
+  const refresh = () => { setLoaded(false); };
 
   const handlePinLocation = async () => {
     if (!userLocation) { Alert.alert('No location', 'Enable location services first.'); return; }
