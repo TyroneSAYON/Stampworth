@@ -7,3 +7,6 @@ dist/
 .env.production
 *.apk
 *.aab
+
+.vercel
+.env*.local
