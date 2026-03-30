@@ -44,8 +44,8 @@ export default function LoginPage() {
         )}
       </button>
 
-      <div className="w-full max-w-md">
-        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg dark:shadow-gray-900/50 p-8">
+      <div className="w-full max-w-md px-4 sm:px-0">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg dark:shadow-gray-900/50 p-6 sm:p-8">
           <div className="text-center mb-8 flex flex-col items-center">
             <img src="/logo.png" alt="Stampworth" className="w-12 h-12 mb-4" />
             <h1 className="text-2xl font-bold text-[#2F4366] dark:text-[#7DA2D4]">Stampworth</h1>
