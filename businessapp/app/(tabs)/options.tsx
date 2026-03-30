@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, View, useColorScheme, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons, type IoniconsProps } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
@@ -188,6 +188,156 @@ export default function OptionsScreen() {
           <Ionicons name="chevron-forward" size={18} color="#C4CAD4" />
         </TouchableOpacity>
 
+        {/* Subscription Plans */}
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Subscription</Text>
+
+        {/* Current Beta Plan */}
+        <View style={styles.betaCard}>
+          <View style={styles.betaCardHeader}>
+            <View style={styles.betaIconCircle}>
+              <Ionicons name="flask" size={20} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text style={styles.betaCardTitle}>Beta Tester</Text>
+                <View style={styles.activeBadge}>
+                  <View style={styles.activeDot} />
+                  <Text style={styles.activeBadgeText}>ACTIVE</Text>
+                </View>
+              </View>
+              <Text style={styles.betaCardDesc}>All features unlocked during beta</Text>
+            </View>
+            <Text style={styles.betaFreeLabel}>FREE</Text>
+          </View>
+          <View style={styles.betaDivider} />
+          <View style={styles.betaPerks}>
+            <View style={styles.betaPerkItem}>
+              <Ionicons name="people" size={15} color="#2F4366" />
+              <Text style={styles.betaPerkText}>Unlimited customers</Text>
+            </View>
+            <View style={styles.betaPerkItem}>
+              <Ionicons name="qr-code" size={15} color="#2F4366" />
+              <Text style={styles.betaPerkText}>Unlimited QR scans</Text>
+            </View>
+            <View style={styles.betaPerkItem}>
+              <Ionicons name="color-palette" size={15} color="#2F4366" />
+              <Text style={styles.betaPerkText}>All card customizations</Text>
+            </View>
+            <View style={styles.betaPerkItem}>
+              <Ionicons name="megaphone" size={15} color="#2F4366" />
+              <Text style={styles.betaPerkText}>Unlimited announcements</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Plans After Beta */}
+        <Text style={styles.plansAfterLabel}>Plans after beta</Text>
+
+        {/* Starter */}
+        <View style={styles.planCard}>
+          <View style={styles.planCardTop}>
+            <View style={[styles.planIconCircle, { backgroundColor: '#E8F4FD' }]}>
+              <Ionicons name="storefront-outline" size={20} color="#2F4366" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.planName}>Starter</Text>
+              <Text style={styles.planTagline}>For small shops getting started</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[styles.planPrice, { color: '#2F4366' }]}>₱499</Text>
+              <Text style={styles.planPeriod}>/month</Text>
+            </View>
+          </View>
+          <View style={styles.planDivider} />
+          <View style={styles.planFeatures}>
+            <PlanFeature icon="people-outline" text="Up to 50 loyalty card holders" />
+            <PlanFeature icon="qr-code-outline" text="200 QR stamp scans / month" />
+            <PlanFeature icon="card-outline" text="1 loyalty card design" />
+            <PlanFeature icon="bar-chart-outline" text="Basic stamp & redemption stats" />
+            <PlanFeature icon="megaphone-outline" text="5 announcements / month" />
+            <PlanFeature icon="mail-outline" text="Email support" />
+          </View>
+          <TouchableOpacity
+            style={[styles.planButton, { backgroundColor: '#2F4366' }]}
+            onPress={() => Alert.alert('Coming Soon', 'Starter plan will be available once the beta period ends. You\'ll keep all your data!')}
+          >
+            <Text style={styles.planButtonText}>Coming Soon</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Growth */}
+        <View style={[styles.planCard, { borderColor: '#27AE60', borderWidth: 2 }]}>
+          <View style={styles.popularBanner}>
+            <Ionicons name="star" size={10} color="#FFFFFF" />
+            <Text style={styles.popularBannerText}>RECOMMENDED</Text>
+          </View>
+          <View style={styles.planCardTop}>
+            <View style={[styles.planIconCircle, { backgroundColor: '#E8F8EE' }]}>
+              <Ionicons name="trending-up-outline" size={20} color="#27AE60" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.planName}>Growth</Text>
+              <Text style={styles.planTagline}>For growing businesses</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[styles.planPrice, { color: '#27AE60' }]}>₱999</Text>
+              <Text style={styles.planPeriod}>/month</Text>
+            </View>
+          </View>
+          <View style={styles.planDivider} />
+          <View style={styles.planFeatures}>
+            <PlanFeature icon="people-outline" text="Up to 500 loyalty card holders" color="#27AE60" />
+            <PlanFeature icon="qr-code-outline" text="Unlimited QR stamp scans" color="#27AE60" />
+            <PlanFeature icon="color-palette-outline" text="5 card designs + custom colors" color="#27AE60" />
+            <PlanFeature icon="image-outline" text="Custom stamp icons (upload your own)" color="#27AE60" />
+            <PlanFeature icon="analytics-outline" text="Advanced analytics & customer insights" color="#27AE60" />
+            <PlanFeature icon="megaphone-outline" text="Unlimited announcements" color="#27AE60" />
+            <PlanFeature icon="location-outline" text="Store map listing + nearby customers" color="#27AE60" />
+            <PlanFeature icon="chatbubbles-outline" text="Priority support" color="#27AE60" />
+          </View>
+          <TouchableOpacity
+            style={[styles.planButton, { backgroundColor: '#27AE60' }]}
+            onPress={() => Alert.alert('Coming Soon', 'Growth plan will be available once the beta period ends. You\'ll keep all your data!')}
+          >
+            <Text style={styles.planButtonText}>Coming Soon</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Scale */}
+        <View style={styles.planCard}>
+          <View style={styles.planCardTop}>
+            <View style={[styles.planIconCircle, { backgroundColor: '#FFF4E6' }]}>
+              <Ionicons name="flash-outline" size={20} color="#E67E22" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.planName}>Scale</Text>
+              <Text style={styles.planTagline}>For multi-location brands</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[styles.planPrice, { color: '#E67E22' }]}>₱1,999</Text>
+              <Text style={styles.planPeriod}>/month</Text>
+            </View>
+          </View>
+          <View style={styles.planDivider} />
+          <View style={styles.planFeatures}>
+            <PlanFeature icon="people-outline" text="Unlimited loyalty card holders" color="#E67E22" />
+            <PlanFeature icon="qr-code-outline" text="Unlimited QR stamp scans" color="#E67E22" />
+            <PlanFeature icon="color-palette-outline" text="Unlimited card designs + full branding" color="#E67E22" />
+            <PlanFeature icon="image-outline" text="Custom stamp icons + animated stamps" color="#E67E22" />
+            <PlanFeature icon="analytics-outline" text="Full analytics suite + export reports" color="#E67E22" />
+            <PlanFeature icon="megaphone-outline" text="Unlimited announcements + push notifications" color="#E67E22" />
+            <PlanFeature icon="map-outline" text="Multi-location store management" color="#E67E22" />
+            <PlanFeature icon="code-slash-outline" text="API access for custom integrations" color="#E67E22" />
+            <PlanFeature icon="headset-outline" text="Dedicated account manager" color="#E67E22" />
+          </View>
+          <TouchableOpacity
+            style={[styles.planButton, { backgroundColor: '#E67E22' }]}
+            onPress={() => Alert.alert('Coming Soon', 'Scale plan will be available once the beta period ends. You\'ll keep all your data!')}
+          >
+            <Text style={styles.planButtonText}>Coming Soon</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
@@ -195,6 +345,15 @@ export default function OptionsScreen() {
         </TouchableOpacity>
       </ScrollView>
     </ThemedView>
+  );
+}
+
+function PlanFeature({ icon, text, color = '#2F4366' }: { icon: string; text: string; color?: string }) {
+  return (
+    <View style={styles.featureRow}>
+      <Ionicons name={icon as any} size={15} color={color} />
+      <Text style={styles.featureText}>{text}</Text>
+    </View>
   );
 }
 
@@ -238,6 +397,41 @@ const styles = StyleSheet.create({
   menuText: { flex: 1 },
   menuTitle: { fontSize: 15, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
   menuSubtitle: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 2 },
+
+  // Beta Card
+  betaCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1.5, borderColor: '#2F4366', shadowColor: '#2F4366', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
+  betaCardHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12 },
+  betaIconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#2F4366', alignItems: 'center' as const, justifyContent: 'center' as const },
+  betaCardTitle: { fontSize: 16, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  betaCardDesc: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 1 },
+  betaFreeLabel: { fontSize: 18, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  activeBadge: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, backgroundColor: '#E8F8EE', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  activeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#27AE60' },
+  activeBadgeText: { fontSize: 9, fontFamily: 'Poppins-SemiBold', color: '#27AE60', letterSpacing: 0.5 },
+  betaDivider: { height: 1, backgroundColor: '#F0F2F5', marginVertical: 14 },
+  betaPerks: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8 },
+  betaPerkItem: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, backgroundColor: '#F6F8FB', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, width: '48%' as any },
+  betaPerkText: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#4A5568', flexShrink: 1 },
+
+  // Plans After Beta
+  plansAfterLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#B0B8C4', textTransform: 'uppercase' as const, letterSpacing: 1, paddingHorizontal: 24, marginBottom: 12 },
+
+  // Plan Cards
+  planCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 14, borderWidth: 1, borderColor: '#E0E4EA', overflow: 'hidden' as const },
+  planCardTop: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12 },
+  planIconCircle: { width: 42, height: 42, borderRadius: 12, alignItems: 'center' as const, justifyContent: 'center' as const },
+  planName: { fontSize: 17, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
+  planTagline: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 1 },
+  planPrice: { fontSize: 22, fontFamily: 'Poppins-SemiBold' },
+  planPeriod: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
+  planDivider: { height: 1, backgroundColor: '#F0F2F5', marginVertical: 14 },
+  planFeatures: { gap: 10, marginBottom: 16 },
+  featureRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8 },
+  featureText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#4A5568', flex: 1 },
+  planButton: { borderRadius: 12, height: 46, alignItems: 'center' as const, justifyContent: 'center' as const },
+  planButtonText: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+  popularBanner: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 4, backgroundColor: '#27AE60', paddingVertical: 5, marginHorizontal: -18, marginTop: -18, marginBottom: 14 },
+  popularBannerText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF', letterSpacing: 1 },
 
   // Logout
   logoutButton: { marginHorizontal: 24, marginTop: 20, backgroundColor: '#E74C3C', borderRadius: 14, height: 50, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },

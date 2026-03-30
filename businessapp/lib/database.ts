@@ -16,6 +16,8 @@ type MerchantProfile = {
   address?: string | null;
   website_url?: string | null;
   logo_url?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 type MerchantAccountInput = {
