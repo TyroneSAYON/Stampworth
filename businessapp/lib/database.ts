@@ -644,6 +644,26 @@ export const resolveCustomerFromScannedQR = async (scannedValue: string) => {
   };
 };
 
+export const logScanEvent = async (merchantId: string, customerId: string) => {
+  // Get or create loyalty card so the customer app can navigate to it
+  const { data: existingCard } = await supabase
+    .from('loyalty_cards')
+    .select('id, stamp_count')
+    .eq('merchant_id', merchantId)
+    .eq('customer_id', customerId)
+    .maybeSingle();
+
+  // Log a scan transaction so customer app's Realtime listener picks it up
+  await supabase.from('transactions').insert({
+    merchant_id: merchantId,
+    customer_id: customerId,
+    loyalty_card_id: existingCard?.id || null,
+    transaction_type: 'CUSTOMER_SCANNED',
+    stamp_count_after: existingCard?.stamp_count || 0,
+    notes: 'QR code scanned by merchant',
+  });
+};
+
 export const resolveCustomerById = async (customerId: string) => {
   const { data, error } = await supabase
     .from('customers')
@@ -660,9 +680,10 @@ export const issueStampForCustomer = async (
   source: 'QR' | 'MANUAL',
   sourceReference?: string,
 ) => {
+  // Always fetch the latest card state to avoid stale stamp_count
   const { data: existingCard } = await supabase
     .from('loyalty_cards')
-    .select('*')
+    .select('id, stamp_count, total_stamps_earned, status, is_free_redemption, customer_id, merchant_id')
     .eq('customer_id', customerId)
     .eq('merchant_id', merchantId)
     .maybeSingle();
@@ -686,8 +707,13 @@ export const issueStampForCustomer = async (
     loyaltyCard = newCard;
   }
 
-  const nextStampCount = (loyaltyCard.stamp_count || 0) + 1;
-  const totalStampsEarned = (loyaltyCard.total_stamps_earned || 0) + 1;
+  if (!loyaltyCard) return { data: null, error: new Error('Unable to find or create loyalty card.') };
+
+  // Use the DB values directly for accuracy
+  const currentCount = loyaltyCard.stamp_count ?? 0;
+  const currentTotal = loyaltyCard.total_stamps_earned ?? 0;
+  const nextStampCount = currentCount + 1;
+  const totalStampsEarned = currentTotal + 1;
 
   const { data: settings } = await supabase
     .from('stamp_settings')
@@ -788,8 +814,23 @@ export const getCustomerLoyaltyCardProgress = async (merchantId: string, custome
     return { data: null, error: settingsError };
   }
 
-  const stampCount = card?.stamp_count || 0;
   const stampsPerRedemption = settings?.stamps_per_redemption || 10;
+
+  // Always derive stamp count from actual valid stamp records for accuracy
+  let stampCount = card?.stamp_count || 0;
+  if (card) {
+    const { count } = await supabase
+      .from('stamps')
+      .select('id', { count: 'exact', head: true })
+      .eq('loyalty_card_id', card.id)
+      .eq('is_valid', true);
+    const actualCount = count ?? stampCount;
+    // Sync if out of date
+    if (actualCount !== stampCount) {
+      stampCount = actualCount;
+      await supabase.from('loyalty_cards').update({ stamp_count: actualCount }).eq('id', card.id);
+    }
+  }
 
   return {
     data: {
@@ -916,6 +957,51 @@ export const isMerchantSetupComplete = async () => {
   if (error || !merchant) return { complete: false, error };
   const hasAddress = !!merchant.address && merchant.address !== 'To be updated';
   return { complete: hasAddress, error: null };
+};
+
+// Reset loyalty program — clears all stamps, cards, rewards, and transactions for this merchant
+export const resetLoyaltyProgram = async () => {
+  const { data: merchant, error: merchantError } = await ensureCurrentMerchantProfile();
+  if (merchantError || !merchant) return { error: merchantError || new Error('Merchant not found') };
+
+  const merchantId = merchant.id;
+
+  try {
+    // Get all loyalty card IDs for this merchant
+    const { data: cards } = await supabase
+      .from('loyalty_cards')
+      .select('id')
+      .eq('merchant_id', merchantId);
+
+    const cardIds = (cards || []).map((c) => c.id);
+
+    // Delete stamps by card IDs and merchant ID
+    if (cardIds.length > 0) {
+      const { error: e1 } = await supabase.from('stamps').delete().in('loyalty_card_id', cardIds);
+      if (e1) console.warn('stamps delete by card:', e1.message);
+    }
+    const { error: e2 } = await supabase.from('stamps').delete().eq('merchant_id', merchantId);
+    if (e2) console.warn('stamps delete by merchant:', e2.message);
+
+    // Delete redeemed rewards
+    const { error: e3 } = await supabase.from('redeemed_rewards').delete().eq('merchant_id', merchantId);
+    if (e3) console.warn('rewards delete:', e3.message);
+
+    // Delete transactions
+    const { error: e4 } = await supabase.from('transactions').delete().eq('merchant_id', merchantId);
+    if (e4) console.warn('transactions delete:', e4.message);
+
+    // Delete loyalty cards
+    const { error: e5 } = await supabase.from('loyalty_cards').delete().eq('merchant_id', merchantId);
+    if (e5) console.warn('cards delete:', e5.message);
+
+    // If any critical delete failed, report the last error
+    if (e5) return { error: new Error('Could not delete loyalty cards: ' + e5.message) };
+
+    return { error: null };
+  } catch (err: any) {
+    return { error: new Error(err.message || 'Reset failed') };
+  }
 };
 
 // Announcements

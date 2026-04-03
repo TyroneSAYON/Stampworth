@@ -1,12 +1,12 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, View, useColorScheme, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View, useColorScheme, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
-import { getMerchantDashboardSnapshot } from '@/lib/database';
+import { getMerchantDashboardSnapshot, resetLoyaltyProgram } from '@/lib/database';
 
 export default function OptionsScreen() {
   const colorScheme = useColorScheme();
@@ -66,6 +66,26 @@ export default function OptionsScreen() {
     collected: i < collectedStamps,
     isFree: i === totalStamps - 1,
   }));
+
+  const [resetting, setResetting] = useState(false);
+  const [resetStep, setResetStep] = useState(0);
+
+  const handleReset = () => setResetStep(1);
+
+  const doReset = async () => {
+    setResetStep(0);
+    setResetting(true);
+    const { error } = await resetLoyaltyProgram();
+    setResetting(false);
+    if (error) {
+      Alert.alert('Reset Failed', error.message);
+      return;
+    }
+    setActiveUsers(0);
+    setStampsIssued(0);
+    setRewardsRedeemed(0);
+    Alert.alert('Reset Complete', 'Your loyalty program has been reset. All stamps, cards, and rewards have been cleared.');
+  };
 
   const handleLogout = () => {
     Alert.alert('Log out', 'Do you want to log out of your business account?', [
@@ -186,6 +206,25 @@ export default function OptionsScreen() {
             <Text style={styles.menuSubtitle}>Card style, stamps & rewards</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#C4CAD4" />
+        </TouchableOpacity>
+
+        {/* Reset */}
+        <TouchableOpacity
+          activeOpacity={0.6}
+          style={styles.resetButton}
+          onPress={handleReset}
+        >
+          <View style={[styles.menuIcon, { backgroundColor: '#FDE8E8' }]}>
+            {resetting
+              ? <ActivityIndicator size="small" color="#E74C3C" />
+              : <Ionicons name="refresh-outline" size={20} color="#E74C3C" />
+            }
+          </View>
+          <View style={styles.menuText}>
+            <Text style={[styles.menuTitle, { color: '#E74C3C' }]}>{resetting ? 'Resetting...' : 'Reset Loyalty Program'}</Text>
+            <Text style={styles.menuSubtitle}>Clear all stamps, cards & rewards</Text>
+          </View>
+          {!resetting && <Ionicons name="chevron-forward" size={18} color="#E74C3C" />}
         </TouchableOpacity>
 
         {/* Subscription Plans */}
@@ -344,6 +383,74 @@ export default function OptionsScreen() {
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Reset Step 1 */}
+      {resetStep === 1 && (
+        <View style={styles.resetOverlay}>
+          <View style={styles.resetModal}>
+            <View style={styles.resetModalIcon}>
+              <Ionicons name="warning" size={32} color="#E74C3C" />
+            </View>
+            <Text style={styles.resetModalTitle}>Reset Loyalty Program</Text>
+            <Text style={styles.resetModalText}>
+              This will permanently delete:{'\n\n'}
+              • All issued stamps{'\n'}
+              • All customer loyalty cards{'\n'}
+              • All redeemed rewards{'\n'}
+              • All transaction history{'\n\n'}
+              Your customers will lose their progress.
+            </Text>
+            <TouchableOpacity style={styles.resetModalBtnDanger} onPress={() => setResetStep(2)}>
+              <Text style={styles.resetModalBtnDangerText}>Continue</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.resetModalBtnCancel} onPress={() => setResetStep(0)}>
+              <Text style={styles.resetModalBtnCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Reset Step 2 */}
+      {resetStep === 2 && (
+        <View style={styles.resetOverlay}>
+          <View style={styles.resetModal}>
+            <View style={styles.resetModalIcon}>
+              <Ionicons name="alert-circle" size={32} color="#E74C3C" />
+            </View>
+            <Text style={styles.resetModalTitle}>Are you sure?</Text>
+            <Text style={styles.resetModalText}>
+              This action cannot be undone. All data will be permanently erased.
+            </Text>
+            <TouchableOpacity style={styles.resetModalBtnDanger} onPress={() => setResetStep(3)}>
+              <Text style={styles.resetModalBtnDangerText}>Reset Everything</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.resetModalBtnCancel} onPress={() => setResetStep(0)}>
+              <Text style={styles.resetModalBtnCancelText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Reset Step 3 - Final */}
+      {resetStep === 3 && (
+        <View style={styles.resetOverlay}>
+          <View style={styles.resetModal}>
+            <View style={styles.resetModalIcon}>
+              <Ionicons name="trash" size={32} color="#E74C3C" />
+            </View>
+            <Text style={styles.resetModalTitle}>Final Confirmation</Text>
+            <Text style={styles.resetModalText}>
+              Proceed with resetting your loyalty program?
+            </Text>
+            <TouchableOpacity style={styles.resetModalBtnDanger} onPress={doReset}>
+              <Text style={styles.resetModalBtnDangerText}>Yes, Proceed</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.resetModalBtnCancel} onPress={() => setResetStep(0)}>
+              <Text style={styles.resetModalBtnCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </ThemedView>
   );
 }
@@ -432,6 +539,18 @@ const styles = StyleSheet.create({
   planButtonText: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
   popularBanner: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 4, backgroundColor: '#27AE60', paddingVertical: 5, marginHorizontal: -18, marginTop: -18, marginBottom: 14 },
   popularBannerText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF', letterSpacing: 1 },
+
+  // Reset
+  resetButton: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 10, marginTop: 10, gap: 14, borderWidth: 1.5, borderColor: '#F5C6C6' },
+  resetOverlay: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center' as const, alignItems: 'center' as const, zIndex: 100, paddingHorizontal: 24 },
+  resetModal: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 28, width: '100%', alignItems: 'center' as const },
+  resetModalIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#FDE8E8', alignItems: 'center' as const, justifyContent: 'center' as const, marginBottom: 16 },
+  resetModalTitle: { fontSize: 18, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E', marginBottom: 12 },
+  resetModalText: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', textAlign: 'center' as const, lineHeight: 20, marginBottom: 24 },
+  resetModalBtnDanger: { width: '100%', height: 48, backgroundColor: '#E74C3C', borderRadius: 12, alignItems: 'center' as const, justifyContent: 'center' as const, marginBottom: 10 },
+  resetModalBtnDangerText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Poppins-SemiBold' },
+  resetModalBtnCancel: { width: '100%', height: 48, alignItems: 'center' as const, justifyContent: 'center' as const },
+  resetModalBtnCancelText: { color: '#8A94A6', fontSize: 14, fontFamily: 'Poppins-Regular' },
 
   // Logout
   logoutButton: { marginHorizontal: 24, marginTop: 20, backgroundColor: '#E74C3C', borderRadius: 14, height: 50, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },

@@ -1,13 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { router, useFocusEffect } from 'expo-router';
-import { getOrCreateCustomerProfile, getOrCreateCustomerQRCode, getCustomerAnnouncements } from '@/lib/database';
+import { getOrCreateCustomerProfile, getOrCreateCustomerQRCode, getCustomerAnnouncements, getCustomerLoyaltyCards } from '@/lib/database';
 import { getCurrentUser } from '@/lib/auth';
 import { setupPushNotifications } from '@/lib/notifications';
-import { useRef } from 'react';
+import { supabase } from '@/lib/supabase';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -17,6 +17,7 @@ export default function QRCodeScreen() {
   const [loading, setLoading] = useState(true);
   const [qrValue, setQrValue] = useState<string | null>(null);
   const [customerCode, setCustomerCode] = useState('');
+  const [customerId, setCustomerId] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState('Customer');
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -51,6 +52,7 @@ export default function QRCodeScreen() {
 
         if (!cancelled) {
           setQrValue(qrData.qr_code_value);
+          setCustomerId(customer.id);
           setCustomerCode(customer.id.slice(0, 8).toUpperCase());
           setLoading(false);
         }
@@ -59,6 +61,43 @@ export default function QRCodeScreen() {
       return () => { cancelled = true; };
     }, [])
   );
+
+  // Realtime: auto-navigate to card when merchant scans and performs an action
+  useEffect(() => {
+    if (!customerId) return;
+
+    const channel = supabase
+      .channel('customer-scan-' + customerId)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customerId}` },
+        async (payload) => {
+          const tx = payload.new as any;
+          const { data: cards } = await getCustomerLoyaltyCards();
+          const card = (cards || []).find((c: any) => c.merchant_id === tx.merchant_id);
+          if (card) {
+            router.push({
+              pathname: '/stamps',
+              params: {
+                loyaltyCardId: card.id,
+                merchantId: card.merchant_id,
+                merchant: card.merchants?.business_name || 'Store',
+                collected: String(card.stamp_count || 0),
+                total: String(card.stamp_settings?.stamps_per_redemption || 10),
+                color: card.stamp_settings?.card_color || '#2F4366',
+                iconName: card.stamp_settings?.stamp_icon_name || 'star',
+                iconImageUrl: card.stamp_settings?.stamp_icon_image_url || '',
+              },
+            });
+          } else {
+            router.push('/(tabs)/cards');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [customerId]);
 
   const toggleDropdown = () => {
     if (dropdownOpen) {

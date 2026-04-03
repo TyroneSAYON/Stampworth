@@ -115,11 +115,39 @@ export const getUserLoyaltyCards = async (customerId: string) => {
   const merchantMap = new Map((merchants || []).map((m: any) => [m.id, m]));
   const settingsMap = new Map((settings || []).map((s: any) => [s.merchant_id, s]));
 
-  const enriched = cards.map((card: any) => ({
-    ...card,
-    merchants: merchantMap.get(card.merchant_id) || null,
-    stamp_settings: settingsMap.get(card.merchant_id) || null,
-  }));
+  // Verify stamp counts from actual valid stamp records for accuracy
+  const cardIds = cards.map((c: any) => c.id);
+  const { data: allStamps } = await supabase
+    .from('stamps')
+    .select('loyalty_card_id')
+    .in('loyalty_card_id', cardIds)
+    .eq('is_valid', true);
+
+  const stampCountMap: Record<string, number> = {};
+  for (const s of allStamps || []) {
+    stampCountMap[s.loyalty_card_id] = (stampCountMap[s.loyalty_card_id] || 0) + 1;
+  }
+
+  const enriched = cards.map((card: any) => {
+    const actualCount = stampCountMap[card.id] ?? card.stamp_count ?? 0;
+    const stampsPerRedemption = settingsMap.get(card.merchant_id)?.stamps_per_redemption || 10;
+    const isFreeRedemption = actualCount >= stampsPerRedemption - 1;
+    // Auto-sync if out of date
+    if (actualCount !== (card.stamp_count ?? 0) || isFreeRedemption !== (card.is_free_redemption ?? false)) {
+      supabase.from('loyalty_cards').update({
+        stamp_count: actualCount,
+        is_free_redemption: isFreeRedemption,
+        status: isFreeRedemption ? 'FREE_REDEMPTION' : 'ACTIVE',
+      }).eq('id', card.id).then(() => {});
+    }
+    return {
+      ...card,
+      stamp_count: actualCount,
+      is_free_redemption: isFreeRedemption,
+      merchants: merchantMap.get(card.merchant_id) || null,
+      stamp_settings: settingsMap.get(card.merchant_id) || null,
+    };
+  });
 
   return { data: enriched, error: null };
 };
@@ -336,6 +364,23 @@ export const getStampRecordsForCard = async (loyaltyCardId: string) => {
 };
 
 // Get pending (unclaimed) rewards for current customer at a merchant
+// Delete a loyalty card and all related data for the current customer
+export const deleteCustomerLoyaltyCard = async (loyaltyCardId: string, merchantId: string) => {
+  const { data: customer, error: customerError } = await getOrCreateCustomerProfile();
+  if (customerError || !customer) return { error: customerError || new Error('Not authenticated') };
+
+  // Delete stamps for this card
+  await supabase.from('stamps').delete().eq('loyalty_card_id', loyaltyCardId).eq('customer_id', customer.id);
+  // Delete rewards for this merchant+customer
+  await supabase.from('redeemed_rewards').delete().eq('merchant_id', merchantId).eq('customer_id', customer.id);
+  // Delete transactions for this merchant+customer
+  await supabase.from('transactions').delete().eq('merchant_id', merchantId).eq('customer_id', customer.id);
+  // Delete the loyalty card
+  const { error } = await supabase.from('loyalty_cards').delete().eq('id', loyaltyCardId).eq('customer_id', customer.id);
+
+  return { error };
+};
+
 export const getCustomerPendingRewards = async (merchantId: string) => {
   const { data: customer } = await getOrCreateCustomerProfile();
   if (!customer) return { data: [], error: null };

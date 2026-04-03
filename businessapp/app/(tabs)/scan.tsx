@@ -10,6 +10,7 @@ import {
   getMerchantStampRules,
   resolveCustomerById,
   resolveCustomerFromScannedQR,
+  logScanEvent,
 } from '@/lib/database';
 
 export default function ScanScreen() {
@@ -51,6 +52,8 @@ export default function ScanScreen() {
     setScanned(true); setShowCamera(false);
     const { data: resolved, error } = await resolveCustomerFromScannedQR(data);
     if (error || !resolved?.customer?.id) { Alert.alert('Invalid QR', error?.message || 'Only customerapp QR codes accepted.'); setScanned(false); setShowCamera(true); return; }
+    // Log scan event so customer app can react in real-time
+    if (merchantId) logScanEvent(merchantId, resolved.customer.id).catch(() => {});
     setScanned(false); setShowCamera(false); setShowIdInput(false);
     navigateToCard(resolved.customer.id, 'QR', data);
   };

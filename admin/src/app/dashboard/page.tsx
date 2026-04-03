@@ -11,7 +11,18 @@ type Merchant = { id: string; auth_id: string | null; owner_email: string; busin
 type MerchantStats = { cardHolders: number; totalStampsEarned: number; totalRewardsRedeemed: number; stampsPerRedemption: number; cardColor: string; stampIcon: string };
 type Transaction = { id: string; merchant_id: string; transaction_type: string; stamp_count_after: number | null; notes: string | null; created_at: string; merchants: any; customers: any };
 type Reward = { id: string; merchant_id: string; reward_code: string; stamps_used: number; is_used: boolean; used_at: string | null; created_at: string; merchants: any; customers: any };
-type Tab = "overview" | "map" | "customers" | "merchants" | "rewards";
+type Analytics = {
+  customerGrowth: { date: string; count: number }[];
+  merchantGrowth: { date: string; count: number }[];
+  transactionActivity: { date: string; count: number }[];
+  rewardActivity: { date: string; count: number }[];
+  customersThisWeek: number; customersLastWeek: number;
+  merchantsThisWeek: number; merchantsLastWeek: number;
+  txByType: Record<string, number>;
+  topMerchants: { id: string; name: string; transactions: number; cardHolders: number; stamps: number }[];
+  engagement: { activeCustomers: number; customersWithMultipleCards: number; avgStampsPerCard: number; redemptionRate: number; activeMerchants: number; merchantsWithLocation: number; pendingRewards: number; claimedRewards: number; totalCards: number };
+};
+type Tab = "overview" | "analytics" | "map" | "customers" | "merchants" | "rewards";
 
 // All merchants are on Beta during testing
 const SUBSCRIPTION_PLAN = "Beta (Free)";
@@ -25,11 +36,65 @@ export default function DashboardPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [merchantStatsMap, setMerchantStatsMap] = useState<Record<string, MerchantStats>>({});
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Date filter (for businesses tab only) — "all" means no filter
+  const todayStr = new Date().toISOString().split("T")[0];
+  const [selectedDate, setSelectedDate] = useState<string>("all");
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  const dateLabel = (d: string) => {
+    if (d === "all") return "All Time";
+    if (d === todayStr) return "Today";
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    if (d === yesterday.toISOString().split("T")[0]) return "Yesterday";
+    return new Date(d + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  };
+
+  // Generate calendar days for the month of selectedDate
+  const calendarMonth = (() => {
+    const dateForCal = selectedDate === "all" ? todayStr : selectedDate;
+    const [y, m] = dateForCal.split("-").map(Number);
+    const first = new Date(y, m - 1, 1);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const startDay = first.getDay();
+    const weeks: (number | null)[][] = [];
+    let week: (number | null)[] = Array(startDay).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      week.push(d);
+      if (week.length === 7) { weeks.push(week); week = []; }
+    }
+    if (week.length > 0) { while (week.length < 7) week.push(null); weeks.push(week); }
+    return { year: y, month: m, weeks };
+  })();
+
+  const calendarMonthLabel = new Date(calendarMonth.year, calendarMonth.month - 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  const shiftMonth = (dir: number) => {
+    const dateForCal = selectedDate === "all" ? todayStr : selectedDate;
+    const [y, m] = dateForCal.split("-").map(Number);
+    const nd = new Date(y, m - 1 + dir, 1);
+    const day = Math.min(Number(dateForCal.split("-")[2]), new Date(nd.getFullYear(), nd.getMonth() + 1, 0).getDate());
+    setSelectedDate(`${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+  };
+
+  const pickDay = (day: number) => {
+    const dateForCal = selectedDate === "all" ? todayStr : selectedDate;
+    const [y, m] = dateForCal.split("-").map(Number);
+    setSelectedDate(`${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+    setShowCalendar(false);
+  };
+
+  // Count records per day for calendar dots (businesses only)
+  const dayHasRecords = (day: number) => {
+    const ds = `${calendarMonth.year}-${String(calendarMonth.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return merchants.some((m) => m.created_at.startsWith(ds));
+  };
 
   // Edit/Delete state
   const [editModal, setEditModal] = useState<{ type: "customer" | "merchant"; item: any } | null>(null);
@@ -48,7 +113,7 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/data");
       const d = await res.json();
-      setStats(d.stats); setCustomers(d.customers || []); setMerchants(d.merchants || []); setTransactions(d.transactions || []); setRewards(d.rewards || []); setMerchantStatsMap(d.merchantStats || {});
+      setStats(d.stats); setCustomers(d.customers || []); setMerchants(d.merchants || []); setTransactions(d.transactions || []); setRewards(d.rewards || []); setMerchantStatsMap(d.merchantStats || {}); setAnalytics(d.analytics || null);
     } catch {}
     setLoading(false);
   };
@@ -100,6 +165,7 @@ export default function DashboardPage() {
 
   const navItems: { key: Tab; label: string; icon: string }[] = [
     { key: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
+    { key: "analytics", label: "Analytics", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
     { key: "map", label: "Store Map", icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z" },
     { key: "customers", label: "Customers", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
     { key: "merchants", label: "Businesses", icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" },
@@ -179,6 +245,117 @@ export default function DashboardPage() {
               </>
             )}
 
+            {/* ANALYTICS */}
+            {tab === "analytics" && analytics && stats && (
+              <>
+                <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4] mb-5">Analytics</h2>
+
+                {/* Summary */}
+                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5 mb-6">
+                  <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Platform Summary</p>
+                  <div className="text-[12px] text-gray-600 dark:text-gray-400 leading-relaxed space-y-2">
+                    <p>
+                      Stampworth currently has <span className="font-semibold text-[#2F4366] dark:text-[#7DA2D4]">{stats.totalCustomers} customers</span> and <span className="font-semibold text-[#2F4366] dark:text-[#7DA2D4]">{stats.totalMerchants} businesses</span> registered on the platform.
+                      {analytics.customersThisWeek > 0 ? ` ${analytics.customersThisWeek} new customer${analytics.customersThisWeek > 1 ? "s" : ""} signed up this week` : " No new customer signups this week"}
+                      {analytics.customersLastWeek > 0 ? ` (${analytics.customersThisWeek > analytics.customersLastWeek ? "up" : analytics.customersThisWeek < analytics.customersLastWeek ? "down" : "same"} from ${analytics.customersLastWeek} last week).` : "."}
+                      {analytics.merchantsThisWeek > 0 ? ` ${analytics.merchantsThisWeek} new business${analytics.merchantsThisWeek > 1 ? "es" : ""} joined this week.` : ""}
+                    </p>
+                    <p>
+                      There are <span className="font-semibold">{analytics.engagement.totalCards} loyalty cards</span> in circulation with an average of <span className="font-semibold">{analytics.engagement.avgStampsPerCard} stamps per card</span>.
+                      {analytics.engagement.customersWithMultipleCards > 0 ? ` ${analytics.engagement.customersWithMultipleCards} customer${analytics.engagement.customersWithMultipleCards > 1 ? "s" : ""} hold cards from multiple businesses, indicating cross-store engagement.` : ""}
+                    </p>
+                    <p>
+                      {analytics.engagement.redemptionRate > 0
+                        ? `The reward redemption rate is ${analytics.engagement.redemptionRate}% — ${analytics.engagement.claimedRewards} claimed out of ${analytics.engagement.claimedRewards + analytics.engagement.pendingRewards} total rewards.`
+                        : "No rewards have been issued yet."
+                      }
+                      {analytics.engagement.pendingRewards > 0 ? ` ${analytics.engagement.pendingRewards} reward${analytics.engagement.pendingRewards > 1 ? "s are" : " is"} pending redemption.` : ""}
+                    </p>
+                    <p>
+                      {analytics.engagement.activeMerchants} of {stats.totalMerchants} businesses are active.
+                      {analytics.engagement.merchantsWithLocation > 0 ? ` ${analytics.engagement.merchantsWithLocation} ${analytics.engagement.merchantsWithLocation > 1 ? "have" : "has"} set their store location on the map.` : " No businesses have pinned their location yet."}
+                      {stats.totalMerchants > 0 && analytics.engagement.activeMerchants < stats.totalMerchants ? ` ${stats.totalMerchants - analytics.engagement.activeMerchants} business${stats.totalMerchants - analytics.engagement.activeMerchants > 1 ? "es are" : " is"} currently inactive.` : ""}
+                    </p>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 italic pt-1">
+                      All businesses are on the <span className="font-semibold">Beta (Free)</span> plan during the testing period. All features are unlimited.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Week-over-week */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                  <WowCard label="Customers this week" value={analytics.customersThisWeek} prev={analytics.customersLastWeek} />
+                  <WowCard label="Businesses this week" value={analytics.merchantsThisWeek} prev={analytics.merchantsLastWeek} />
+                  <WowCard label="Active customers" value={analytics.engagement.activeCustomers} total={stats.totalCustomers} isPercent />
+                  <WowCard label="Redemption rate" value={analytics.engagement.redemptionRate} suffix="%" />
+                </div>
+
+                {/* Engagement metrics */}
+                <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Engagement</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                  <StatCard label="Total Cards" value={analytics.engagement.totalCards} />
+                  <StatCard label="Avg Stamps/Card" value={analytics.engagement.avgStampsPerCard} />
+                  <StatCard label="Multi-Store Customers" value={analytics.engagement.customersWithMultipleCards} />
+                  <StatCard label="Stores on Map" value={analytics.engagement.merchantsWithLocation} />
+                </div>
+
+                {/* Reward breakdown */}
+                <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Rewards</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+                  <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+                    <p className="text-[10px] font-medium text-amber-500 uppercase tracking-wide">Pending</p>
+                    <p className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">{analytics.engagement.pendingRewards}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+                    <p className="text-[10px] font-medium text-green-500 uppercase tracking-wide">Claimed</p>
+                    <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-1">{analytics.engagement.claimedRewards}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+                    <p className="text-[10px] font-medium text-purple-500 uppercase tracking-wide">Redemption Rate</p>
+                    <p className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1">{analytics.engagement.redemptionRate}%</p>
+                  </div>
+                </div>
+
+                {/* Transaction breakdown */}
+                <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Transaction Breakdown</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                  {Object.entries(analytics.txByType).map(([type, count]) => (
+                    <div key={type} className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+                      <TypeBadge type={type} />
+                      <p className="text-xl font-bold text-[#2F4366] dark:text-[#7DA2D4] mt-2">{count}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Growth charts (sparklines) */}
+                <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Growth (Last 30 Days)</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                  <Sparkline label="Customer Signups" data={analytics.customerGrowth} color="#2F4366" />
+                  <Sparkline label="Business Signups" data={analytics.merchantGrowth} color="#27AE60" />
+                  <Sparkline label="Transactions" data={analytics.transactionActivity} color="#E67E22" />
+                  <Sparkline label="Rewards Issued" data={analytics.rewardActivity} color="#9B59B6" />
+                </div>
+
+                {/* Top merchants */}
+                {analytics.topMerchants.length > 0 && (
+                  <>
+                    <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Top Businesses by Activity</p>
+                    <Table heads={["#", "Business", "Transactions", "Card Holders", "Stamps"]}>
+                      {analytics.topMerchants.map((m, i) => (
+                        <tr key={m.id} className="border-b border-gray-50 dark:border-gray-800">
+                          <td className="px-4 py-2.5 text-gray-300 dark:text-gray-600 text-[11px]">{i + 1}</td>
+                          <td className="px-4 py-2.5 font-medium text-[#2F4366] dark:text-[#7DA2D4]">{m.name}</td>
+                          <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400 text-center">{m.transactions}</td>
+                          <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400 text-center">{m.cardHolders}</td>
+                          <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400 text-center">{m.stamps}</td>
+                        </tr>
+                      ))}
+                    </Table>
+                  </>
+                )}
+              </>
+            )}
+
             {/* MAP */}
             {tab === "map" && (
               <>
@@ -241,19 +418,67 @@ export default function DashboardPage() {
             )}
 
             {/* MERCHANTS LIST */}
-            {tab === "merchants" && !selectedMerchant && (
+            {tab === "merchants" && !selectedMerchant && (() => {
+              const displayMerchants = selectedDate === "all" ? merchants : merchants.filter((m) => m.created_at.startsWith(selectedDate));
+              return (
               <>
-                <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4] mb-5">Businesses <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({merchants.length})</span></h2>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                  <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4]">Businesses <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({displayMerchants.length}{selectedDate !== "all" ? ` on ${dateLabel(selectedDate).toLowerCase()} · ${merchants.length} total` : " total"})</span></h2>
+                  <div className="flex items-center gap-2 relative">
+                    <button onClick={() => setSelectedDate("all")} className={`px-3 py-2 rounded-lg text-[11px] font-semibold transition-colors ${selectedDate === "all" ? "bg-[#2F4366] dark:bg-[#7DA2D4] text-white dark:text-gray-900" : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>All</button>
+                    <button onClick={() => setSelectedDate(todayStr)} className={`px-3 py-2 rounded-lg text-[11px] font-semibold transition-colors ${selectedDate === todayStr ? "bg-[#2F4366] dark:bg-[#7DA2D4] text-white dark:text-gray-900" : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>Today</button>
+                    <button onClick={() => setShowCalendar(!showCalendar)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium transition-colors ${selectedDate !== "all" && selectedDate !== todayStr ? "bg-[#2F4366] dark:bg-[#7DA2D4] text-white dark:text-gray-900" : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-[#2F4366] dark:hover:border-[#7DA2D4]"}`}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                      {selectedDate !== "all" && selectedDate !== todayStr ? dateLabel(selectedDate) : "Pick Date"}
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+
+                    {showCalendar && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowCalendar(false)} />
+                        <div className="absolute right-0 top-12 z-50 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl p-4 w-[300px]">
+                          <div className="flex items-center justify-between mb-3">
+                            <button onClick={() => shiftMonth(-1)} className="w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center text-gray-500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+                            <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-200">{calendarMonthLabel}</p>
+                            <button onClick={() => shiftMonth(1)} className="w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center text-gray-500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg></button>
+                          </div>
+                          <div className="grid grid-cols-7 gap-0.5 mb-1">
+                            {["Su","Mo","Tu","We","Th","Fr","Sa"].map((d) => (
+                              <div key={d} className="text-center text-[10px] font-semibold text-gray-400 dark:text-gray-500 py-1">{d}</div>
+                            ))}
+                          </div>
+                          {calendarMonth.weeks.map((week, wi) => (
+                            <div key={wi} className="grid grid-cols-7 gap-0.5">
+                              {week.map((day, di) => {
+                                if (day === null) return <div key={di} />;
+                                const ds = `${calendarMonth.year}-${String(calendarMonth.month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                                const isSelected = ds === selectedDate;
+                                const isToday = ds === todayStr;
+                                const hasData = dayHasRecords(day);
+                                return (
+                                  <button key={di} onClick={() => pickDay(day)} className={`relative h-9 rounded-lg text-[12px] font-medium transition-colors ${isSelected ? "bg-[#2F4366] dark:bg-[#7DA2D4] text-white dark:text-gray-900" : isToday ? "bg-blue-50 dark:bg-blue-950 text-[#2F4366] dark:text-[#7DA2D4]" : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"}`}>
+                                    {day}
+                                    {hasData && !isSelected && <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#2F4366] dark:bg-[#7DA2D4]" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mobile cards */}
                 <div className="sm:hidden space-y-2">
-                  {merchants.map((m) => {
+                  {displayMerchants.map((m) => {
                     const ms = merchantStatsMap[m.id];
                     return (
                       <div key={m.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
                         <div className="flex items-center justify-between mb-2">
                           <button onClick={() => setSelectedMerchant(m)} className="font-medium text-[13px] text-[#2F4366] dark:text-[#7DA2D4]">{m.business_name}</button>
-                          <div className="flex items-center gap-1">
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-semibold ${m.is_active ? "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400" : "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400"}`}>{m.is_active ? "Active" : "Inactive"}</span>
-                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-semibold ${m.is_active ? "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400" : "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400"}`}>{m.is_active ? "Active" : "Inactive"}</span>
                         </div>
                         <p className="text-[11px] text-gray-500 dark:text-gray-400">{m.owner_email}</p>
                         <div className="flex items-center gap-3 mt-2">
@@ -268,36 +493,48 @@ export default function DashboardPage() {
                       </div>
                     );
                   })}
-                  {merchants.length === 0 && <Empty />}
+                  {displayMerchants.length === 0 && (
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-10 text-center">
+                      <p className="text-gray-400 dark:text-gray-500 text-[12px]">No businesses registered on {dateLabel(selectedDate).toLowerCase()}</p>
+                    </div>
+                  )}
                 </div>
+
+                {/* Desktop table */}
                 <div className="hidden sm:block">
-                  <Table heads={["#", "Business", "Email", "Plan", "Card Holders", "Stamps", "Status", "Actions"]}>
-                    {merchants.map((m, i) => {
-                      const ms = merchantStatsMap[m.id];
-                      return (
-                        <tr key={m.id} className="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
-                          <td className="px-4 py-2.5 text-gray-300 dark:text-gray-600 text-[11px]">{i + 1}</td>
-                          <td className="px-4 py-2.5 font-medium text-[#2F4366] dark:text-[#7DA2D4] cursor-pointer" onClick={() => setSelectedMerchant(m)}>{m.business_name}</td>
-                          <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">{m.owner_email}</td>
-                          <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400">{SUBSCRIPTION_PLAN}</span></td>
-                          <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 text-center">{ms?.cardHolders ?? 0}</td>
-                          <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 text-center">{ms?.totalStampsEarned ?? 0}</td>
-                          <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${m.is_active ? "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400" : "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400"}`}>{m.is_active ? "Active" : "Inactive"}</span></td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex gap-1">
-                              <button onClick={() => setSelectedMerchant(m)} className="px-2 py-1 rounded text-[10px] font-semibold bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">View</button>
-                              <button onClick={() => openEditMerchant(m)} className="px-2 py-1 rounded text-[10px] font-semibold bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900">Edit</button>
-                              <button onClick={() => setDeleteConfirm({ type: "merchant", item: m })} className="px-2 py-1 rounded text-[10px] font-semibold bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900">Delete</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </Table>
-                  {merchants.length === 0 && <Empty />}
+                  {displayMerchants.length > 0 ? (
+                    <Table heads={["#", "Business", "Email", "Plan", "Card Holders", "Stamps", "Status", "Actions"]}>
+                      {displayMerchants.map((m, i) => {
+                        const ms = merchantStatsMap[m.id];
+                        return (
+                          <tr key={m.id} className="border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
+                            <td className="px-4 py-2.5 text-gray-300 dark:text-gray-600 text-[11px]">{i + 1}</td>
+                            <td className="px-4 py-2.5 font-medium text-[#2F4366] dark:text-[#7DA2D4] cursor-pointer" onClick={() => setSelectedMerchant(m)}>{m.business_name}</td>
+                            <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">{m.owner_email}</td>
+                            <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400">{SUBSCRIPTION_PLAN}</span></td>
+                            <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 text-center">{ms?.cardHolders ?? 0}</td>
+                            <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 text-center">{ms?.totalStampsEarned ?? 0}</td>
+                            <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${m.is_active ? "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400" : "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400"}`}>{m.is_active ? "Active" : "Inactive"}</span></td>
+                            <td className="px-4 py-2.5">
+                              <div className="flex gap-1">
+                                <button onClick={() => setSelectedMerchant(m)} className="px-2 py-1 rounded text-[10px] font-semibold bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">View</button>
+                                <button onClick={() => openEditMerchant(m)} className="px-2 py-1 rounded text-[10px] font-semibold bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900">Edit</button>
+                                <button onClick={() => setDeleteConfirm({ type: "merchant", item: m })} className="px-2 py-1 rounded text-[10px] font-semibold bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900">Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </Table>
+                  ) : (
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-10 text-center">
+                      <p className="text-gray-400 dark:text-gray-500 text-[12px]">No businesses registered on {dateLabel(selectedDate).toLowerCase()}</p>
+                    </div>
+                  )}
                 </div>
               </>
-            )}
+              );
+            })()}
 
             {/* MERCHANT DETAIL */}
             {tab === "merchants" && selectedMerchant && (() => {
@@ -522,6 +759,53 @@ function TypeBadge({ type }: { type: string }) {
 }
 
 function Empty() { return <p className="text-center text-gray-400 dark:text-gray-500 text-[12px] py-10">No data yet</p>; }
+
+function WowCard({ label, value, prev, suffix, isPercent, total }: { label: string; value: number; prev?: number; suffix?: string; isPercent?: boolean; total?: number }) {
+  const display = isPercent && total ? (total > 0 ? Math.round((value / total) * 100) : 0) : value;
+  const displaySuffix = isPercent ? "%" : suffix || "";
+  const change = prev !== undefined ? value - prev : null;
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+      <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide">{label}</p>
+      <div className="flex items-baseline gap-2 mt-1">
+        <p className="text-xl font-bold text-[#2F4366] dark:text-[#7DA2D4]">{display}{displaySuffix}</p>
+        {change !== null && (
+          <span className={`text-[10px] font-semibold ${change > 0 ? "text-green-500" : change < 0 ? "text-red-500" : "text-gray-400"}`}>
+            {change > 0 ? "↑" : change < 0 ? "↓" : "—"}{change !== 0 ? ` ${Math.abs(change)}` : ""}
+          </span>
+        )}
+      </div>
+      {prev !== undefined && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">vs {prev} last week</p>}
+    </div>
+  );
+}
+
+function Sparkline({ label, data, color }: { label: string; data: { date: string; count: number }[]; color: string }) {
+  const max = Math.max(...data.map((d) => d.count), 1);
+  const total = data.reduce((s, d) => s + d.count, 0);
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{label}</p>
+        <p className="text-[11px] font-bold" style={{ color }}>{total} total</p>
+      </div>
+      <div className="flex items-end gap-[2px] h-12">
+        {data.map((d, i) => (
+          <div
+            key={i}
+            className="flex-1 rounded-sm transition-all hover:opacity-80 relative group"
+            style={{ height: `${Math.max((d.count / max) * 100, 4)}%`, backgroundColor: d.count > 0 ? color : (color + "20") }}
+            title={`${d.date}: ${d.count}`}
+          />
+        ))}
+      </div>
+      <div className="flex justify-between mt-1.5">
+        <p className="text-[9px] text-gray-400 dark:text-gray-500">{data[0]?.date.slice(5)}</p>
+        <p className="text-[9px] text-gray-400 dark:text-gray-500">{data[data.length - 1]?.date.slice(5)}</p>
+      </div>
+    </div>
+  );
+}
 
 function StoreMap({ merchants, onSelect }: { merchants: Merchant[]; onSelect: (m: Merchant) => void }) {
   const mapContainer = useRef<HTMLDivElement>(null);

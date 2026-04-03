@@ -38,6 +38,51 @@ export default function CardsScreen() {
       <Text style={styles.pageTitle}>My Cards</Text>
       <Text style={styles.pageSubtitle}>Your loyalty card collection</Text>
 
+      {/* Free redemption banner */}
+      {!loading && (() => {
+        const freeCards = cards.filter((c) => {
+          const t = c.stamp_settings?.stamps_per_redemption || 10;
+          return c.is_free_redemption || (c.stamp_count || 0) >= t - 1;
+        });
+        if (freeCards.length === 0) return null;
+        return (
+          <TouchableOpacity
+            style={styles.redeemBanner}
+            onPress={() => {
+              const card = freeCards[0];
+              router.push({
+                pathname: '/stamps',
+                params: {
+                  loyaltyCardId: card.id,
+                  merchantId: card.merchant_id,
+                  merchant: card.merchants?.business_name || 'Store',
+                  collected: String(card.stamp_count || 0),
+                  total: String(card.stamp_settings?.stamps_per_redemption || 10),
+                  color: card.stamp_settings?.card_color || '#2F4366',
+                  iconName: card.stamp_settings?.stamp_icon_name || 'star',
+                  iconImageUrl: card.stamp_settings?.stamp_icon_image_url || '',
+                },
+              });
+            }}
+          >
+            <View style={styles.redeemBannerIcon}>
+              <Ionicons name="gift" size={22} color="#E67E22" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.redeemBannerTitle}>
+                {freeCards.length === 1
+                  ? 'You have a free reward!'
+                  : `You have ${freeCards.length} free rewards!`}
+              </Text>
+              <Text style={styles.redeemBannerSub}>
+                {freeCards.map((c) => c.merchants?.business_name || 'Store').join(', ')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#E67E22" />
+          </TouchableOpacity>
+        );
+      })()}
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color="#2F4366" /></View>
       ) : cards.length === 0 ? (
@@ -57,6 +102,7 @@ export default function CardsScreen() {
             const collected = card.stamp_count || 0;
             const collectableSlots = total - 1;
             const pct = collectableSlots > 0 ? Math.min(100, (collected / collectableSlots) * 100) : 0;
+            const hasFreeReward = card.is_free_redemption || collected >= collectableSlots;
 
             return (
               <TouchableOpacity
@@ -117,10 +163,11 @@ export default function CardsScreen() {
                   <View style={[styles.progressFill, { width: `${pct}%` }]} />
                 </View>
 
-                {card.is_free_redemption && (
+                {hasFreeReward && (
                   <View style={styles.freeBadge}>
-                    <Ionicons name="gift" size={12} color="#FFFFFF" />
-                    <Text style={styles.freeText}>REWARD AVAILABLE</Text>
+                    <Ionicons name="gift" size={14} color="#E67E22" />
+                    <Text style={styles.freeText}>FREE REWARD READY</Text>
+                    <Ionicons name="chevron-forward" size={12} color="#E67E22" />
                   </View>
                 )}
               </TouchableOpacity>
@@ -159,6 +206,12 @@ const styles = StyleSheet.create({
   progressBg: { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: 5, backgroundColor: '#FFFFFF', borderRadius: 3 },
 
-  freeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  freeText: { fontSize: 9, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF', letterSpacing: 0.5 },
+  freeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'stretch', marginTop: 12, backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  freeText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#E67E22', letterSpacing: 0.5, flex: 1 },
+
+  // Free redemption banner
+  redeemBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 16, backgroundColor: '#FFF8F0', borderRadius: 14, padding: 14, gap: 12, borderWidth: 1.5, borderColor: '#F5D5B0' },
+  redeemBannerIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#FFF0E0', alignItems: 'center', justifyContent: 'center' },
+  redeemBannerTitle: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#E67E22' },
+  redeemBannerSub: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#C4894D', marginTop: 1 },
 });

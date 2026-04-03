@@ -1,9 +1,9 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View, ScrollView, Dimensions } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View, ScrollView, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { getStampRecordsForCard, getCustomerPendingRewards } from '@/lib/database';
+import { getStampRecordsForCard, getCustomerPendingRewards, deleteCustomerLoyaltyCard } from '@/lib/database';
 
 const REWARD_CARD_W = 130;
 
@@ -30,6 +30,7 @@ export default function StampsScreen() {
   const [stampCount, setStampCount] = useState(Number(params.collected || 0));
   const [stampRecords, setStampRecords] = useState<{ id: string; earned_date: string }[]>([]);
   const [pendingRewards, setPendingRewards] = useState<any[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -53,6 +54,29 @@ export default function StampsScreen() {
       return () => { cancelled = true; };
     }, [params.loyaltyCardId, params.merchantId])
   );
+
+  const handleDeleteCard = () => {
+    Alert.alert(
+      'Delete Loyalty Card',
+      `Remove your loyalty card from ${merchantName}? This will delete all your stamps and rewards from this store. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Card',
+          style: 'destructive',
+          onPress: async () => {
+            if (!params.loyaltyCardId || !params.merchantId) return;
+            setDeleting(true);
+            const { error } = await deleteCustomerLoyaltyCard(params.loyaltyCardId, params.merchantId);
+            setDeleting(false);
+            if (error) { Alert.alert('Failed', error.message); return; }
+            Alert.alert('Card Deleted', `Your loyalty card from ${merchantName} has been removed.`);
+            router.back();
+          },
+        },
+      ]
+    );
+  };
 
   const renderIcon = (size: number, color: string) => {
     if (iconImageUrl) return <Image source={{ uri: iconImageUrl }} style={{ width: size, height: size }} contentFit="contain" />;
@@ -83,6 +107,9 @@ export default function StampsScreen() {
             <Text style={styles.headerTitle}>{merchantName}</Text>
             <Text style={styles.headerSub}>Loyalty Card</Text>
           </View>
+          <TouchableOpacity onPress={handleDeleteCard} style={styles.deleteBtn} disabled={deleting}>
+            <Ionicons name="trash-outline" size={18} color="#E74C3C" />
+          </TouchableOpacity>
         </View>
 
         {/* Pending rewards carousel */}
@@ -175,6 +202,7 @@ const styles = StyleSheet.create({
 
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24 },
   backBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  deleteBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#FDE8E8', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A2E', fontFamily: 'Poppins-SemiBold' },
   headerSub: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 1 },
 
