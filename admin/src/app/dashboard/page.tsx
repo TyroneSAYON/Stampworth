@@ -28,7 +28,8 @@ type MonitorData = {
   database: { tables: Record<string, number>; totalRows: number; estimatedStorageMB: number; freeStorageLimitMB: number };
   checkedAt: string;
 };
-type Tab = "overview" | "analytics" | "monitor" | "map" | "customers" | "merchants" | "rewards";
+type SupportMessage = { id: string; sender_type: "customer" | "merchant"; sender_id: string | null; sender_email: string; sender_name: string | null; subject: string | null; message: string; is_read: boolean; is_replied: boolean; created_at: string };
+type Tab = "overview" | "analytics" | "monitor" | "support" | "map" | "customers" | "merchants" | "rewards";
 
 // All merchants are on Beta during testing
 const SUBSCRIPTION_PLAN = "Beta (Free)";
@@ -43,6 +44,8 @@ export default function DashboardPage() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [merchantStatsMap, setMerchantStatsMap] = useState<Record<string, MerchantStats>>({});
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
+  const [selectedMessage, setSelectedMessage] = useState<SupportMessage | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,7 +146,7 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/data");
       const d = await res.json();
-      setStats(d.stats); setCustomers(d.customers || []); setMerchants(d.merchants || []); setTransactions(d.transactions || []); setRewards(d.rewards || []); setMerchantStatsMap(d.merchantStats || {}); setAnalytics(d.analytics || null);
+      setStats(d.stats); setCustomers(d.customers || []); setMerchants(d.merchants || []); setTransactions(d.transactions || []); setRewards(d.rewards || []); setMerchantStatsMap(d.merchantStats || {}); setAnalytics(d.analytics || null); setSupportMessages(d.supportMessages || []);
     } catch {}
     setLoading(false);
   };
@@ -197,6 +200,7 @@ export default function DashboardPage() {
     { key: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
     { key: "analytics", label: "Analytics", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
     { key: "monitor", label: "Monitoring", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
+    { key: "support", label: "Support Inbox", icon: "M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" },
     { key: "map", label: "Store Map", icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z" },
     { key: "customers", label: "Customers", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
     { key: "merchants", label: "Businesses", icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" },
@@ -494,6 +498,72 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </>
+                )}
+              </>
+            )}
+
+            {/* SUPPORT INBOX */}
+            {tab === "support" && (
+              <>
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4]">
+                    Support Inbox <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({supportMessages.length})</span>
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">{supportMessages.filter((m) => !m.is_read).length} unread</span>
+                  </div>
+                </div>
+
+                {supportMessages.length === 0 ? (
+                  <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-12 text-center">
+                    <svg className="mx-auto mb-3 text-gray-300 dark:text-gray-600" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                    <p className="text-gray-400 dark:text-gray-500 text-[13px] font-medium">No support messages yet</p>
+                    <p className="text-gray-300 dark:text-gray-600 text-[11px] mt-1">Messages from customers and businesses will appear here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {supportMessages.map((msg) => (
+                      <button
+                        key={msg.id}
+                        onClick={async () => {
+                          setSelectedMessage(msg);
+                          if (!msg.is_read) {
+                            await fetch("/api/data", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "support_message", id: msg.id, data: { is_read: true } }) });
+                            setSupportMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, is_read: true } : m));
+                          }
+                        }}
+                        className={`w-full text-left bg-white dark:bg-gray-900 rounded-xl border ${msg.is_read ? "border-gray-100 dark:border-gray-800" : "border-[#2F4366] dark:border-[#7DA2D4]"} p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${msg.sender_type === "customer" ? "bg-blue-50 dark:bg-blue-950" : "bg-green-50 dark:bg-green-950"}`}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={msg.sender_type === "customer" ? "#2F4366" : "#27AE60"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                {msg.sender_type === "customer"
+                                  ? <><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0113 0"/></>
+                                  : <><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0H3m2 0h14M9 7h6m-6 4h6m-6 4h4"/></>
+                                }
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <p className={`text-[13px] font-semibold ${msg.is_read ? "text-gray-700 dark:text-gray-300" : "text-[#2F4366] dark:text-[#7DA2D4]"} truncate`}>{msg.sender_name || msg.sender_email}</p>
+                                {!msg.is_read && <span className="w-2 h-2 rounded-full bg-[#2F4366] dark:bg-[#7DA2D4] shrink-0" />}
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${msg.sender_type === "customer" ? "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400" : "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400"}`}>
+                                  {msg.sender_type.toUpperCase()}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{msg.subject || "(No subject)"}</p>
+                              <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1 line-clamp-1">{msg.message}</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">{fmt(msg.created_at)}</p>
+                            {msg.is_replied && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400">REPLIED</span>}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </>
             )}
@@ -858,6 +928,75 @@ export default function DashboardPage() {
           </>
         )}
       </main>
+
+      {/* SUPPORT MESSAGE DETAIL MODAL */}
+      {selectedMessage && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setSelectedMessage(null)}>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-lg p-6 shadow-xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${selectedMessage.sender_type === "customer" ? "bg-blue-50 dark:bg-blue-950" : "bg-green-50 dark:bg-green-950"}`}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={selectedMessage.sender_type === "customer" ? "#2F4366" : "#27AE60"} strokeWidth="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0113 0"/></svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-bold text-gray-800 dark:text-gray-200 truncate">{selectedMessage.sender_name || "—"}</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">{selectedMessage.sender_email}</p>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${selectedMessage.sender_type === "customer" ? "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400" : "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400"}`}>
+                      {selectedMessage.sender_type.toUpperCase()}
+                    </span>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500">{fmt(selectedMessage.created_at)}</p>
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setSelectedMessage(null)} className="w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center text-gray-500 shrink-0">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            {selectedMessage.subject && (
+              <div className="mb-3">
+                <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Subject</p>
+                <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-200">{selectedMessage.subject}</p>
+              </div>
+            )}
+
+            <div className="mb-5">
+              <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1">Message</p>
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4">
+                <p className="text-[13px] text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{selectedMessage.message}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <a
+                href={`mailto:${selectedMessage.sender_email}?subject=Re: ${selectedMessage.subject || "Stampworth Support"}`}
+                onClick={async () => {
+                  if (!selectedMessage.is_replied) {
+                    await fetch("/api/data", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "support_message", id: selectedMessage.id, data: { is_replied: true } }) });
+                    setSupportMessages((prev) => prev.map((m) => m.id === selectedMessage.id ? { ...m, is_replied: true } : m));
+                  }
+                }}
+                className="flex-1 h-11 rounded-lg bg-[#2F4366] dark:bg-[#7DA2D4] text-white dark:text-gray-900 text-[13px] font-semibold flex items-center justify-center gap-2 hover:opacity-90"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3,6 12,13 21,6"/><rect x="3" y="6" width="18" height="12" rx="2"/></svg>
+                Reply via Email
+              </a>
+              <button
+                onClick={async () => {
+                  if (!confirm("Delete this message?")) return;
+                  await fetch("/api/data", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "support_message", id: selectedMessage.id }) });
+                  setSupportMessages((prev) => prev.filter((m) => m.id !== selectedMessage.id));
+                  setSelectedMessage(null);
+                }}
+                className="h-11 px-4 rounded-lg bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 text-[13px] font-semibold hover:bg-red-100 dark:hover:bg-red-900"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* EDIT MODAL */}
       {editModal && (

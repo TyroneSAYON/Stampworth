@@ -959,6 +959,20 @@ export const isMerchantSetupComplete = async () => {
   return { complete: hasAddress, error: null };
 };
 
+export const sendSupportMessage = async (subject: string, message: string) => {
+  const { data: merchant, error } = await ensureCurrentMerchantProfile();
+  if (error || !merchant) return { error: error || new Error('Not authenticated') };
+  const { error: insertError } = await supabase.from('support_messages').insert({
+    sender_type: 'merchant',
+    sender_id: merchant.id,
+    sender_email: merchant.owner_email,
+    sender_name: merchant.business_name || null,
+    subject: subject || null,
+    message,
+  });
+  return { error: insertError };
+};
+
 // Reset loyalty program — clears all stamps, cards, rewards, and transactions for this merchant
 export const resetLoyaltyProgram = async () => {
   const { data: merchant, error: merchantError } = await ensureCurrentMerchantProfile();

@@ -1,17 +1,33 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { getCurrentUser, signOut } from '@/lib/auth';
-import { getOrCreateCustomerProfile } from '@/lib/database';
+import { getOrCreateCustomerProfile, sendSupportMessage } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
 export default function AccountScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contactSubject, setContactSubject] = useState('');
+  const [contactMessage, setContactMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+
+  const handleSendMessage = async () => {
+    if (!contactMessage.trim()) { Alert.alert('Required', 'Please enter a message.'); return; }
+    setSendingMessage(true);
+    const { error } = await sendSupportMessage(contactSubject.trim(), contactMessage.trim());
+    setSendingMessage(false);
+    if (error) { Alert.alert('Failed', error.message); return; }
+    setContactOpen(false);
+    setContactSubject('');
+    setContactMessage('');
+    Alert.alert('Message Sent', 'Thanks for reaching out! The developers will get back to you soon.');
+  };
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [username, setUsername] = useState('');
@@ -146,6 +162,14 @@ export default function AccountScreen() {
 
         {/* Links */}
         <Text style={styles.sectionTitle}>More</Text>
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => setContactOpen(true)}
+        >
+          <Ionicons name="mail-outline" size={18} color="#2F4366" />
+          <Text style={styles.menuText}>Contact Support</Text>
+          <Ionicons name="chevron-forward" size={16} color="#C4CAD4" />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/terms')}>
           <Ionicons name="document-text-outline" size={18} color="#2F4366" />
           <Text style={styles.menuText}>Terms of Service</Text>
@@ -167,6 +191,54 @@ export default function AccountScreen() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Contact Support Modal */}
+      <Modal visible={contactOpen} transparent animationType="slide" onRequestClose={() => setContactOpen(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <Pressable style={styles.contactOverlay} onPress={() => setContactOpen(false)}>
+            <Pressable style={styles.contactCard} onPress={() => {}}>
+              <View style={styles.contactHeader}>
+                <View>
+                  <Text style={styles.contactTitle}>Contact Support</Text>
+                  <Text style={styles.contactSub}>The developers will get back to you</Text>
+                </View>
+                <TouchableOpacity onPress={() => setContactOpen(false)}>
+                  <Ionicons name="close" size={22} color="#8A94A6" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.contactLabel}>Subject (optional)</Text>
+              <TextInput
+                value={contactSubject}
+                onChangeText={setContactSubject}
+                placeholder="What is this about?"
+                placeholderTextColor="#C4CAD4"
+                style={styles.contactInput}
+              />
+
+              <Text style={styles.contactLabel}>Message</Text>
+              <TextInput
+                value={contactMessage}
+                onChangeText={setContactMessage}
+                placeholder="Describe your issue or feedback..."
+                placeholderTextColor="#C4CAD4"
+                multiline
+                numberOfLines={6}
+                style={[styles.contactInput, styles.contactTextarea]}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={[styles.contactSendBtn, sendingMessage && { opacity: 0.6 }]}
+                onPress={handleSendMessage}
+                disabled={sendingMessage}
+              >
+                {sendingMessage ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.contactSendText}>Send Message</Text>}
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -199,4 +271,16 @@ const styles = StyleSheet.create({
 
   signOutButton: { marginHorizontal: 24, marginTop: 20, backgroundColor: '#E74C3C', borderRadius: 14, height: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   signOutText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Poppins-SemiBold' },
+
+  // Contact Modal
+  contactOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  contactCard: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  contactHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  contactTitle: { fontSize: 18, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  contactSub: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 2 },
+  contactLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#8A94A6', textTransform: 'uppercase', marginBottom: 6, marginTop: 4 },
+  contactInput: { backgroundColor: '#F6F8FB', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, fontFamily: 'Poppins-Regular', color: '#1A1A2E', marginBottom: 14, borderWidth: 1, borderColor: '#E0E4EA' },
+  contactTextarea: { minHeight: 120, paddingTop: 12 },
+  contactSendBtn: { backgroundColor: '#2F4366', borderRadius: 12, height: 50, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  contactSendText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Poppins-SemiBold' },
 });

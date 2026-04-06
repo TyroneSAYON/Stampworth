@@ -11,12 +11,14 @@ try { Location = require('expo-location'); } catch {}
 let MapView: any = null;
 let MarkerComp: any = null;
 let PROVIDER_GOOGLE: any = null;
-try {
-  const M = require('react-native-maps');
-  MapView = M.default;
-  MarkerComp = M.Marker;
-  PROVIDER_GOOGLE = M.PROVIDER_GOOGLE;
-} catch {}
+if (Platform.OS !== 'web') {
+  try {
+    const M = require('react-native-maps');
+    MapView = M.default;
+    MarkerComp = M.Marker;
+    PROVIDER_GOOGLE = M.PROVIDER_GOOGLE;
+  } catch {}
+}
 
 type Merchant = {
   id: string;

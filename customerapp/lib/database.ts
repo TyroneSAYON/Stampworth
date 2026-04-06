@@ -363,6 +363,20 @@ export const getStampRecordsForCard = async (loyaltyCardId: string) => {
   return { data: data || [], error };
 };
 
+export const sendSupportMessage = async (subject: string, message: string) => {
+  const { data: customer, error } = await getOrCreateCustomerProfile();
+  if (error || !customer) return { error: error || new Error('Not authenticated') };
+  const { error: insertError } = await supabase.from('support_messages').insert({
+    sender_type: 'customer',
+    sender_id: customer.id,
+    sender_email: customer.email,
+    sender_name: customer.full_name || customer.username || null,
+    subject: subject || null,
+    message,
+  });
+  return { error: insertError };
+};
+
 // Get pending (unclaimed) rewards for current customer at a merchant
 // Delete a loyalty card and all related data for the current customer
 export const deleteCustomerLoyaltyCard = async (loyaltyCardId: string, merchantId: string) => {

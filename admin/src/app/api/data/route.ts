@@ -34,6 +34,7 @@ export async function GET() {
     const { data: rewards } = await supabaseAdmin.from("redeemed_rewards").select("id, merchant_id, customer_id, reward_code, stamps_used, is_used, used_at, created_at").order("created_at", { ascending: false }).limit(500);
     const { data: loyaltyCards } = await supabaseAdmin.from("loyalty_cards").select("id, customer_id, merchant_id, stamp_count, total_stamps_earned, is_free_redemption, created_at").limit(5000);
     const { data: stampSettings } = await supabaseAdmin.from("stamp_settings").select("merchant_id, stamps_per_redemption, card_color, stamp_icon_name").limit(500);
+    const { data: supportMessages } = await supabaseAdmin.from("support_messages").select("*").order("created_at", { ascending: false }).limit(500);
 
     // Build lookup maps
     const merchantMap = new Map((merchants || []).map((m) => [m.id, m]));
@@ -156,6 +157,7 @@ export async function GET() {
       rewards: enrich(rewards || []),
       merchantStats,
       analytics,
+      supportMessages: supportMessages || [],
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -198,6 +200,9 @@ export async function DELETE(req: NextRequest) {
       await supabaseAdmin.from("store_visits").delete().eq("merchant_id", id);
       const { error } = await supabaseAdmin.from("merchants").delete().eq("id", id);
       if (error) throw error;
+    } else if (type === "support_message") {
+      const { error } = await supabaseAdmin.from("support_messages").delete().eq("id", id);
+      if (error) throw error;
     } else {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
@@ -217,6 +222,9 @@ export async function PATCH(req: NextRequest) {
       if (error) throw error;
     } else if (type === "merchant") {
       const { error } = await supabaseAdmin.from("merchants").update(data).eq("id", id);
+      if (error) throw error;
+    } else if (type === "support_message") {
+      const { error } = await supabaseAdmin.from("support_messages").update(data).eq("id", id);
       if (error) throw error;
     } else {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });

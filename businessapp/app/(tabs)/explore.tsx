@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Alert, ActivityIndicator, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Modal } from 'react-native';
+import { Alert, ActivityIndicator, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -19,7 +19,7 @@ try { Location = require('expo-location'); } catch {}
 let MapView: any = null;
 let Marker: any = null;
 let Circle: any = null;
-try { const M = require('react-native-maps'); MapView = M.default; Marker = M.Marker; Circle = M.Circle; } catch {}
+if (Platform.OS !== 'web') { try { const M = require('react-native-maps'); MapView = M.default; Marker = M.Marker; Circle = M.Circle; } catch {} }
 
 type NearbyCustomer = { id: string; name: string; email: string; latitude: number; longitude: number };
 

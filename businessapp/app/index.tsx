@@ -1,7 +1,8 @@
 import { Image } from 'expo-image';
 import { StyleSheet, Pressable, Animated, Easing, Text, View } from 'react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
+import { supabase } from '@/lib/supabase';
 
 const SKIP_AUTH_MODE = process.env.EXPO_PUBLIC_SKIP_AUTH === 'true';
 
@@ -9,17 +10,33 @@ export default function LandingScreen() {
   const translateY = useRef(new Animated.Value(40)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const screenOpacity = useRef(new Animated.Value(1)).current;
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(translateY, { toValue: 0, duration: 800, easing: Easing.out(Easing.exp), useNativeDriver: true }),
       Animated.timing(opacity, { toValue: 1, duration: 600, useNativeDriver: true }),
     ]).start();
+
+    // Check for existing session and auto-navigate if logged in
+    (async () => {
+      if (SKIP_AUTH_MODE) { setHasSession(true); return; }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Already logged in — go straight to the dashboard
+        Animated.timing(screenOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+          router.replace('/(tabs)');
+        });
+      } else {
+        setHasSession(false);
+      }
+    })();
   }, []);
 
   const handlePress = () => {
+    if (hasSession === null) return; // still checking session
     Animated.timing(screenOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
-      router.replace(SKIP_AUTH_MODE ? '/(tabs)' : '/signin');
+      router.replace(SKIP_AUTH_MODE || hasSession ? '/(tabs)' : '/signin');
     });
   };
 
