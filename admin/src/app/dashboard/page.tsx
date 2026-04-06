@@ -22,7 +22,13 @@ type Analytics = {
   topMerchants: { id: string; name: string; transactions: number; cardHolders: number; stamps: number }[];
   engagement: { activeCustomers: number; customersWithMultipleCards: number; avgStampsPerCard: number; redemptionRate: number; activeMerchants: number; merchantsWithLocation: number; pendingRewards: number; claimedRewards: number; totalCards: number };
 };
-type Tab = "overview" | "analytics" | "map" | "customers" | "merchants" | "rewards";
+type MonitorData = {
+  overall: "operational" | "degraded" | "slow" | "error";
+  services: { name: string; status: "up" | "down" | "slow"; latency: number; error?: string }[];
+  database: { tables: Record<string, number>; totalRows: number; estimatedStorageMB: number; freeStorageLimitMB: number };
+  checkedAt: string;
+};
+type Tab = "overview" | "analytics" | "monitor" | "map" | "customers" | "merchants" | "rewards";
 
 // All merchants are on Beta during testing
 const SUBSCRIPTION_PLAN = "Beta (Free)";
@@ -42,6 +48,30 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Monitoring
+  const [monitor, setMonitor] = useState<MonitorData | null>(null);
+  const [monitorLoading, setMonitorLoading] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<string>("");
+
+  const loadMonitor = async () => {
+    setMonitorLoading(true);
+    try {
+      const res = await fetch("/api/monitor", { cache: "no-store" });
+      const d = await res.json();
+      setMonitor(d);
+      setLastRefresh(new Date().toLocaleTimeString());
+    } catch {}
+    setMonitorLoading(false);
+  };
+
+  // Auto-refresh monitoring every 30s when on monitor tab
+  useEffect(() => {
+    if (tab !== "monitor") return;
+    loadMonitor();
+    const interval = setInterval(loadMonitor, 30000);
+    return () => clearInterval(interval);
+  }, [tab]);
 
   // Date filter (for businesses tab only) — "all" means no filter
   const todayStr = new Date().toISOString().split("T")[0];
@@ -166,6 +196,7 @@ export default function DashboardPage() {
   const navItems: { key: Tab; label: string; icon: string }[] = [
     { key: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
     { key: "analytics", label: "Analytics", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
+    { key: "monitor", label: "Monitoring", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
     { key: "map", label: "Store Map", icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z" },
     { key: "customers", label: "Customers", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
     { key: "merchants", label: "Businesses", icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" },
@@ -351,6 +382,117 @@ export default function DashboardPage() {
                         </tr>
                       ))}
                     </Table>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* MONITORING */}
+            {tab === "monitor" && (
+              <>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                  <div>
+                    <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4]">System Monitoring</h2>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">Auto-refreshes every 30 seconds {lastRefresh && `· Last: ${lastRefresh}`}</p>
+                  </div>
+                  <button onClick={loadMonitor} disabled={monitorLoading} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[12px] font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
+                    <svg className={monitorLoading ? "animate-spin" : ""} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                    {monitorLoading ? "Checking..." : "Refresh"}
+                  </button>
+                </div>
+
+                {!monitor ? (
+                  <div className="flex items-center justify-center h-40"><p className="text-gray-400">Loading system status...</p></div>
+                ) : (
+                  <>
+                    {/* Overall status banner */}
+                    <div className={`rounded-xl p-4 mb-5 flex items-center gap-3 ${monitor.overall === "operational" ? "bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800" : monitor.overall === "slow" ? "bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800" : "bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800"}`}>
+                      <div className={`w-3 h-3 rounded-full ${monitor.overall === "operational" ? "bg-green-500 animate-pulse" : monitor.overall === "slow" ? "bg-amber-500 animate-pulse" : "bg-red-500 animate-pulse"}`} />
+                      <p className={`text-[14px] font-semibold ${monitor.overall === "operational" ? "text-green-700 dark:text-green-300" : monitor.overall === "slow" ? "text-amber-700 dark:text-amber-300" : "text-red-700 dark:text-red-300"}`}>
+                        {monitor.overall === "operational" ? "All Systems Operational" : monitor.overall === "slow" ? "Some Services Slow" : "Service Disruption Detected"}
+                      </p>
+                    </div>
+
+                    {/* Services grid */}
+                    <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Services</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+                      {monitor.services.map((s) => (
+                        <div key={s.name} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-200">{s.name}</p>
+                            <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${s.status === "up" ? "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400" : s.status === "slow" ? "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400" : "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400"}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${s.status === "up" ? "bg-green-500" : s.status === "slow" ? "bg-amber-500" : "bg-red-500"}`} />
+                              {s.status === "up" ? "Operational" : s.status === "slow" ? "Slow" : "Down"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500">Latency</p>
+                            <p className={`text-[12px] font-semibold ${s.latency < 500 ? "text-green-600 dark:text-green-400" : s.latency < 2000 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>{s.latency}ms</p>
+                          </div>
+                          {s.error && <p className="text-[10px] text-red-500 mt-1 truncate">{s.error}</p>}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Database usage */}
+                    <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Database Usage</p>
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5 mb-5">
+                      {/* Storage bar */}
+                      <div className="mb-4">
+                        <div className="flex justify-between mb-1.5">
+                          <p className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Estimated Storage</p>
+                          <p className="text-[11px] font-semibold text-gray-800 dark:text-gray-200">{monitor.database.estimatedStorageMB} MB / {monitor.database.freeStorageLimitMB} MB</p>
+                        </div>
+                        <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${(monitor.database.estimatedStorageMB / monitor.database.freeStorageLimitMB) > 0.8 ? "bg-red-500" : (monitor.database.estimatedStorageMB / monitor.database.freeStorageLimitMB) > 0.5 ? "bg-amber-500" : "bg-green-500"}`} style={{ width: `${Math.min(100, (monitor.database.estimatedStorageMB / monitor.database.freeStorageLimitMB) * 100)}%` }} />
+                        </div>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">{Math.round((monitor.database.estimatedStorageMB / monitor.database.freeStorageLimitMB) * 100)}% of free tier used</p>
+                      </div>
+
+                      {/* Table row counts */}
+                      <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">Table Records</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {Object.entries(monitor.database.tables).map(([table, count]) => (
+                          <div key={table} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 flex items-center justify-between">
+                            <p className="text-[11px] text-gray-600 dark:text-gray-400">{table.replace(/_/g, " ")}</p>
+                            <p className="text-[13px] font-bold text-[#2F4366] dark:text-[#7DA2D4]">{count}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-between">
+                        <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Total Records</p>
+                        <p className="text-[14px] font-bold text-[#2F4366] dark:text-[#7DA2D4]">{monitor.database.totalRows.toLocaleString()}</p>
+                      </div>
+                    </div>
+
+                    {/* Free tier limits */}
+                    <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Free Tier Limits</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                      <LimitCard label="Database Storage" used={monitor.database.estimatedStorageMB} limit={500} unit="MB" />
+                      <LimitCard label="Monthly Active Users" used={(monitor.database.tables.customers || 0) + (monitor.database.tables.merchants || 0)} limit={50000} unit="users" />
+                      <LimitCard label="Realtime Connections" used={0} limit={200} unit="connections" note="Live count unavailable" />
+                      <LimitCard label="API Requests" used={0} limit={500000} unit="/month" note="Check Supabase dashboard" />
+                    </div>
+
+                    {/* Deployment info */}
+                    <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Deployment</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1">Admin Dashboard</p>
+                        <p className="text-[12px] font-semibold text-gray-800 dark:text-gray-200">Vercel</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">Next.js · Free tier</p>
+                      </div>
+                      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1">Backend API</p>
+                        <p className="text-[12px] font-semibold text-gray-800 dark:text-gray-200">DigitalOcean</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">NestJS · $5/mo</p>
+                      </div>
+                      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+                        <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mb-1">Database</p>
+                        <p className="text-[12px] font-semibold text-gray-800 dark:text-gray-200">Supabase</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">PostgreSQL · Free tier</p>
+                      </div>
+                    </div>
                   </>
                 )}
               </>
@@ -619,22 +761,60 @@ export default function DashboardPage() {
                   </Table>
                   {merchantTx.length === 0 && <Empty />}
 
-                  {merchantRewards.length > 0 && (
+                  {/* Rewards */}
+                  <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3 mt-6">Rewards <span className="text-gray-400 dark:text-gray-500 font-normal">({merchantRewards.length})</span></p>
+                  {merchantRewards.length > 0 ? (
                     <>
-                      <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3 mt-6">Rewards</p>
-                      <Table heads={["Code", "Customer", "Stamps", "Status", "Earned", "Used"]}>
+                      <div className="grid grid-cols-3 gap-3 mb-4">
+                        <div className="bg-amber-50 dark:bg-amber-950 rounded-xl p-3 text-center">
+                          <p className="text-[10px] font-medium text-amber-500 dark:text-amber-400 uppercase">Pending</p>
+                          <p className="text-xl font-bold text-amber-700 dark:text-amber-300 mt-1">{merchantRewards.filter((r: any) => !r.is_used).length}</p>
+                        </div>
+                        <div className="bg-green-50 dark:bg-green-950 rounded-xl p-3 text-center">
+                          <p className="text-[10px] font-medium text-green-500 dark:text-green-400 uppercase">Claimed</p>
+                          <p className="text-xl font-bold text-green-700 dark:text-green-300 mt-1">{merchantRewards.filter((r: any) => r.is_used).length}</p>
+                        </div>
+                        <div className="bg-purple-50 dark:bg-purple-950 rounded-xl p-3 text-center">
+                          <p className="text-[10px] font-medium text-purple-500 dark:text-purple-400 uppercase">Total</p>
+                          <p className="text-xl font-bold text-purple-700 dark:text-purple-300 mt-1">{merchantRewards.length}</p>
+                        </div>
+                      </div>
+
+                      {/* Mobile reward cards */}
+                      <div className="sm:hidden space-y-2">
                         {merchantRewards.map((r: any) => (
-                          <tr key={r.id} className="border-b border-gray-50 dark:border-gray-800">
-                            <td className="px-4 py-2.5 font-mono text-[10px] text-gray-500 dark:text-gray-400">{r.reward_code}</td>
-                            <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{r.customers?.full_name || r.customers?.email || "-"}</td>
-                            <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 text-center">{r.stamps_used}</td>
-                            <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${r.is_used ? "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400" : "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400"}`}>{r.is_used ? "Claimed" : "Pending"}</span></td>
-                            <td className="px-4 py-2.5 text-gray-400 dark:text-gray-500 text-[11px] whitespace-nowrap">{fmt(r.created_at)}</td>
-                            <td className="px-4 py-2.5 text-gray-400 dark:text-gray-500 text-[11px] whitespace-nowrap">{r.used_at ? fmt(r.used_at) : "-"}</td>
-                          </tr>
+                          <div key={r.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{r.reward_code}</p>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${r.is_used ? "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400" : "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400"}`}>{r.is_used ? "Claimed" : "Pending"}</span>
+                            </div>
+                            <p className="text-[12px] text-gray-600 dark:text-gray-400">{r.customers?.full_name || r.customers?.email || "-"}</p>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{r.stamps_used} stamps · {fmt(r.created_at)}</p>
+                            {r.used_at && <p className="text-[10px] text-green-500 mt-0.5">Used: {fmt(r.used_at)}</p>}
+                          </div>
                         ))}
-                      </Table>
+                      </div>
+
+                      {/* Desktop rewards table */}
+                      <div className="hidden sm:block">
+                        <Table heads={["Code", "Customer", "Stamps", "Status", "Earned", "Used"]}>
+                          {merchantRewards.map((r: any) => (
+                            <tr key={r.id} className="border-b border-gray-50 dark:border-gray-800">
+                              <td className="px-4 py-2.5 font-mono text-[10px] text-gray-500 dark:text-gray-400">{r.reward_code}</td>
+                              <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{r.customers?.full_name || r.customers?.email || "-"}</td>
+                              <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 text-center">{r.stamps_used}</td>
+                              <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${r.is_used ? "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400" : "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400"}`}>{r.is_used ? "Claimed" : "Pending"}</span></td>
+                              <td className="px-4 py-2.5 text-gray-400 dark:text-gray-500 text-[11px] whitespace-nowrap">{fmt(r.created_at)}</td>
+                              <td className="px-4 py-2.5 text-gray-400 dark:text-gray-500 text-[11px] whitespace-nowrap">{r.used_at ? fmt(r.used_at) : "-"}</td>
+                            </tr>
+                          ))}
+                        </Table>
+                      </div>
                     </>
+                  ) : (
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-8 text-center">
+                      <p className="text-gray-400 dark:text-gray-500 text-[12px]">No rewards issued yet for this business</p>
+                    </div>
                   )}
                 </>
               );
@@ -759,6 +939,22 @@ function TypeBadge({ type }: { type: string }) {
 }
 
 function Empty() { return <p className="text-center text-gray-400 dark:text-gray-500 text-[12px] py-10">No data yet</p>; }
+
+function LimitCard({ label, used, limit, unit, note }: { label: string; used: number; limit: number; unit: string; note?: string }) {
+  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+      <div className="flex justify-between mb-1">
+        <p className="text-[11px] font-medium text-gray-600 dark:text-gray-400">{label}</p>
+        <p className="text-[11px] font-semibold text-gray-800 dark:text-gray-200">{used.toLocaleString()} / {limit.toLocaleString()} {unit}</p>
+      </div>
+      <div className="h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${pct > 80 ? "bg-red-500" : pct > 50 ? "bg-amber-500" : "bg-green-500"}`} style={{ width: `${pct}%` }} />
+      </div>
+      <p className="text-[9px] text-gray-400 dark:text-gray-500 mt-1">{note || `${Math.round(pct)}% used`}</p>
+    </div>
+  );
+}
 
 function WowCard({ label, value, prev, suffix, isPercent, total }: { label: string; value: number; prev?: number; suffix?: string; isPercent?: boolean; total?: number }) {
   const display = isPercent && total ? (total > 0 ? Math.round((value / total) * 100) : 0) : value;
