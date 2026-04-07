@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Alert, ActivityIndicator, StyleSheet, View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { Alert, ActivityIndicator, ScrollView, StyleSheet, View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +19,10 @@ export default function ScanScreen() {
   const [showCamera, setShowCamera] = useState(false);
   const [showIdInput, setShowIdInput] = useState(false);
   const [customerId, setCustomerId] = useState('');
+  const [searching, setSearching] = useState(false);
   const [merchantId, setMerchantId] = useState<string | null>(null);
+  const [businessName, setBusinessName] = useState<string>('');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [conditions, setConditions] = useState('');
 
   useFocusEffect(
@@ -33,6 +36,8 @@ export default function ScanScreen() {
           return;
         }
         setMerchantId(merchant.id);
+        setBusinessName(merchant.business_name || '');
+        setLogoUrl(merchant.logo_url || null);
         const { data: rules } = await getMerchantStampRules(merchant.id);
         if (!cancelled && rules?.promotion_text) setConditions(rules.promotion_text);
       };
@@ -59,11 +64,18 @@ export default function ScanScreen() {
   };
 
   const handleIdSearch = async () => {
-    if (!customerId.trim()) { Alert.alert('Required', 'Enter a customer ID.'); return; }
-    const { data, error } = await resolveCustomerById(customerId.trim());
-    if (error || !data?.id) { Alert.alert('Not found', 'Enter a valid customer ID.'); return; }
+    const query = customerId.trim();
+    if (!query) { Alert.alert('Required', 'Enter a customer ID, username, or email.'); return; }
+    setSearching(true);
+    const { data, error } = await resolveCustomerById(query);
+    setSearching(false);
+    if (error || !data?.id) {
+      Alert.alert('Not found', error?.message || 'No customer matches that input.');
+      return;
+    }
+    if (merchantId) logScanEvent(merchantId, data.id).catch(() => {});
     setCustomerId(''); setShowIdInput(false); setShowCamera(false);
-    navigateToCard(data.id, 'MANUAL', customerId.trim());
+    navigateToCard(data.id, 'MANUAL', query);
   };
 
   // Permission states
@@ -106,65 +118,106 @@ export default function ScanScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.pageTitle}>Scan</Text>
-      <Text style={styles.pageSubtitle}>Scan customer QR code to manage stamps</Text>
+      <View style={styles.scrollContent}>
+        <Text style={styles.pageTitle}>Scan</Text>
+        <Text style={styles.pageSubtitle}>Scan customer QR or search by ID</Text>
 
-      {/* Scan Area */}
-      <View style={styles.scanArea}>
-        {!showCamera && !showIdInput && (
-          <TouchableOpacity style={styles.scanTrigger} onPress={() => setShowCamera(true)} disabled={false}>
-            <Ionicons name="qr-code-outline" size={52} color="#2F4366" />
-            <Text style={styles.scanTriggerText}>Tap to scan</Text>
-          </TouchableOpacity>
-        )}
-
-        {showCamera && !showIdInput && (
-          <View style={styles.cameraBox}>
-            <CameraView
-              style={styles.camera}
-              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-              onBarcodeScanned={scanned ? undefined : handleBarCode}
-            />
-            <View style={styles.cameraOverlay}>
-              <View style={styles.scanFrame} />
-              <Text style={styles.scanHint}>Position QR code within frame</Text>
+        {/* Business identity */}
+        {businessName ? (
+          <View style={styles.businessCard}>
+            <View style={styles.businessLogoWrap}>
+              {logoUrl
+                ? <Image source={{ uri: logoUrl }} style={styles.businessLogo} contentFit="cover" />
+                : <Ionicons name="storefront" size={20} color="#2F4366" />
+              }
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.businessLabel}>Scanning as</Text>
+              <Text style={styles.businessName} numberOfLines={1}>{businessName}</Text>
             </View>
           </View>
+        ) : null}
+
+        {/* Default state — choices */}
+        {!showCamera && !showIdInput && (
+          <>
+            <TouchableOpacity style={styles.scanTrigger} activeOpacity={0.85} onPress={() => setShowCamera(true)}>
+              <Ionicons name="qr-code-outline" size={48} color="#FFFFFF" />
+              <Text style={styles.scanTriggerTitle}>Scan Customer Code</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.searchLink} onPress={() => setShowIdInput(true)}>
+              <Ionicons name="search" size={18} color="#2F4366" />
+              <Text style={styles.searchLinkText}>Search Customer</Text>
+            </TouchableOpacity>
+          </>
         )}
 
+        {/* Camera */}
+        {showCamera && !showIdInput && (
+          <>
+            <View style={styles.cameraBox}>
+              <CameraView
+                style={styles.camera}
+                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                onBarcodeScanned={scanned ? undefined : handleBarCode}
+              />
+              <View style={styles.cameraOverlay}>
+                <View style={styles.scanFrame} />
+                <Text style={styles.cameraHintInside}>Position the QR code within the frame</Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setShowCamera(false)}>
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* Search by ID */}
         {showIdInput && (
-          <View style={styles.idSection}>
+          <View style={styles.idCard}>
+            <Text style={styles.idLabel}>Customer Lookup</Text>
             <View style={styles.inputBox}>
-              <Ionicons name="id-card-outline" size={18} color="#B0B8C4" />
-              <TextInput value={customerId} onChangeText={setCustomerId} style={styles.input} placeholder="Enter customer ID" placeholderTextColor="#C4CAD4" autoCapitalize="none" autoFocus />
+              <Ionicons name="search" size={18} color="#B0B8C4" />
+              <TextInput
+                value={customerId}
+                onChangeText={setCustomerId}
+                style={styles.input}
+                placeholder="ID, @username, or email"
+                placeholderTextColor="#C4CAD4"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus
+                onSubmitEditing={handleIdSearch}
+                returnKeyType="search"
+              />
             </View>
             <View style={styles.idActions}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => { setShowIdInput(false); setShowCamera(true); setCustomerId(''); }}>
-                <Text style={styles.secondaryButtonText}>Back</Text>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => { setShowIdInput(false); setCustomerId(''); }}>
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryButtonSmall} onPress={handleIdSearch} disabled={false}>
-                <Text style={styles.primaryButtonText}>Search</Text>
+              <TouchableOpacity style={[styles.primaryButtonSmall, searching && { opacity: 0.6 }]} onPress={handleIdSearch} disabled={searching}>
+                {searching ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="search" size={16} color="#FFFFFF" />
+                    <Text style={styles.primaryButtonText}>Search</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </View>
         )}
+
+        {/* Conditions */}
+        {conditions && !showCamera && !showIdInput ? (
+          <View style={styles.conditionsCard}>
+            <Ionicons name="document-text-outline" size={14} color="#8A94A6" />
+            <Text style={styles.conditionsText} numberOfLines={2}>{conditions}</Text>
+          </View>
+        ) : null}
       </View>
-
-      {/* Bottom actions */}
-      {showCamera && !showIdInput && (
-        <TouchableOpacity style={styles.fallbackRow} onPress={() => { setShowCamera(false); setShowIdInput(true); }}>
-          <Ionicons name="id-card-outline" size={16} color="#2F4366" />
-          <Text style={styles.fallbackText}>Enter ID manually</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Conditions */}
-      {conditions ? (
-        <View style={styles.conditionsCard}>
-          <Ionicons name="document-text-outline" size={14} color="#8A94A6" />
-          <Text style={styles.conditionsText}>{conditions}</Text>
-        </View>
-      ) : null}
     </ThemedView>
   );
 }
@@ -174,14 +227,22 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 16 },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 8 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 52, paddingBottom: 4 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logo: { width: 32, height: 32 },
   brandName: { fontSize: 20, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
   profileButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E0E4EA' },
 
-  pageTitle: { fontSize: 26, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold', paddingHorizontal: 24, marginTop: 20 },
-  pageSubtitle: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', paddingHorizontal: 24, marginTop: 4, marginBottom: 20 },
+  scrollContent: { flex: 1, paddingBottom: 12 },
+  pageTitle: { fontSize: 22, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold', paddingHorizontal: 24, marginTop: 8, marginBottom: 12 },
+  pageSubtitle: { display: 'none' as any },
+
+  // Business identity card — compact
+  businessCard: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 24, backgroundColor: 'transparent', padding: 0, marginBottom: 14 },
+  businessLogoWrap: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#E8F4FD', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  businessLogo: { width: 42, height: 42, borderRadius: 21 },
+  businessLabel: { fontSize: 10, fontFamily: 'Poppins-Regular', color: '#8A94A6', textTransform: 'uppercase', letterSpacing: 0.5 },
+  businessName: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#2F4366', marginTop: 1 },
   permText: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#8A94A6', textAlign: 'center' },
 
   processingBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8, marginHorizontal: 24, backgroundColor: '#E8F4FD', borderRadius: 10, marginBottom: 12 },
@@ -200,30 +261,35 @@ const styles = StyleSheet.create({
   clearButton: { marginTop: 12, alignSelf: 'center' },
   clearText: { color: '#8A94A6', fontSize: 12, fontFamily: 'Poppins-SemiBold' },
 
-  // Scan area
-  scanArea: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  scanTrigger: { width: 300, height: 300, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E0E4EA', borderStyle: 'dashed' },
-  scanTriggerText: { marginTop: 12, fontSize: 14, color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
+  // Primary scan card — fills almost all space
+  scanTrigger: { flex: 1, marginHorizontal: 24, backgroundColor: '#2F4366', borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: 18, paddingHorizontal: 24, gap: 12 },
+  scanTriggerTitle: { fontSize: 16, color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
 
-  cameraBox: { width: 320, height: 320, borderRadius: 20, overflow: 'hidden', position: 'relative' },
+  // Search link (centered text below card)
+  searchLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, marginBottom: 8 },
+  searchLinkText: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+
+  // Camera — same height as scan card (flex: 1)
+  cameraBox: { flex: 1, marginHorizontal: 24, marginBottom: 18, borderRadius: 28, overflow: 'hidden', position: 'relative', backgroundColor: '#000' },
   camera: { flex: 1 },
   cameraOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   scanFrame: { width: 240, height: 240, borderWidth: 2, borderColor: '#FFFFFF', borderRadius: 14 },
-  scanHint: { position: 'absolute', bottom: 14, color: '#FFFFFF', fontSize: 11, fontFamily: 'Poppins-Regular', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10 },
+  cameraHintInside: { position: 'absolute', bottom: 24, color: '#FFFFFF', fontSize: 12, fontFamily: 'Poppins-Regular', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 12 },
+  cancelBtn: { alignSelf: 'center', paddingHorizontal: 24, paddingVertical: 10, marginBottom: 8 },
+  cancelBtnText: { color: '#8A94A6', fontSize: 13, fontFamily: 'Poppins-SemiBold' },
 
-  idSection: { width: '100%', maxWidth: 300 },
-  inputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E4EA', borderRadius: 12, paddingHorizontal: 16, height: 54, marginBottom: 14, gap: 12 },
-  input: { flex: 1, fontSize: 15, fontFamily: 'Poppins-Regular', color: '#1A1A2E', padding: 0 },
+  // Search by ID card
+  idCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#E0E4EA' },
+  idLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#8A94A6', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 0.5 },
+  inputBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F6F8FB', borderWidth: 1, borderColor: '#E0E4EA', borderRadius: 12, paddingHorizontal: 14, height: 50, marginBottom: 14, gap: 10 },
+  input: { flex: 1, fontSize: 14, fontFamily: 'Poppins-Regular', color: '#1A1A2E', padding: 0 },
   idActions: { flexDirection: 'row', gap: 10 },
-  secondaryButton: { flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E0E4EA' },
+  secondaryButton: { flex: 1, height: 46, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E0E4EA' },
   secondaryButtonText: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
-  primaryButtonSmall: { flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2F4366' },
-
-  fallbackRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12 },
-  fallbackText: { color: '#2F4366', fontSize: 13, fontFamily: 'Poppins-SemiBold' },
+  primaryButtonSmall: { flex: 1, height: 46, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: '#2F4366', flexDirection: 'row', gap: 6 },
 
   // Conditions
-  conditionsCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginHorizontal: 24, marginBottom: 100, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14 },
+  conditionsCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginHorizontal: 24, marginTop: 16, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E0E4EA' },
   conditionsText: { flex: 1, fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6', lineHeight: 16 },
 
   primaryButton: { paddingHorizontal: 32, paddingVertical: 14, borderRadius: 14, backgroundColor: '#2F4366' },

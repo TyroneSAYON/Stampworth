@@ -82,9 +82,6 @@ export default function CreateAccountScreen() {
           <TouchableOpacity style={styles.socialButton} onPress={() => handleOAuth('google')} disabled={loading || socialLoading !== null}>
             <GoogleLogo size={32} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.socialButton}>
-            <Ionicons name="logo-apple" size={32} color="#1A1A2E" />
-          </TouchableOpacity>
         </View>
         {socialLoading && <Text style={styles.socialLoadingText}>Creating account with {socialLoading}...</Text>}
       </ScrollView>

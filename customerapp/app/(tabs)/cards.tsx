@@ -124,7 +124,10 @@ export default function CardsScreen() {
               >
                 <View style={styles.cardRow}>
                   <View style={styles.cardIcon}>
-                    <Ionicons name="business" size={18} color="#FFFFFF" />
+                    {card.merchants?.logo_url
+                      ? <Image source={{ uri: card.merchants.logo_url }} style={{ width: 36, height: 36, borderRadius: 18 }} contentFit="cover" />
+                      : <Ionicons name="business" size={18} color="#FFFFFF" />
+                    }
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.cardMerchant} numberOfLines={1}>{merchantName}</Text>

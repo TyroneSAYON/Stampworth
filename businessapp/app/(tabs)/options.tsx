@@ -14,6 +14,7 @@ export default function OptionsScreen() {
 
   const [loading, setLoading] = useState(true);
   const [businessName, setBusinessName] = useState('Your Business');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [cardColor, setCardColor] = useState('#2F4366');
   const [totalStamps, setTotalStamps] = useState(10);
   const [stampIconName, setStampIconName] = useState('star');
@@ -44,6 +45,7 @@ export default function OptionsScreen() {
         }
 
         setBusinessName(data.merchant.business_name || 'Your Business');
+        setLogoUrl(data.merchant.logo_url || null);
         setCardColor(data.settings?.card_color || '#2F4366');
         setTotalStamps(data.settings?.stamps_per_redemption || 10);
         setStampIconName(data.settings?.stamp_icon_name || 'star');
@@ -147,7 +149,10 @@ export default function OptionsScreen() {
         <View style={[styles.cardPreview, { backgroundColor: cardColor }]}>
           <View style={styles.cardRow}>
             <View style={styles.cardLogoPlaceholder}>
-              <Ionicons name="business" size={20} color="#FFFFFF" />
+              {logoUrl
+                ? <Image source={{ uri: logoUrl }} style={{ width: 40, height: 40, borderRadius: 20 }} contentFit="cover" />
+                : <Ionicons name="business" size={20} color="#FFFFFF" />
+              }
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.cardBusinessName} numberOfLines={1}>{businessName}</Text>

@@ -97,7 +97,7 @@ export default function StampsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <View style={styles.scroll}>
         {/* Header */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -190,15 +190,14 @@ export default function StampsScreen() {
           </View>
         )}
 
-        <Text style={styles.helperText}>Collect stamps every time you purchase from this store.</Text>
-      </ScrollView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F6F8FB' },
-  scroll: { paddingHorizontal: 24, paddingTop: 56, paddingBottom: 48 },
+  scroll: { flex: 1, paddingHorizontal: 24, paddingTop: 56, paddingBottom: 24 },
 
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24 },
   backBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
@@ -214,21 +213,21 @@ const styles = StyleSheet.create({
   rewardCardDate: { fontSize: 9, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
 
   // Card
-  card: { borderRadius: 20, padding: 18, marginBottom: 28 },
+  card: { flex: 1, minHeight: 480, borderRadius: 20, padding: 24, marginBottom: 16, justifyContent: 'space-between' },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
   cardLogoCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   cardName: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
   cardLabel: { fontSize: 10, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.65)' },
   cardCount: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  slot: { alignItems: 'center' },
-  circle: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
-  freeLabel: { fontSize: 9, fontFamily: 'Poppins-SemiBold', letterSpacing: 0.5 },
-  dateText: { fontSize: 6, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.55)', marginTop: 2 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', alignItems: 'center', flex: 1 },
+  slot: { alignItems: 'center', width: '22%' },
+  circle: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
+  freeLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', letterSpacing: 0.5 },
+  dateText: { fontSize: 8, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.65)', marginTop: 4 },
 
   // Progress
-  progressSection: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 24 },
+  progressSection: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, marginBottom: 12 },
   progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   progressLabel: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
   progressValue: { fontSize: 14, fontFamily: 'Poppins-SemiBold' },

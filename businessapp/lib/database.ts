@@ -664,14 +664,53 @@ export const logScanEvent = async (merchantId: string, customerId: string) => {
   });
 };
 
-export const resolveCustomerById = async (customerId: string) => {
-  const { data, error } = await supabase
+export const resolveCustomerById = async (input: string) => {
+  const query = input.trim();
+  if (!query) return { data: null, error: new Error('Please enter a customer ID, username, or email.') };
+
+  // 1. Try exact UUID match
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query);
+  if (isUuid) {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('id, full_name, username, email')
+      .eq('id', query)
+      .maybeSingle();
+    if (data) return { data, error: null };
+    if (error) return { data: null, error };
+  }
+
+  // 2. Try username (case-insensitive, with or without @)
+  const cleanUsername = query.replace(/^@/, '').toLowerCase();
+  const { data: byUsername } = await supabase
     .from('customers')
     .select('id, full_name, username, email')
-    .eq('id', customerId)
-    .single();
+    .ilike('username', cleanUsername)
+    .maybeSingle();
+  if (byUsername) return { data: byUsername, error: null };
 
-  return { data, error };
+  // 3. Try email (case-insensitive)
+  if (query.includes('@')) {
+    const { data: byEmail } = await supabase
+      .from('customers')
+      .select('id, full_name, username, email')
+      .ilike('email', query)
+      .maybeSingle();
+    if (byEmail) return { data: byEmail, error: null };
+  }
+
+  // 4. Try short customer code (first 8 chars of UUID, uppercase from QR display)
+  const shortCode = query.toLowerCase();
+  if (/^[0-9a-f]{4,12}$/i.test(shortCode)) {
+    const { data: allCustomers } = await supabase
+      .from('customers')
+      .select('id, full_name, username, email')
+      .limit(2000);
+    const match = (allCustomers || []).find((c: any) => c.id.toLowerCase().startsWith(shortCode));
+    if (match) return { data: match, error: null };
+  }
+
+  return { data: null, error: new Error('Customer not found. Try ID, @username, or email.') };
 };
 
 export const issueStampForCustomer = async (
