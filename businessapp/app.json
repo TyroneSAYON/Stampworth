@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Stampworth Business",
-    "slug": "stampworth-business",
+    "slug": "businessapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/stampworthb-logo.png",
