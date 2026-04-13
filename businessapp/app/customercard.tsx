@@ -44,7 +44,8 @@ export default function CustomerCardScreen() {
   );
 
   const loadData = async () => {
-    setLoading(true);
+    // Only show full-screen loader on first load (not on refreshes after stamp ops)
+    if (stampCount === 0 && stampRecords.length === 0) setLoading(true);
     const { data, error } = await getCustomerLoyaltyCardProgress(merchantId!, customerId!);
     if (error || !data) { Alert.alert('Error', error?.message || 'Could not load card.'); setLoading(false); return; }
 
@@ -78,27 +79,36 @@ export default function CustomerCardScreen() {
   const handleOkay = async () => {
     if (!merchantId || !customerId || stampQty <= 0) return;
     setStamping(true);
-    for (let i = 0; i < stampQty; i++) {
+    // Optimistic update
+    const optimisticCount = stampCount + stampQty;
+    setStampCount(optimisticCount);
+    const qty = stampQty;
+    setStampQty(0);
+
+    let freeReached = false;
+    for (let i = 0; i < qty; i++) {
       const { data, error } = await issueStampForCustomer(merchantId, customerId, (source as 'QR' | 'MANUAL') || 'QR', reference);
       if (error) { Alert.alert('Failed', error.message); break; }
       if (data?.freeRedemptionReached) {
+        freeReached = true;
         await storeCustomerReward(merchantId, customerId);
-        setStamping(false); setStampQty(0);
-        await loadData();
-        return;
+        break;
       }
     }
-    setStamping(false); setStampQty(0);
-    await loadData();
+    setStamping(false);
+    // Refresh in background (don't await — UI already updated)
+    if (freeReached) await loadData();
+    else loadData();
   };
 
   const handleRemoveOne = async () => {
     if (!merchantId || !customerId || stampCount <= 0) return;
     setStamping(true);
+    setStampCount(stampCount - 1); // Optimistic
     const { error } = await removeLatestStampForCustomer(merchantId, customerId, (source as 'QR' | 'MANUAL') || 'QR', reference);
     setStamping(false);
-    if (error) { Alert.alert('Failed', error.message); return; }
-    await loadData();
+    if (error) { Alert.alert('Failed', error.message); setStampCount(stampCount); return; }
+    loadData(); // Background refresh
   };
 
   const handleClaim = (reward: PendingReward) => {

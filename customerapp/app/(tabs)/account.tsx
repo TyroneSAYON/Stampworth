@@ -35,22 +35,31 @@ export default function AccountScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Only load once — keep cached data on subsequent focuses
+      if (authUserId) return;
       let cancelled = false;
       const load = async () => {
         setLoading(true);
         const user = await getCurrentUser();
         if (!user) { setLoading(false); router.replace('/signin'); return; }
-        const { data: customer } = await getOrCreateCustomerProfile();
         if (cancelled) return;
+        // Show user info immediately from auth metadata, fetch full profile in background
         setAuthUserId(user.id);
-        setEmail(user.email || customer?.email || '');
-        setUsername(customer?.full_name || customer?.username || user.user_metadata?.full_name as string || user.email?.split('@')[0] || 'Customer');
-        setPhotoUri(customer?.avatar_url || user.user_metadata?.avatar_url as string || null);
+        setEmail(user.email || '');
+        setUsername(user.user_metadata?.full_name as string || user.email?.split('@')[0] || 'Customer');
+        setPhotoUri(user.user_metadata?.avatar_url as string || null);
         setLoading(false);
+        // Background profile fetch
+        getOrCreateCustomerProfile().then(({ data: customer }) => {
+          if (cancelled || !customer) return;
+          setEmail(user.email || customer.email || '');
+          setUsername(customer.full_name || customer.username || user.user_metadata?.full_name as string || user.email?.split('@')[0] || 'Customer');
+          if (customer.avatar_url) setPhotoUri(customer.avatar_url);
+        });
       };
       load();
       return () => { cancelled = true; };
-    }, [])
+    }, [authUserId])
   );
 
   const pickPhoto = async () => {
