@@ -4,7 +4,11 @@
       "Bash(npx tsc:*)",
       "Bash(ls:*)",
       "Bash(npm run:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(node -e \":*)",
+      "Bash(npx sharp-cli:*)",
+      "Bash(npx -y sharp -i customerapp/assets/images/stampworth-logo.png -o customerapp/assets/images/adaptive-icon.png resize 288 288 -- extend 72 72 72 72 --extendBackground \"rgba\\(255,255,255,0\\)\"2)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }
