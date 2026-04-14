@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { signIn, signInWithOAuth } from '@/lib/auth';
@@ -30,7 +30,7 @@ export default function SignInScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Sign In</Text>
 
@@ -78,7 +78,7 @@ export default function SignInScreen() {
         </View>
         {socialLoading && <Text style={styles.socialLoadingText}>Signing in with {socialLoading}...</Text>}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

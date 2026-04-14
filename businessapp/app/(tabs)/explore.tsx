@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { Alert, ActivityIndicator, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Modal } from 'react-native';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -13,6 +13,8 @@ import {
   getNearbyCustomersWithLocation,
 } from '@/lib/database';
 
+const NEARBY_REFRESH_MS = 15000; // refresh nearby customers every 15s
+
 let Location: typeof import('expo-location') | null = null;
 try { Location = require('expo-location'); } catch {}
 
@@ -21,7 +23,7 @@ let Marker: any = null;
 let Circle: any = null;
 if (Platform.OS !== 'web') { try { const M = require('react-native-maps'); MapView = M.default; Marker = M.Marker; Circle = M.Circle; } catch {} }
 
-type NearbyCustomer = { id: string; name: string; email: string; latitude: number; longitude: number };
+type NearbyCustomer = { id: string; name: string; email: string; latitude: number; longitude: number; updatedAt?: string };
 
 export default function ExploreScreen() {
   const [loading, setLoading] = useState(true);
@@ -35,9 +37,12 @@ export default function ExploreScreen() {
   const [cardHolders, setCardHolders] = useState<any[]>([]);
   const [nearbyCustomers, setNearbyCustomers] = useState<NearbyCustomer[]>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [geofenceRadius, setGeofenceRadius] = useState(500);
+  const [geofenceRadius, setGeofenceRadius] = useState(22);
   const [savingLocation, setSavingLocation] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const merchantIdRef = useRef<string | null>(null);
 
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,6 +56,23 @@ export default function ExploreScreen() {
 
   useFocusEffect(useCallback(() => {
     if (!loaded) init();
+
+    // Start auto-refresh for nearby customers when screen is focused
+    refreshIntervalRef.current = setInterval(() => {
+      if (merchantIdRef.current) {
+        getNearbyCustomersWithLocation(merchantIdRef.current).then(({ data }) => {
+          setNearbyCustomers(data || []);
+          setLastRefreshed(new Date());
+        });
+      }
+    }, NEARBY_REFRESH_MS);
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+    };
   }, [loaded]));
 
   const init = async () => {
@@ -69,6 +91,7 @@ export default function ExploreScreen() {
     const merchant = merchantResult.data;
     if (merchant) {
       setMerchantId(merchant.id);
+      merchantIdRef.current = merchant.id;
       setMerchantName(merchant.business_name || 'Your Store');
       setMerchantAddress(merchant.address || '');
       if (merchant.latitude && merchant.longitude) {
@@ -145,13 +168,14 @@ export default function ExploreScreen() {
     : userLocation || { latitude: 14.5995, longitude: 120.9842 };
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ThemedView style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Image source={require('@/assets/images/stampworthb-logo.png')} style={styles.logo} contentFit="contain" />
-            <Text style={styles.brandName}>Stampworth</Text>
+            <Text style={styles.brandName}>Stampworth Business</Text>
           </View>
           <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/(tabs)/options')}>
             <Ionicons name="storefront" size={18} color="#2F4366" />
@@ -162,7 +186,15 @@ export default function ExploreScreen() {
         <Text style={styles.pageSubtitle}>Your store location and nearby customers</Text>
 
         {/* Map */}
-        <Text style={styles.sectionTitle}>Store Map</Text>
+        <View style={styles.sectionTitleRow}>
+          <Text style={styles.sectionTitle}>Store Map</Text>
+          {nearbyCustomers.length > 0 && (
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE</Text>
+            </View>
+          )}
+        </View>
         {MapView ? (
           <View style={styles.mapContainer}>
             <MapView
@@ -246,13 +278,80 @@ export default function ExploreScreen() {
               </View>
             </View>
 
+            <Text style={styles.geofenceLabel}>Geofence Radius</Text>
             <View style={styles.radiusRow}>
-              {[200, 500, 1000, 2000].map((r) => (
+              {[22, 500, 1000, 2000].map((r) => (
                 <TouchableOpacity key={r} style={[styles.radiusChip, geofenceRadius === r && styles.radiusChipActive]} onPress={() => setGeofenceRadius(r)}>
                   <Text style={[styles.radiusChipText, geofenceRadius === r && styles.radiusChipTextActive]}>{r}m</Text>
                 </TouchableOpacity>
               ))}
             </View>
+
+            {/* Nearby Customers within geofence */}
+            {(() => {
+              const insideCustomers = nearbyCustomers.filter((c) =>
+                merchantLat && merchantLng
+                  ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) <= geofenceRadius
+                  : false
+              );
+              const outsideCustomers = nearbyCustomers.filter((c) =>
+                merchantLat && merchantLng
+                  ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) > geofenceRadius
+                  : false
+              );
+
+              return (
+                <>
+                  <View style={styles.geofenceHeaderRow}>
+                    <Text style={styles.geofenceSectionTitle}>
+                      Nearby Customers
+                    </Text>
+                    <View style={[styles.geofenceCountBadge, { backgroundColor: insideCustomers.length > 0 ? '#E8F8EE' : '#F0F2F5' }]}>
+                      <Text style={[styles.geofenceCountText, { color: insideCustomers.length > 0 ? '#27AE60' : '#8A94A6' }]}>
+                        {insideCustomers.length} within {geofenceRadius}m
+                      </Text>
+                    </View>
+                  </View>
+
+                  {insideCustomers.length === 0 && outsideCustomers.length === 0 ? (
+                    <View style={styles.geofenceEmpty}>
+                      <Ionicons name="location-outline" size={28} color="#C4CAD4" />
+                      <Text style={styles.geofenceEmptyTitle}>No customers tracked yet</Text>
+                      <Text style={styles.geofenceEmptyText}>Customers using Stampworth with location enabled will appear here</Text>
+                    </View>
+                  ) : insideCustomers.length === 0 ? (
+                    <View style={styles.geofenceEmpty}>
+                      <Ionicons name="radio-outline" size={28} color="#C4CAD4" />
+                      <Text style={styles.geofenceEmptyTitle}>No customers within {geofenceRadius}m</Text>
+                      <Text style={styles.geofenceEmptyText}>{outsideCustomers.length} customer{outsideCustomers.length !== 1 ? 's' : ''} tracked outside the radius</Text>
+                    </View>
+                  ) : (
+                    insideCustomers.map((c) => {
+                      const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : 0;
+                      return (
+                        <TouchableOpacity key={c.id} style={styles.nearbyRow} onPress={() => viewCustomerCard(c.id)}>
+                          <View style={styles.nearbyAvatar}>
+                            <Ionicons name="person" size={14} color="#FFFFFF" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.nearbyName}>{c.name}</Text>
+                            <Text style={styles.nearbyEmail}>{c.email}</Text>
+                          </View>
+                          <View style={styles.nearbyDistBadge}>
+                            <Ionicons name="navigate-outline" size={10} color="#27AE60" />
+                            <Text style={styles.nearbyDistText}>{dist}m</Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+
+                  {outsideCustomers.length > 0 && insideCustomers.length > 0 && (
+                    <Text style={styles.outsideLabel}>{outsideCustomers.length} more outside {geofenceRadius}m radius</Text>
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
 
@@ -265,8 +364,12 @@ export default function ExploreScreen() {
           </View>
           <View style={[styles.statCard, { backgroundColor: '#E8F8EE' }]}>
             <Ionicons name="navigate" size={20} color="#27AE60" />
-            <Text style={[styles.statNumber, { color: '#27AE60' }]}>{nearbyCustomers.length}</Text>
-            <Text style={styles.statLabel}>Tracked</Text>
+            <Text style={[styles.statNumber, { color: '#27AE60' }]}>
+              {merchantLat && merchantLng
+                ? nearbyCustomers.filter((c) => haversine(merchantLat, merchantLng, c.latitude, c.longitude) <= geofenceRadius).length
+                : nearbyCustomers.length}
+            </Text>
+            <Text style={styles.statLabel}>Nearby</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: '#FFF4E6' }]}>
             <Ionicons name="gift" size={20} color="#E67E22" />
@@ -373,6 +476,7 @@ export default function ExploreScreen() {
         </View>
       </Modal>
     </ThemedView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -389,7 +493,11 @@ const styles = StyleSheet.create({
 
   pageTitle: { fontSize: 26, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold', paddingHorizontal: 24, marginTop: 20 },
   pageSubtitle: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', paddingHorizontal: 24, marginTop: 4, marginBottom: 20 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 12, marginTop: 8 },
   sectionTitle: { fontSize: 15, fontFamily: 'Poppins-SemiBold', color: '#2F4366', paddingHorizontal: 24, marginBottom: 12, marginTop: 8 },
+  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#E8F8EE', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#27AE60' },
+  liveText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#27AE60', letterSpacing: 0.5 },
 
   // Map
   mapContainer: { marginHorizontal: 24, height: 300, borderRadius: 16, overflow: 'hidden', marginBottom: 12 },
@@ -409,11 +517,29 @@ const styles = StyleSheet.create({
   storeInfoAddress: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 1 },
   storeInfoCoords: { fontSize: 10, fontFamily: 'Poppins-Regular', color: '#C4CAD4', marginTop: 2 },
 
-  radiusRow: { flexDirection: 'row', paddingHorizontal: 24, gap: 8, marginBottom: 20 },
+  geofenceLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#8A94A6', paddingHorizontal: 24, marginBottom: 8, letterSpacing: 0.5, textTransform: 'uppercase' },
+  radiusRow: { flexDirection: 'row', paddingHorizontal: 24, gap: 8, marginBottom: 16 },
   radiusChip: { flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: '#FFFFFF', alignItems: 'center', borderWidth: 1, borderColor: '#E0E4EA' },
   radiusChipActive: { backgroundColor: '#2F4366', borderColor: '#2F4366' },
   radiusChipText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
   radiusChipTextActive: { color: '#FFFFFF' },
+
+  geofenceHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 },
+  geofenceSectionTitle: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  geofenceCountBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  geofenceCountText: { fontSize: 11, fontFamily: 'Poppins-SemiBold' },
+
+  geofenceEmpty: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 24, alignItems: 'center', marginBottom: 20, gap: 6 },
+  geofenceEmptyTitle: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
+  geofenceEmptyText: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
+
+  nearbyRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 12, marginBottom: 8, gap: 10 },
+  nearbyAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#27AE60', alignItems: 'center', justifyContent: 'center' },
+  nearbyName: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
+  nearbyEmail: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 1 },
+  nearbyDistBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#E8F8EE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  nearbyDistText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#27AE60' },
+  outsideLabel: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6', textAlign: 'center', marginBottom: 20, marginTop: 4 },
 
   // Stats
   statsRow: { flexDirection: 'row', paddingHorizontal: 24, gap: 8, marginBottom: 16 },

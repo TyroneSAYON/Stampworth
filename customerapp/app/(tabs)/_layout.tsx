@@ -1,15 +1,21 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useLocationTracking } from '@/hooks/use-location-tracking';
+import { DevBroadcastListener } from '@/components/dev-broadcast-listener';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  useLocationTracking();
 
   return (
+    <View style={{ flex: 1 }}>
+    <DevBroadcastListener />
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
@@ -55,5 +61,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </View>
   );
 }

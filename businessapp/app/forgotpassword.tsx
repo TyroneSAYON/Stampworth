@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -109,7 +109,7 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.headerRow}>
@@ -239,7 +239,7 @@ export default function ForgotPasswordScreen() {
           </>
         )}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

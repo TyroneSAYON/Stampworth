@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useTheme } from "@/lib/theme";
+import { supabase } from "@/lib/supabase";
 
 type Stats = { totalCustomers: number; totalMerchants: number; totalLoyaltyCards: number; totalStampsIssued: number; totalRewardsRedeemed: number; totalAnnouncements: number; totalTransactions: number };
 type Customer = { id: string; email: string; full_name: string | null; username: string; phone_number: string | null; created_at: string };
@@ -29,7 +30,8 @@ type MonitorData = {
   checkedAt: string;
 };
 type SupportMessage = { id: string; sender_type: "customer" | "merchant"; sender_id: string | null; sender_email: string; sender_name: string | null; subject: string | null; message: string; is_read: boolean; is_replied: boolean; created_at: string };
-type Tab = "overview" | "analytics" | "monitor" | "support" | "map" | "customers" | "merchants" | "rewards";
+type DevBroadcast = { id: string; title: string; message: string; target: "all" | "customers" | "merchants"; is_active: boolean; created_at: string };
+type Tab = "overview" | "analytics" | "monitor" | "support" | "broadcast" | "map" | "customers" | "merchants" | "rewards";
 
 // All merchants are on Beta during testing
 const SUBSCRIPTION_PLAN = "Beta (Free)";
@@ -51,6 +53,15 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [viewedSnapshots, setViewedSnapshots] = useState<Record<string, number>>(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(localStorage.getItem("stampworth_viewed_snapshots") || "{}"); } catch { return {}; }
+  });
+  const [devBroadcasts, setDevBroadcasts] = useState<DevBroadcast[]>([]);
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [broadcastTarget, setBroadcastTarget] = useState<"all" | "customers" | "merchants">("all");
+  const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
   // Monitoring
   const [monitor, setMonitor] = useState<MonitorData | null>(null);
@@ -136,23 +147,56 @@ export default function DashboardPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: "customer" | "merchant"; item: any } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Debounced reload — collapses rapid-fire DB changes into a single fetch
+  const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedReload = useCallback(() => {
+    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+    reloadTimerRef.current = setTimeout(() => { load(); }, 800);
+  }, []);
+
   useEffect(() => {
     if (typeof window !== "undefined" && !localStorage.getItem("stampworth_admin")) { router.push("/"); return; }
     load();
+
+    // Realtime: subscribe to all key tables
+    const channel = supabase
+      .channel("admin-dashboard-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, debouncedReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "merchants" }, debouncedReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_cards" }, debouncedReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "stamps" }, debouncedReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, debouncedReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "redeemed_rewards" }, debouncedReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "merchant_announcements" }, debouncedReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "support_messages" }, debouncedReload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dev_broadcasts" }, debouncedReload)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+    };
   }, []);
 
   const load = async () => {
-    setLoading(true);
+    setLoading((prev) => stats === null); // only show full loader on first load
     try {
       const res = await fetch("/api/data");
       const d = await res.json();
-      setStats(d.stats); setCustomers(d.customers || []); setMerchants(d.merchants || []); setTransactions(d.transactions || []); setRewards(d.rewards || []); setMerchantStatsMap(d.merchantStats || {}); setAnalytics(d.analytics || null); setSupportMessages(d.supportMessages || []);
+      setStats(d.stats); setCustomers(d.customers || []); setMerchants(d.merchants || []); setTransactions(d.transactions || []); setRewards(d.rewards || []); setMerchantStatsMap(d.merchantStats || {}); setAnalytics(d.analytics || null); setSupportMessages(d.supportMessages || []); setDevBroadcasts(d.devBroadcasts || []);
     } catch {}
     setLoading(false);
   };
 
   const fmt = (d: string) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
-  const switchTab = (t: Tab) => { setTab(t); setSelectedMerchant(null); setSidebarOpen(false); };
+  const markTabViewed = (t: Tab, counts: Record<string, number>) => {
+    setViewedSnapshots((prev) => {
+      const next = { ...prev, [t]: counts[t] ?? 0 };
+      try { localStorage.setItem("stampworth_viewed_snapshots", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  const switchTab = (t: Tab) => { setTab(t); setSelectedMerchant(null); setSidebarOpen(false); markTabViewed(t, badgeCounts); };
 
   const handleDelete = async () => {
     if (!deleteConfirm) return;
@@ -196,11 +240,48 @@ export default function DashboardPage() {
   const merchantRewards = selectedMerchant ? rewards.filter((r) => r.merchant_id === selectedMerchant.id) : [];
   const merchantsWithLocation = merchants.filter((m) => m.latitude && m.longitude);
 
+  // Notification badge counts per section
+  const newCustomersToday = customers.filter((c) => c.created_at.startsWith(todayStr)).length;
+  const newMerchantsToday = merchants.filter((m) => m.created_at.startsWith(todayStr)).length;
+  const unreadSupport = supportMessages.filter((m) => !m.is_read).length;
+  const pendingRewardsCount = rewards.filter((r) => !r.is_used).length;
+  const merchantsNoLocation = merchants.length - merchantsWithLocation.length;
+  const degradedServices = monitor?.services.filter((s) => s.status !== "up").length || 0;
+  const inactiveMerchants = merchants.filter((m) => !m.is_active).length;
+  const todayTransactions = transactions.filter((t) => t.created_at.startsWith(todayStr)).length;
+
+  const activeBroadcasts = devBroadcasts.filter((b) => b.is_active).length;
+
+  const badgeCounts: Record<Tab, number> = {
+    overview: newCustomersToday + newMerchantsToday + todayTransactions,
+    analytics: analytics?.customersThisWeek || 0,
+    monitor: degradedServices,
+    support: unreadSupport,
+    broadcast: activeBroadcasts,
+    map: merchantsNoLocation,
+    customers: newCustomersToday,
+    merchants: newMerchantsToday + inactiveMerchants,
+    rewards: pendingRewardsCount,
+  };
+
+  const badgeColors: Record<Tab, string> = {
+    overview: "bg-blue-500",
+    analytics: "bg-indigo-500",
+    monitor: degradedServices > 0 ? "bg-red-500" : "bg-green-500",
+    support: "bg-orange-500",
+    broadcast: "bg-teal-500",
+    map: "bg-amber-500",
+    customers: "bg-blue-500",
+    merchants: inactiveMerchants > 0 ? "bg-red-500" : "bg-blue-500",
+    rewards: "bg-purple-500",
+  };
+
   const navItems: { key: Tab; label: string; icon: string }[] = [
     { key: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" },
     { key: "analytics", label: "Analytics", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
     { key: "monitor", label: "Monitoring", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
     { key: "support", label: "Support Inbox", icon: "M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" },
+    { key: "broadcast", label: "Broadcast", icon: "M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" },
     { key: "map", label: "Store Map", icon: "M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z" },
     { key: "customers", label: "Customers", icon: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" },
     { key: "merchants", label: "Businesses", icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" },
@@ -230,19 +311,28 @@ export default function DashboardPage() {
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <nav className="flex-1 px-3 py-1">
-          {navItems.map((n) => (
-            <button key={n.key} onClick={() => switchTab(n.key)} className={`w-full text-left px-3 py-2.5 rounded-lg text-[13px] font-medium mb-0.5 transition-colors flex items-center gap-2.5 ${tab === n.key ? "bg-[#2F4366] dark:bg-[#7DA2D4] text-white dark:text-gray-900" : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d={n.icon}/></svg>
-              {n.label}
-            </button>
-          ))}
+          {navItems.map((n) => {
+            const count = badgeCounts[n.key];
+            const color = badgeColors[n.key];
+            return (
+              <button key={n.key} onClick={() => switchTab(n.key)} className={`w-full text-left px-3 py-2.5 rounded-lg text-[13px] font-medium mb-0.5 transition-colors flex items-center gap-2.5 ${tab === n.key ? "bg-[#2F4366] dark:bg-[#7DA2D4] text-white dark:text-gray-900" : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"}`}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d={n.icon}/></svg>
+                <span className="flex-1">{n.label}</span>
+                {count > 0 && count !== (viewedSnapshots[n.key] ?? -1) && (
+                  <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold text-white flex items-center justify-center ${tab === n.key ? "bg-white/25" : color}`}>
+                    {count > 99 ? "99+" : count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
         <div className="px-3 py-3 border-t border-gray-100 dark:border-gray-800 space-y-0.5">
           <button onClick={toggle} className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2">
             {theme === "light" ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/></svg>}
             {theme === "light" ? "Dark Mode" : "Light Mode"}
           </button>
-          <button onClick={load} className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">Refresh</button>
+          <button onClick={() => load()} className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">Refresh</button>
           <button onClick={() => { localStorage.removeItem("stampworth_admin"); router.push("/"); }} className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-gray-400 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">Sign Out</button>
         </div>
       </aside>
@@ -257,6 +347,15 @@ export default function DashboardPage() {
             {tab === "overview" && stats && (
               <>
                 <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4] mb-5">Overview</h2>
+                {(newCustomersToday > 0 || newMerchantsToday > 0 || todayTransactions > 0 || unreadSupport > 0 || pendingRewardsCount > 0) && (
+                  <div className="flex flex-wrap gap-2 mb-5">
+                    {newCustomersToday > 0 && <NotifPill color="blue" icon="👤" text={`${newCustomersToday} new customer${newCustomersToday > 1 ? "s" : ""} today`} onClick={() => switchTab("customers")} />}
+                    {newMerchantsToday > 0 && <NotifPill color="green" icon="🏪" text={`${newMerchantsToday} new business${newMerchantsToday > 1 ? "es" : ""} today`} onClick={() => switchTab("merchants")} />}
+                    {todayTransactions > 0 && <NotifPill color="indigo" icon="⚡" text={`${todayTransactions} transaction${todayTransactions > 1 ? "s" : ""} today`} />}
+                    {unreadSupport > 0 && <NotifPill color="orange" icon="💬" text={`${unreadSupport} unread message${unreadSupport > 1 ? "s" : ""}`} onClick={() => switchTab("support")} />}
+                    {pendingRewardsCount > 0 && <NotifPill color="purple" icon="🎁" text={`${pendingRewardsCount} pending reward${pendingRewardsCount > 1 ? "s" : ""}`} onClick={() => switchTab("rewards")} />}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
                   <StatCard label="Customers" value={stats.totalCustomers} />
                   <StatCard label="Businesses" value={stats.totalMerchants} />
@@ -284,6 +383,12 @@ export default function DashboardPage() {
             {tab === "analytics" && analytics && stats && (
               <>
                 <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4] mb-5">Analytics</h2>
+                {(analytics.customersThisWeek > 0 || analytics.merchantsThisWeek > 0) && (
+                  <div className="flex flex-wrap gap-2 mb-5">
+                    {analytics.customersThisWeek > 0 && <NotifPill color="blue" icon="📈" text={`${analytics.customersThisWeek} new customer${analytics.customersThisWeek > 1 ? "s" : ""} this week${analytics.customersLastWeek > 0 ? ` (${analytics.customersThisWeek > analytics.customersLastWeek ? "↑" : analytics.customersThisWeek < analytics.customersLastWeek ? "↓" : "→"} vs last week)` : ""}`} />}
+                    {analytics.merchantsThisWeek > 0 && <NotifPill color="green" icon="📊" text={`${analytics.merchantsThisWeek} new business${analytics.merchantsThisWeek > 1 ? "es" : ""} this week`} />}
+                  </div>
+                )}
 
                 {/* Summary */}
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5 mb-6">
@@ -394,6 +499,18 @@ export default function DashboardPage() {
             {/* MONITORING */}
             {tab === "monitor" && (
               <>
+                {degradedServices > 0 && (
+                  <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                    <p className="text-[12px] font-semibold text-red-600 dark:text-red-400">{degradedServices} service{degradedServices > 1 ? "s" : ""} degraded or down — check details below</p>
+                  </div>
+                )}
+                {monitor && monitor.overall === "operational" && (
+                  <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                    <span className="w-2 h-2 rounded-full bg-green-500" />
+                    <p className="text-[12px] font-semibold text-green-600 dark:text-green-400">All systems operational</p>
+                  </div>
+                )}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
                   <div>
                     <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4]">System Monitoring</h2>
@@ -505,6 +622,18 @@ export default function DashboardPage() {
             {/* SUPPORT INBOX */}
             {tab === "support" && (
               <>
+                {unreadSupport > 0 && (
+                  <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800">
+                    <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+                    <p className="text-[12px] font-semibold text-orange-600 dark:text-orange-400">{unreadSupport} unread support message{unreadSupport > 1 ? "s" : ""} awaiting review</p>
+                  </div>
+                )}
+                {supportMessages.filter((m) => m.is_read && !m.is_replied).length > 0 && (
+                  <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <p className="text-[12px] font-semibold text-amber-600 dark:text-amber-400">{supportMessages.filter((m) => m.is_read && !m.is_replied).length} message{supportMessages.filter((m) => m.is_read && !m.is_replied).length > 1 ? "s" : ""} read but not yet replied</p>
+                  </div>
+                )}
                 <div className="flex items-center justify-between mb-5">
                   <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4]">
                     Support Inbox <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({supportMessages.length})</span>
@@ -568,17 +697,121 @@ export default function DashboardPage() {
               </>
             )}
 
+            {/* BROADCAST */}
+            {tab === "broadcast" && (
+              <>
+                <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4] mb-5">Broadcast to App Users</h2>
+
+                {/* Compose */}
+                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-5 mb-6">
+                  <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-4">New Broadcast</p>
+
+                  <div className="mb-3">
+                    <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">Target Audience</label>
+                    <div className="flex gap-2">
+                      {(["all", "customers", "merchants"] as const).map((t) => (
+                        <button key={t} onClick={() => setBroadcastTarget(t)} className={`px-4 py-2 rounded-lg text-[12px] font-semibold transition-colors ${broadcastTarget === t ? "bg-[#2F4366] dark:bg-[#7DA2D4] text-white dark:text-gray-900" : "bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"}`}>
+                          {t === "all" ? "Everyone" : t === "customers" ? "Customers Only" : "Businesses Only"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">Title</label>
+                    <input value={broadcastTitle} onChange={(e) => setBroadcastTitle(e.target.value)} placeholder="e.g. New Feature Available!" className="w-full h-10 px-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-[13px] text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-[#2F4366] dark:focus:border-[#7DA2D4]" />
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-1 block">Message</label>
+                    <textarea value={broadcastMessage} onChange={(e) => setBroadcastMessage(e.target.value)} placeholder="Write your message to all users..." rows={3} className="w-full px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-[13px] text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-[#2F4366] dark:focus:border-[#7DA2D4] resize-none" />
+                  </div>
+
+                  <button
+                    disabled={sendingBroadcast || !broadcastTitle.trim() || !broadcastMessage.trim()}
+                    onClick={async () => {
+                      setSendingBroadcast(true);
+                      try {
+                        await fetch("/api/data", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ type: "dev_broadcast", data: { title: broadcastTitle.trim(), message: broadcastMessage.trim(), target: broadcastTarget } }),
+                        });
+                        setBroadcastTitle(""); setBroadcastMessage(""); setBroadcastTarget("all");
+                      } catch {}
+                      setSendingBroadcast(false);
+                    }}
+                    className="h-11 px-6 rounded-lg bg-[#2F4366] dark:bg-[#7DA2D4] text-white dark:text-gray-900 text-[13px] font-semibold hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+                    {sendingBroadcast ? "Sending..." : "Send Broadcast"}
+                  </button>
+                </div>
+
+                {/* History */}
+                <p className="text-[13px] font-semibold text-[#2F4366] dark:text-[#7DA2D4] mb-3">Broadcast History</p>
+                {devBroadcasts.length === 0 ? (
+                  <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-12 text-center">
+                    <svg className="mx-auto mb-3 text-gray-300 dark:text-gray-600" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6"/></svg>
+                    <p className="text-gray-400 dark:text-gray-500 text-[13px] font-medium">No broadcasts sent yet</p>
+                    <p className="text-gray-300 dark:text-gray-600 text-[11px] mt-1">Messages you send will appear in both apps as notifications</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {devBroadcasts.map((b) => (
+                      <div key={b.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-200">{b.title}</p>
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-semibold ${b.target === "all" ? "bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400" : b.target === "customers" ? "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400" : "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400"}`}>
+                                {b.target === "all" ? "ALL USERS" : b.target === "customers" ? "CUSTOMERS" : "BUSINESSES"}
+                              </span>
+                            </div>
+                            <p className="text-[12px] text-gray-500 dark:text-gray-400">{b.message}</p>
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-2">{fmt(b.created_at)}</p>
+                          </div>
+                          <button
+                            onClick={async () => {
+                              if (!confirm("Delete this broadcast?")) return;
+                              await fetch("/api/data", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "dev_broadcast", id: b.id }) });
+                            }}
+                            className="w-8 h-8 rounded-lg hover:bg-red-50 dark:hover:bg-red-950 flex items-center justify-center shrink-0"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E74C3C" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
             {/* MAP */}
             {tab === "map" && (
               <>
                 <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4] mb-5">Store Locations</h2>
+                {merchantsNoLocation > 0 && (
+                  <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                    <p className="text-[12px] font-semibold text-amber-600 dark:text-amber-400">{merchantsNoLocation} business{merchantsNoLocation > 1 ? "es" : ""} ha{merchantsNoLocation > 1 ? "ve" : "s"} not set their store location yet</p>
+                  </div>
+                )}
                 <StoreMap merchants={merchantsWithLocation} onSelect={(m) => { setSelectedMerchant(m); setTab("merchants"); }} />
                 <p className="text-[12px] text-gray-400 dark:text-gray-500 mt-3">{merchantsWithLocation.length} of {merchants.length} stores have set their location</p>
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {merchantsWithLocation.map((m) => (
-                    <button key={m.id} onClick={() => { setSelectedMerchant(m); setTab("merchants"); }} className="text-left bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4 hover:border-[#2F4366]/30 dark:hover:border-[#7DA2D4]/30 transition-colors">
-                      <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-200">{m.business_name}</p>
-                      <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{[m.address, m.city].filter(Boolean).join(", ") || "No address"}</p>
+                    <button key={m.id} onClick={() => { setSelectedMerchant(m); setTab("merchants"); }} className="text-left bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4 hover:border-[#2F4366]/30 dark:hover:border-[#7DA2D4]/30 transition-colors flex items-center gap-3">
+                      {m.logo_url ? (
+                        <img src={m.logo_url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0 border-2 border-gray-100 dark:border-gray-700" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-[#2F4366] flex items-center justify-content shrink-0 text-white text-[13px] font-bold flex items-center justify-center">{m.business_name.charAt(0)}</div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-gray-800 dark:text-gray-200 truncate">{m.business_name}</p>
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5 truncate">{[m.address, m.city].filter(Boolean).join(", ") || "No address"}</p>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -589,6 +822,12 @@ export default function DashboardPage() {
             {tab === "customers" && (
               <>
                 <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4] mb-5">Customers <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({customers.length})</span></h2>
+                {newCustomersToday > 0 && (
+                  <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    <p className="text-[12px] font-semibold text-blue-600 dark:text-blue-400">{newCustomersToday} new customer{newCustomersToday > 1 ? "s" : ""} registered today</p>
+                  </div>
+                )}
                 <div className="sm:hidden space-y-2">
                   {customers.map((c, i) => (
                     <div key={c.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
@@ -634,6 +873,12 @@ export default function DashboardPage() {
               const displayMerchants = selectedDate === "all" ? merchants : merchants.filter((m) => m.created_at.startsWith(selectedDate));
               return (
               <>
+                {(newMerchantsToday > 0 || inactiveMerchants > 0) && (
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {newMerchantsToday > 0 && <NotifPill color="green" icon="🆕" text={`${newMerchantsToday} new business${newMerchantsToday > 1 ? "es" : ""} registered today`} />}
+                    {inactiveMerchants > 0 && <NotifPill color="red" icon="⚠️" text={`${inactiveMerchants} inactive business${inactiveMerchants > 1 ? "es" : ""}`} />}
+                  </div>
+                )}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
                   <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4]">Businesses <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({displayMerchants.length}{selectedDate !== "all" ? ` on ${dateLabel(selectedDate).toLowerCase()} · ${merchants.length} total` : " total"})</span></h2>
                   <div className="flex items-center gap-2 relative">
@@ -776,6 +1021,12 @@ export default function DashboardPage() {
                       <div><p className="text-gray-400 dark:text-gray-500">Phone</p><p className="text-gray-700 dark:text-gray-300 mt-0.5">{selectedMerchant.phone_number || "-"}</p></div>
                       <div><p className="text-gray-400 dark:text-gray-500">Location</p><p className="text-gray-700 dark:text-gray-300 mt-0.5">{selectedMerchant.latitude ? `${selectedMerchant.latitude.toFixed(5)}, ${selectedMerchant.longitude?.toFixed(5)}` : "Not set"}</p></div>
                     </div>
+                    {selectedMerchant.latitude && selectedMerchant.longitude && (
+                      <div className="mt-4">
+                        <p className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">Store Location</p>
+                        <StoreMap merchants={[selectedMerchant]} onSelect={() => {}} />
+                      </div>
+                    )}
                   </div>
 
                   {/* Subscription & Earnings */}
@@ -894,6 +1145,12 @@ export default function DashboardPage() {
             {tab === "rewards" && (
               <>
                 <h2 className="text-lg font-bold text-[#2F4366] dark:text-[#7DA2D4] mb-5">All Rewards <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({rewards.length})</span></h2>
+                {pendingRewardsCount > 0 && (
+                  <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800">
+                    <span className="w-2 h-2 rounded-full bg-purple-500" />
+                    <p className="text-[12px] font-semibold text-purple-600 dark:text-purple-400">{pendingRewardsCount} reward{pendingRewardsCount > 1 ? "s" : ""} pending redemption</p>
+                  </div>
+                )}
                 <div className="sm:hidden space-y-2">
                   {rewards.map((r: any) => (
                     <div key={r.id} className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 p-4">
@@ -1061,6 +1318,27 @@ function StatCard({ label, value }: { label: string; value: number }) {
   );
 }
 
+const notifColorMap: Record<string, string> = {
+  blue: "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400",
+  green: "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-600 dark:text-green-400",
+  orange: "bg-orange-50 dark:bg-orange-950 border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400",
+  red: "bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400",
+  purple: "bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400",
+  amber: "bg-amber-50 dark:bg-amber-950 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400",
+  indigo: "bg-indigo-50 dark:bg-indigo-950 border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400",
+};
+
+function NotifPill({ color, icon, text, onClick }: { color: string; icon: string; text: string; onClick?: () => void }) {
+  const cls = notifColorMap[color] || notifColorMap.blue;
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag onClick={onClick} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-semibold ${cls} ${onClick ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}>
+      <span>{icon}</span>
+      {text}
+    </Tag>
+  );
+}
+
 function Table({ heads, children }: { heads: string[]; children: React.ReactNode }) {
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 overflow-x-auto">
@@ -1160,8 +1438,17 @@ function StoreMap({ merchants, onSelect }: { merchants: Merchant[]; onSelect: (m
         merchants.forEach((m) => {
           if (!m.latitude || !m.longitude) return;
           const el = document.createElement("div");
-          el.style.cssText = "width:32px;height:32px;border-radius:50%;background:#2F4366;border:3px solid #fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.3);";
-          el.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/></svg>';
+          if (m.logo_url) {
+            el.style.cssText = "width:36px;height:36px;border-radius:50%;border:3px solid #fff;cursor:pointer;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.3);background:#2F4366;";
+            const img = document.createElement("img");
+            img.src = m.logo_url;
+            img.style.cssText = "width:100%;height:100%;object-fit:cover;";
+            img.onerror = () => { el.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="white" style="margin:auto"><path d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/></svg>'; el.style.display = "flex"; el.style.alignItems = "center"; el.style.justifyContent = "center"; };
+            el.appendChild(img);
+          } else {
+            el.style.cssText = "width:32px;height:32px;border-radius:50%;background:#2F4366;border:3px solid #fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.3);";
+            el.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/></svg>';
+          }
           el.title = m.business_name;
           const popup = new mgl.Popup({ offset: 20, closeButton: false }).setHTML(`<div style="font-family:system-ui;padding:4px 0"><strong style="color:#2F4366">${m.business_name}</strong><br/><span style="color:#888;font-size:11px">${[m.address, m.city].filter(Boolean).join(", ") || "No address"}</span></div>`);
           new mgl.Marker({ element: el }).setLngLat([m.longitude, m.latitude]).setPopup(popup).addTo(map);

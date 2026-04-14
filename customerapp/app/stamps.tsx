@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View, ScrollView, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { getStampRecordsForCard, getCustomerPendingRewards, deleteCustomerLoyaltyCard } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
 
 const REWARD_CARD_W = 130;
 
@@ -32,28 +33,36 @@ export default function StampsScreen() {
   const [pendingRewards, setPendingRewards] = useState<any[]>([]);
   const [deleting, setDeleting] = useState(false);
 
+  const loadStampData = async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+    if (params.loyaltyCardId) {
+      const { data } = await getStampRecordsForCard(params.loyaltyCardId);
+      setStampRecords(data || []);
+      setStampCount(data?.length || Number(params.collected || 0));
+    }
+    if (params.merchantId) {
+      const { data: rewards } = await getCustomerPendingRewards(params.merchantId);
+      setPendingRewards(rewards || []);
+    }
+    setLoading(false);
+  };
+
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      const load = async () => {
-        setLoading(true);
-        if (params.loyaltyCardId) {
-          const { data } = await getStampRecordsForCard(params.loyaltyCardId);
-          if (!cancelled) {
-            setStampRecords(data || []);
-            setStampCount(data?.length || Number(params.collected || 0));
-          }
-        }
-        if (params.merchantId) {
-          const { data: rewards } = await getCustomerPendingRewards(params.merchantId);
-          if (!cancelled) setPendingRewards(rewards || []);
-        }
-        if (!cancelled) setLoading(false);
-      };
-      load();
-      return () => { cancelled = true; };
+      loadStampData();
     }, [params.loyaltyCardId, params.merchantId])
   );
+
+  // Realtime: subscribe to stamp and reward changes for this card
+  useEffect(() => {
+    if (!params.loyaltyCardId) return;
+    const channel = supabase
+      .channel('stamps-realtime-' + params.loyaltyCardId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stamps', filter: `loyalty_card_id=eq.${params.loyaltyCardId}` }, () => loadStampData(false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'redeemed_rewards' }, () => loadStampData(false))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [params.loyaltyCardId]);
 
   const handleDeleteCard = () => {
     Alert.alert(

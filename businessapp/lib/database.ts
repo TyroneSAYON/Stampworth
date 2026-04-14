@@ -7,6 +7,24 @@ const AUTH_SESSION_MISSING = 'AUTH_SESSION_MISSING';
 const BACKEND_BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:3000';
 const BACKEND_TIMEOUT_MS = 10000;
 const SKIP_AUTH_MODE = process.env.EXPO_PUBLIC_SKIP_AUTH === 'true';
+const GOOGLE_MAPS_API_KEY = 'AIzaSyC2VkT6Kj7MY1W2ilwIjXevs5cTYJU7OXIc';
+
+const geocodeAddress = async (address: string): Promise<{ latitude: number; longitude: number } | null> => {
+  try {
+    const encoded = encodeURIComponent(address);
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encoded}&key=${GOOGLE_MAPS_API_KEY}`,
+    );
+    const data = await response.json();
+    if (data.status === 'OK' && data.results?.[0]?.geometry?.location) {
+      const { lat, lng } = data.results[0].geometry.location;
+      return { latitude: lat, longitude: lng };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
 
 type MerchantProfile = {
   id: string;
@@ -440,6 +458,13 @@ export const saveMerchantStoreSetup = async (payload: {
     website_url: payload.websiteUrl?.trim() || null,
     logo_url: logoUrl,
   };
+
+  // Geocode the address to get lat/lng for the map
+  const coords = await geocodeAddress(payload.address.trim());
+  if (coords) {
+    updatePayload.latitude = coords.latitude;
+    updatePayload.longitude = coords.longitude;
+  }
 
   if (payload.email?.trim()) {
     updatePayload.owner_email = payload.email.trim().toLowerCase();
@@ -1261,38 +1286,34 @@ export const saveMerchantLocation = async (latitude: number, longitude: number) 
   return { data, error };
 };
 
-// Get nearby customers who have location data
-export const getNearbyCustomersWithLocation = async (merchantId: string) => {
-  // Get all customers with loyalty cards at this merchant
-  const { data: cards } = await supabase
-    .from('loyalty_cards')
-    .select('customer_id')
-    .eq('merchant_id', merchantId);
+// Get all customers who have recent location data (active Stampworth users)
+export const getNearbyCustomersWithLocation = async (_merchantId: string) => {
+  // Get recent locations (last 30 minutes) to show active users
+  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
 
-  if (!cards || cards.length === 0) return { data: [], error: null };
+  const { data: locations } = await supabase
+    .from('user_locations')
+    .select('customer_id, latitude, longitude, created_at')
+    .gte('created_at', thirtyMinAgo)
+    .order('created_at', { ascending: false });
 
-  const customerIds = [...new Set(cards.map((c: any) => c.customer_id))];
+  if (!locations || locations.length === 0) return { data: [], error: null };
+
+  // Build map of latest location per customer
+  const locationMap = new Map<string, { latitude: number; longitude: number; updatedAt: string }>();
+  for (const loc of locations) {
+    if (!locationMap.has(loc.customer_id)) {
+      locationMap.set(loc.customer_id, { latitude: loc.latitude, longitude: loc.longitude, updatedAt: loc.created_at });
+    }
+  }
+
+  const customerIds = [...locationMap.keys()];
 
   // Get customer details
   const { data: customers } = await supabase
     .from('customers')
     .select('id, full_name, username, email')
     .in('id', customerIds);
-
-  // Get latest location for each customer
-  const { data: locations } = await supabase
-    .from('user_locations')
-    .select('customer_id, latitude, longitude, created_at')
-    .in('customer_id', customerIds)
-    .order('created_at', { ascending: false });
-
-  // Build map of latest location per customer
-  const locationMap = new Map<string, { latitude: number; longitude: number }>();
-  for (const loc of locations || []) {
-    if (!locationMap.has(loc.customer_id)) {
-      locationMap.set(loc.customer_id, { latitude: loc.latitude, longitude: loc.longitude });
-    }
-  }
 
   const result = (customers || [])
     .filter((c: any) => locationMap.has(c.id))

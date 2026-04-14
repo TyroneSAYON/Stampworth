@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Alert, ActivityIndicator, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -88,7 +88,7 @@ export default function StoreSetupScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -150,7 +150,7 @@ export default function StoreSetupScreen() {
           <Text style={styles.primaryButtonText}>{saving ? 'Saving...' : isEditMode ? 'Save Changes' : 'Save & Continue'}</Text>
         </TouchableOpacity>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

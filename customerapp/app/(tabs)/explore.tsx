@@ -1,9 +1,11 @@
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { getAllMerchants } from '@/lib/database';
+
+const NEARBY_THRESHOLD = 2000; // 2000m
 
 let Location: typeof import('expo-location') | null = null;
 try { Location = require('expo-location'); } catch {}
@@ -41,6 +43,9 @@ export default function ExploreScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [nearbyAlert, setNearbyAlert] = useState<Merchant | null>(null);
+  const dismissedNearbyRef = useRef<Set<string>>(new Set());
+  const nearbySlideAnim = useRef(new Animated.Value(-150)).current;
 
   useFocusEffect(
     useCallback(() => {
@@ -63,9 +68,28 @@ export default function ExploreScreen() {
     if (locationResult?.coords) {
       setUserLocation({ latitude: locationResult.coords.latitude, longitude: locationResult.coords.longitude });
     }
-    setMerchants(merchantsResult.data || []);
+    const allMerchants = merchantsResult.data || [];
+    setMerchants(allMerchants);
     setLoading(false);
     setLoaded(true);
+
+    // Check for nearby stores
+    if (locationResult?.coords) {
+      const loc = locationResult.coords;
+      for (const m of allMerchants) {
+        if (!m.latitude || !m.longitude || dismissedNearbyRef.current.has(m.id)) continue;
+        const toRad = (v: number) => (v * Math.PI) / 180;
+        const R = 6371000;
+        const dLat = toRad(m.latitude - loc.latitude);
+        const dLon = toRad(m.longitude - loc.longitude);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(loc.latitude)) * Math.cos(toRad(m.latitude)) * Math.sin(dLon / 2) ** 2;
+        const dist = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+        if (dist <= NEARBY_THRESHOLD) {
+          setNearbyAlert(m);
+          break;
+        }
+      }
+    }
   };
 
   const getDistance = (m: Merchant) => {
@@ -90,6 +114,20 @@ export default function ExploreScreen() {
     const dest = `${m.latitude},${m.longitude}`;
     const url = Platform.select({ ios: `maps://app?daddr=${dest}&dirflg=d`, android: `google.navigation:q=${dest}`, default: '' });
     if (url) Linking.canOpenURL(url).then((ok) => Linking.openURL(ok ? url : `https://www.google.com/maps/dir/?api=1&destination=${dest}`));
+  };
+
+  // Animate nearby alert
+  useEffect(() => {
+    if (nearbyAlert) {
+      Animated.spring(nearbySlideAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }).start();
+    } else {
+      Animated.timing(nearbySlideAnim, { toValue: -150, duration: 200, useNativeDriver: true }).start();
+    }
+  }, [nearbyAlert]);
+
+  const dismissNearbyAlert = () => {
+    if (nearbyAlert) dismissedNearbyRef.current.add(nearbyAlert.id);
+    setNearbyAlert(null);
   };
 
   const filtered = searchQuery.trim()
@@ -119,6 +157,7 @@ export default function ExploreScreen() {
       : { latitude: 14.5995, longitude: 120.9842, latitudeDelta: 0.08, longitudeDelta: 0.04 };
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <View style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
       {/* Header */}
       <View style={styles.header}>
@@ -130,6 +169,28 @@ export default function ExploreScreen() {
 
       <Text style={styles.pageTitle}>Explore</Text>
       <Text style={styles.pageSubtitle}>Discover Stampworth partner stores</Text>
+
+      {/* Nearby store alert */}
+      {nearbyAlert && (
+        <Animated.View style={[styles.nearbyBanner, { transform: [{ translateY: nearbySlideAnim }] }]}>
+          <TouchableOpacity style={styles.nearbyBannerInner} activeOpacity={0.85} onPress={() => { setSelectedMerchant(nearbyAlert); setModalVisible(true); dismissNearbyAlert(); }}>
+            <View style={styles.nearbyBannerIcon}>
+              {nearbyAlert.logo_url ? (
+                <Image source={{ uri: nearbyAlert.logo_url }} style={{ width: 36, height: 36, borderRadius: 18 }} contentFit="cover" />
+              ) : (
+                <Ionicons name="storefront" size={18} color="#FFFFFF" />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.nearbyBannerTitle}>Stampworth store nearby!</Text>
+              <Text style={styles.nearbyBannerText}>{nearbyAlert.business_name} is within {formatDist(getDistance(nearbyAlert))} from you</Text>
+            </View>
+            <TouchableOpacity onPress={dismissNearbyAlert} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={18} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {/* Search */}
       <View style={styles.searchRow}>
@@ -146,7 +207,7 @@ export default function ExploreScreen() {
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color="#2F4366" /><Text style={styles.loadingText}>Loading stores...</Text></View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Map or Location card */}
           {hasMap ? (
             <View style={styles.mapContainer}>
@@ -154,7 +215,11 @@ export default function ExploreScreen() {
                 {merchantsOnMap.map((m) => (
                   <MarkerComp key={m.id} coordinate={{ latitude: m.latitude!, longitude: m.longitude! }} title={m.business_name} description={formatDist(getDistance(m)) || formatAddress(m)} onPress={() => { setSelectedMerchant(m); setModalVisible(true); }}>
                     <View style={styles.markerPin}>
-                      <Ionicons name="storefront" size={14} color="#FFFFFF" />
+                      {m.logo_url ? (
+                        <Image source={{ uri: m.logo_url }} style={styles.markerLogo} contentFit="cover" />
+                      ) : (
+                        <Ionicons name="storefront" size={14} color="#FFFFFF" />
+                      )}
                     </View>
                   </MarkerComp>
                 ))}
@@ -284,6 +349,7 @@ export default function ExploreScreen() {
         </View>
       </Modal>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -308,7 +374,8 @@ const styles = StyleSheet.create({
   // Map
   mapContainer: { marginHorizontal: 24, height: 340, borderRadius: 16, overflow: 'hidden', marginBottom: 16 },
   map: { flex: 1 },
-  markerPin: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#2F4366', borderWidth: 2, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  markerPin: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2F4366', borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
+  markerLogo: { width: 36, height: 36, borderRadius: 18 },
 
   // Location card (Expo Go fallback)
   locationCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24, alignItems: 'center', marginBottom: 16, gap: 8 },
@@ -348,4 +415,11 @@ const styles = StyleSheet.create({
   navButtonText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Poppins-SemiBold' },
   noLocationBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F6F8FB', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8 },
   noLocationText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
+
+  // Nearby alert
+  nearbyBanner: { paddingHorizontal: 24, marginBottom: 12 },
+  nearbyBannerInner: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#27AE60', borderRadius: 16, padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
+  nearbyBannerIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  nearbyBannerTitle: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+  nearbyBannerText: { fontSize: 11, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.85)', marginTop: 1 },
 });

@@ -1,30 +1,48 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { getCustomerLoyaltyCards } from '@/lib/database';
+import { getCustomerLoyaltyCards, getOrCreateCustomerProfile } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
 
 export default function CardsScreen() {
   const [loading, setLoading] = useState(true);
   const [cards, setCards] = useState<any[]>([]);
+  const customerIdRef = useRef<string | null>(null);
+
+  const loadCards = async (showLoader = true) => {
+    if (showLoader && cards.length === 0) setLoading(true);
+    const { data, error } = await getCustomerLoyaltyCards();
+    if (error) console.warn('Cards load error:', error.message);
+    setCards(data || []);
+    setLoading(false);
+  };
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      const load = async () => {
-        setLoading(true);
-        const { data, error } = await getCustomerLoyaltyCards();
-        if (!cancelled) {
-          if (error) console.warn('Cards load error:', error.message);
-          setCards(data || []);
-          setLoading(false);
-        }
-      };
-      load();
-      return () => { cancelled = true; };
+      loadCards();
     }, [])
   );
+
+  // Realtime: subscribe to stamp/card changes for this customer
+  useEffect(() => {
+    let channel: any = null;
+    const setup = async () => {
+      const { data: customer } = await getOrCreateCustomerProfile();
+      if (!customer) return;
+      customerIdRef.current = customer.id;
+
+      channel = supabase
+        .channel('cards-realtime-' + customer.id)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'loyalty_cards', filter: `customer_id=eq.${customer.id}` }, () => loadCards(false))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'stamps' }, () => loadCards(false))
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'redeemed_rewards', filter: `customer_id=eq.${customer.id}` }, () => loadCards(false))
+        .subscribe();
+    };
+    setup();
+    return () => { if (channel) supabase.removeChannel(channel); };
+  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
@@ -100,6 +118,7 @@ export default function CardsScreen() {
             const iconName = card.stamp_settings?.stamp_icon_name || 'star';
             const iconImageUrl = card.stamp_settings?.stamp_icon_image_url || null;
             const collected = card.stamp_count || 0;
+            const rewardDesc = card.stamp_settings?.redemption_reward_description || null;
             const collectableSlots = total - 1;
             const pct = collectableSlots > 0 ? Math.min(100, (collected / collectableSlots) * 100) : 0;
             const hasFreeReward = card.is_free_redemption || collected >= collectableSlots;
@@ -149,7 +168,11 @@ export default function CardsScreen() {
                           : { backgroundColor: 'rgba(255,255,255,0.2)' },
                       ]}>
                         {isFree ? (
-                          <Text style={[styles.miniFree, { color }]}>F</Text>
+                          iconImageUrl ? (
+                            <Image source={{ uri: iconImageUrl }} style={{ width: 10, height: 10 }} contentFit="contain" tintColor="#E67E22" />
+                          ) : (
+                            <Ionicons name={iconName as any} size={10} color="#E67E22" />
+                          )
                         ) : isFilled ? (
                           iconImageUrl ? (
                             <Image source={{ uri: iconImageUrl }} style={{ width: 10, height: 10 }} contentFit="contain" />
@@ -165,6 +188,14 @@ export default function CardsScreen() {
                 <View style={styles.progressBg}>
                   <View style={[styles.progressFill, { width: `${pct}%` }]} />
                 </View>
+
+                {/* Reward description */}
+                {rewardDesc && (
+                  <View style={styles.rewardRow}>
+                    <Ionicons name="gift-outline" size={14} color="rgba(255,255,255,0.85)" />
+                    <Text style={styles.rewardDesc} numberOfLines={1}>Reward: {rewardDesc}</Text>
+                  </View>
+                )}
 
                 {hasFreeReward && (
                   <View style={styles.freeBadge}>
@@ -208,6 +239,9 @@ const styles = StyleSheet.create({
 
   progressBg: { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, overflow: 'hidden' },
   progressFill: { height: 5, backgroundColor: '#FFFFFF', borderRadius: 3 },
+
+  rewardRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  rewardDesc: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: 'rgba(255,255,255,0.9)', flex: 1 },
 
   freeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'stretch', marginTop: 12, backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
   freeText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#E67E22', letterSpacing: 0.5, flex: 1 },

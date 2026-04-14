@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Alert, ActivityIndicator, ScrollView, StyleSheet, View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -92,7 +92,7 @@ export default function ScanScreen() {
       <ThemedView style={styles.container}>
         <View style={styles.header}>
           <Image source={require('@/assets/images/stampworthb-logo.png')} style={styles.logo} contentFit="contain" />
-          <Text style={styles.brandName}>Stampworth</Text>
+          <Text style={styles.brandName}>Stampworth Business</Text>
         </View>
         <View style={styles.center}>
           <Ionicons name="camera-outline" size={48} color="#C4CAD4" />
@@ -106,12 +106,13 @@ export default function ScanScreen() {
   }
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ThemedView style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image source={require('@/assets/images/stampworthb-logo.png')} style={styles.logo} contentFit="contain" />
-          <Text style={styles.brandName}>Stampworth</Text>
+          <Text style={styles.brandName}>Stampworth Business</Text>
         </View>
         <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/(tabs)/options')}>
           <Ionicons name="storefront" size={18} color="#2F4366" />
@@ -219,6 +220,7 @@ export default function ScanScreen() {
         ) : null}
       </View>
     </ThemedView>
+    </KeyboardAvoidingView>
   );
 }
 

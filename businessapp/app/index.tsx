@@ -44,8 +44,7 @@ export default function LandingScreen() {
     <Pressable style={styles.container} onPress={handlePress}>
       <Animated.View style={[styles.content, { transform: [{ translateY }], opacity: Animated.multiply(opacity, screenOpacity) }]}>
         <Image source={require('@/assets/images/stampworthb-logo.png')} style={styles.logo} contentFit="contain" />
-        <Text style={styles.brand}>Stampworth</Text>
-        <Text style={styles.tagline}>Business</Text>
+        <Text style={styles.brand}>Stampworth Business</Text>
       </Animated.View>
       <Animated.View style={[styles.footer, { opacity: Animated.multiply(opacity, screenOpacity) }]}>
         <Text style={styles.tapText}>Tap anywhere to continue</Text>

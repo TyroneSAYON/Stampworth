@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View, Text, TouchableOpacity, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,24 +20,32 @@ export default function NotificationsScreen() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const customerIdRef = useRef<string | null>(null);
+
+  const loadAnnouncements = async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+    const { data: customer } = await getOrCreateCustomerProfile();
+    if (!customer) { setLoading(false); return; }
+    customerIdRef.current = customer.id;
+    const { data } = await getCustomerAnnouncements(customer.id);
+    setAnnouncements(data || []);
+    setLoading(false);
+  };
 
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      const load = async () => {
-        setLoading(true);
-        const { data: customer } = await getOrCreateCustomerProfile();
-        if (cancelled || !customer) { setLoading(false); return; }
-        const { data } = await getCustomerAnnouncements(customer.id);
-        if (!cancelled) {
-          setAnnouncements(data || []);
-          setLoading(false);
-        }
-      };
-      load();
-      return () => { cancelled = true; };
+      loadAnnouncements();
     }, [])
   );
+
+  // Realtime: subscribe to new announcements
+  useEffect(() => {
+    const channel = supabase
+      .channel('announcements-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'merchant_announcements' }, () => loadAnnouncements(false))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const toggleExpand = (id: string) => {
     setExpandedId(expandedId === id ? null : id);

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Alert, ActivityIndicator, StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList } from 'react-native';
+import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -77,12 +77,13 @@ export default function AnnouncementScreen() {
   };
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ThemedView style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Image source={require('@/assets/images/stampworthb-logo.png')} style={styles.logo} contentFit="contain" />
-          <Text style={styles.brandName}>Stampworth</Text>
+          <Text style={styles.brandName}>Stampworth Business</Text>
         </View>
         <TouchableOpacity style={styles.profileButton} onPress={() => router.push('/(tabs)/options')}>
           <Ionicons name="storefront" size={18} color="#2F4366" />
@@ -132,6 +133,7 @@ export default function AnnouncementScreen() {
         />
       )}
     </ThemedView>
+    </KeyboardAvoidingView>
   );
 }
 

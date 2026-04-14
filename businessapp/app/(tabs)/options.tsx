@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, TextInput, View, useColorScheme, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
 import { getMerchantDashboardSnapshot, resetLoyaltyProgram, sendSupportMessage } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
 
 export default function OptionsScreen() {
   const colorScheme = useColorScheme();
@@ -61,6 +62,24 @@ export default function OptionsScreen() {
       return () => { cancelled = true; };
     }, [])
   );
+
+  // Realtime: refresh stats when stamps/rewards change
+  useEffect(() => {
+    const channel = supabase
+      .channel('options-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stamps' }, () => {
+        getMerchantDashboardSnapshot().then(({ data }) => {
+          if (data) { setActiveUsers(data.stats.activeUsers); setStampsIssued(data.stats.stampsIssued); setRewardsRedeemed(data.stats.rewardsRedeemed); }
+        });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'redeemed_rewards' }, () => {
+        getMerchantDashboardSnapshot().then(({ data }) => {
+          if (data) { setRewardsRedeemed(data.stats.rewardsRedeemed); }
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const collectedStamps = Math.min(3, totalStamps - 1);
   const stamps = Array.from({ length: totalStamps }, (_, i) => ({
@@ -138,7 +157,7 @@ export default function OptionsScreen() {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Image source={require('@/assets/images/stampworthb-logo.png')} style={styles.logo} contentFit="contain" />
-            <Text style={styles.brandName}>Stampworth</Text>
+            <Text style={styles.brandName}>Stampworth Business</Text>
           </View>
         </View>
 

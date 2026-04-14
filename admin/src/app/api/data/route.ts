@@ -35,6 +35,7 @@ export async function GET() {
     const { data: loyaltyCards } = await supabaseAdmin.from("loyalty_cards").select("id, customer_id, merchant_id, stamp_count, total_stamps_earned, is_free_redemption, created_at").limit(5000);
     const { data: stampSettings } = await supabaseAdmin.from("stamp_settings").select("merchant_id, stamps_per_redemption, card_color, stamp_icon_name").limit(500);
     const { data: supportMessages } = await supabaseAdmin.from("support_messages").select("*").order("created_at", { ascending: false }).limit(500);
+    const { data: devBroadcasts } = await supabaseAdmin.from("dev_broadcasts").select("*").order("created_at", { ascending: false }).limit(100);
 
     // Build lookup maps
     const merchantMap = new Map((merchants || []).map((m) => [m.id, m]));
@@ -158,6 +159,7 @@ export async function GET() {
       merchantStats,
       analytics,
       supportMessages: supportMessages || [],
+      devBroadcasts: devBroadcasts || [],
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -203,6 +205,9 @@ export async function DELETE(req: NextRequest) {
     } else if (type === "support_message") {
       const { error } = await supabaseAdmin.from("support_messages").delete().eq("id", id);
       if (error) throw error;
+    } else if (type === "dev_broadcast") {
+      const { error } = await supabaseAdmin.from("dev_broadcasts").delete().eq("id", id);
+      if (error) throw error;
     } else {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
@@ -231,6 +236,26 @@ export async function PATCH(req: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { type, data } = await req.json();
+
+    if (type === "dev_broadcast") {
+      const { data: broadcast, error } = await supabaseAdmin
+        .from("dev_broadcasts")
+        .insert({ title: data.title, message: data.message, target: data.target || "all" })
+        .select("*")
+        .single();
+      if (error) throw error;
+      return NextResponse.json({ success: true, broadcast });
+    }
+
+    return NextResponse.json({ error: "Invalid type" }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

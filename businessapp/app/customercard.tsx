@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, FlatList, StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +12,7 @@ import {
   getPendingRewards,
   claimReward,
 } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
 
 const REWARD_CARD_WIDTH = 140;
 
@@ -42,6 +43,18 @@ export default function CustomerCardScreen() {
       if (customerId && merchantId) loadData();
     }, [customerId, merchantId])
   );
+
+  // Realtime: subscribe to stamp/reward changes for this customer+merchant
+  useEffect(() => {
+    if (!customerId || !merchantId) return;
+    const channel = supabase
+      .channel('biz-card-' + customerId + '-' + merchantId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stamps' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'redeemed_rewards', filter: `customer_id=eq.${customerId}` }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'loyalty_cards', filter: `customer_id=eq.${customerId}` }, () => loadData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [customerId, merchantId]);
 
   const loadData = async () => {
     // Only show full-screen loader on first load (not on refreshes after stamp ops)

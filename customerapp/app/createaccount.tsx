@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { signUp, signInWithOAuth } from '@/lib/auth';
@@ -31,7 +31,7 @@ export default function CreateAccountScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -85,7 +85,7 @@ export default function CreateAccountScreen() {
         </View>
         {socialLoading && <Text style={styles.socialLoadingText}>Creating account with {socialLoading}...</Text>}
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
