@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Modal } from 'react-native';
+import { Alert, ActivityIndicator, KeyboardAvoidingView, Linking, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -18,19 +18,28 @@ const NEARBY_REFRESH_MS = 15000; // refresh nearby customers every 15s
 let Location: typeof import('expo-location') | null = null;
 try { Location = require('expo-location'); } catch {}
 
-let MapView: any = null;
-let Marker: any = null;
-let Circle: any = null;
-let PROVIDER_GOOGLE: any = null;
-if (Platform.OS !== 'web') {
-  try {
-    const M = require('react-native-maps');
-    MapView = M.default;
-    Marker = M.Marker;
-    Circle = M.Circle;
-    PROVIDER_GOOGLE = M.PROVIDER_GOOGLE;
-  } catch {}
-}
+const GOOGLE_MAPS_KEY = 'AIzaSyC2VkT6Kj7MY1W2ilwIjXevs5cTYJU7OXIc';
+
+const buildStaticMapUrl = (
+  center: { latitude: number; longitude: number },
+  storePin: { lat: number; lng: number; label: string } | null,
+  customers: { lat: number; lng: number; inside: boolean }[],
+  size = '600x350',
+) => {
+  let url = `https://maps.googleapis.com/maps/api/staticmap?center=${center.latitude},${center.longitude}&zoom=15&size=${size}&scale=2&maptype=roadmap&key=${GOOGLE_MAPS_KEY}`;
+  if (storePin) {
+    url += `&markers=color:0x2F4366%7Clabel:${storePin.label}%7C${storePin.lat},${storePin.lng}`;
+  }
+  const insideCustomers = customers.filter((c) => c.inside);
+  const outsideCustomers = customers.filter((c) => !c.inside);
+  if (insideCustomers.length > 0) {
+    url += `&markers=color:0x27AE60%7Csize:small%7C${insideCustomers.map((c) => `${c.lat},${c.lng}`).join('%7C')}`;
+  }
+  if (outsideCustomers.length > 0) {
+    url += `&markers=color:0xE74C3C%7Csize:small%7C${outsideCustomers.map((c) => `${c.lat},${c.lng}`).join('%7C')}`;
+  }
+  return url;
+};
 
 type NearbyCustomer = { id: string; name: string; email: string; latitude: number; longitude: number; updatedAt?: string };
 
@@ -204,60 +213,39 @@ export default function ExploreScreen() {
             </View>
           )}
         </View>
-        {MapView ? (
-          <View style={styles.mapContainer}>
-            <MapView
-              key={`map-${merchantLat}-${merchantLng}-${geofenceRadius}`}
-              style={styles.map}
-              provider={PROVIDER_GOOGLE}
-              region={{ ...mapCenter, latitudeDelta: 0.02, longitudeDelta: 0.02 }}
-              showsUserLocation={!!userLocation}
-              showsMyLocationButton={false}
+        {(() => {
+          const customerPins = nearbyCustomers.map((c) => {
+            const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : null;
+            return { lat: c.latitude, lng: c.longitude, inside: dist !== null && dist <= geofenceRadius };
+          });
+          const storePin = merchantLat && merchantLng ? { lat: merchantLat, lng: merchantLng, label: 'S' } : null;
+          const mapUrl = buildStaticMapUrl(mapCenter, storePin, customerPins);
+
+          return (
+            <TouchableOpacity
+              style={styles.mapContainer}
+              activeOpacity={0.9}
+              onPress={() => {
+                if (merchantLat && merchantLng) {
+                  const url = Platform.select({
+                    ios: `maps://app?ll=${merchantLat},${merchantLng}`,
+                    android: `geo:${merchantLat},${merchantLng}?q=${merchantLat},${merchantLng}(${encodeURIComponent(merchantName)})`,
+                    default: `https://www.google.com/maps/@${merchantLat},${merchantLng},15z`,
+                  });
+                  if (url) Linking.openURL(url).catch(() => {});
+                }
+              }}
             >
+              <Image source={{ uri: mapUrl }} style={styles.map} contentFit="cover" />
               {merchantLat && merchantLng && (
-                <>
-                  <Marker
-                    coordinate={{ latitude: merchantLat, longitude: merchantLng }}
-                    title={merchantName}
-                    description={merchantAddress || 'Your store location'}
-                  >
-                    <View style={styles.storePin}>
-                      <Ionicons name="storefront" size={16} color="#FFFFFF" />
-                    </View>
-                  </Marker>
-                  <Circle
-                    center={{ latitude: merchantLat, longitude: merchantLng }}
-                    radius={geofenceRadius}
-                    strokeColor="rgba(47,67,102,0.5)"
-                    fillColor="rgba(47,67,102,0.08)"
-                    strokeWidth={2}
-                  />
-                </>
+                <View style={styles.mapOverlayBadge}>
+                  <Ionicons name="navigate" size={12} color="#FFFFFF" />
+                  <Text style={styles.mapOverlayText}>Tap to open in Maps</Text>
+                </View>
               )}
-              {nearbyCustomers.map((c) => {
-                const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : null;
-                const inside = dist !== null && dist <= geofenceRadius;
-                return (
-                  <Marker
-                    key={c.id}
-                    coordinate={{ latitude: c.latitude, longitude: c.longitude }}
-                    title={c.name}
-                    description={dist !== null ? `${dist}m away` : c.email}
-                  >
-                    <View style={[styles.customerPin, { backgroundColor: inside ? '#27AE60' : '#E74C3C' }]}>
-                      <Ionicons name="person" size={12} color="#FFFFFF" />
-                    </View>
-                  </Marker>
-                );
-              })}
-            </MapView>
-          </View>
-        ) : (
-          <View style={styles.mapPlaceholder}>
-            <Ionicons name="map-outline" size={36} color="#C4CAD4" />
-            <Text style={styles.placeholderText}>Map requires a dev build</Text>
-          </View>
-        )}
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* Pin / Radius controls */}
         <View style={styles.mapControls}>
@@ -507,12 +495,10 @@ const styles = StyleSheet.create({
   liveText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#27AE60', letterSpacing: 0.5 },
 
   // Map
-  mapContainer: { marginHorizontal: 24, height: 300, borderRadius: 16, overflow: 'hidden', marginBottom: 12 },
-  map: { flex: 1 },
-  storePin: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2F4366', borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
-  customerPin: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  mapPlaceholder: { marginHorizontal: 24, height: 180, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 8 },
-  placeholderText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
+  mapContainer: { marginHorizontal: 24, height: 220, borderRadius: 16, overflow: 'hidden', marginBottom: 12, backgroundColor: '#E8ECF1' },
+  map: { width: '100%', height: '100%' },
+  mapOverlayBadge: { position: 'absolute', bottom: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(47,67,102,0.85)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  mapOverlayText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
 
   mapControls: { paddingHorizontal: 24, marginBottom: 16 },
   pinButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, backgroundColor: '#2F4366' },
