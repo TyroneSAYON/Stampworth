@@ -4,7 +4,6 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
-import { GoogleMapView } from '@/components/google-map-view';
 import {
   getMerchantExploreAnalytics,
   searchCustomers,
@@ -18,6 +17,20 @@ const NEARBY_REFRESH_MS = 15000; // refresh nearby customers every 15s
 
 let Location: typeof import('expo-location') | null = null;
 try { Location = require('expo-location'); } catch {}
+
+let MapView: any = null;
+let Marker: any = null;
+let Circle: any = null;
+let PROVIDER_GOOGLE: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    const M = require('react-native-maps');
+    MapView = M.default;
+    Marker = M.Marker;
+    Circle = M.Circle;
+    PROVIDER_GOOGLE = M.PROVIDER_GOOGLE;
+  } catch {}
+}
 
 type NearbyCustomer = { id: string; name: string; email: string; latitude: number; longitude: number; updatedAt?: string };
 
@@ -191,35 +204,60 @@ export default function ExploreScreen() {
             </View>
           )}
         </View>
-        {(() => {
-          const mapMarkers: { id: string; latitude: number; longitude: number; title: string; description?: string; color: string; icon?: 'store' | 'person' }[] = [];
-
-          // Business store pin
-          if (merchantLat && merchantLng) {
-            mapMarkers.push({ id: 'store', latitude: merchantLat, longitude: merchantLng, title: merchantName, description: merchantAddress || 'Your store location', color: '#2F4366', icon: 'store' });
-          }
-
-          // Nearby customer pins
-          nearbyCustomers.forEach((c) => {
-            const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : null;
-            const inside = dist !== null && dist <= geofenceRadius;
-            mapMarkers.push({ id: c.id, latitude: c.latitude, longitude: c.longitude, title: c.name, description: dist !== null ? `${dist}m away` : c.email, color: inside ? '#27AE60' : '#E74C3C', icon: 'person' });
-          });
-
-          const mapCircle = merchantLat && merchantLng ? { latitude: merchantLat, longitude: merchantLng, radius: geofenceRadius } : null;
-
-          return (
-            <GoogleMapView
-              style={styles.mapContainer}
-              center={mapCenter}
-              zoom={15}
-              markers={mapMarkers}
-              circle={mapCircle}
-              showUserLocation={!!userLocation}
-              userLocation={userLocation}
-            />
-          );
-        })()}
+        {MapView ? (
+          <View style={styles.mapContainer}>
+            <MapView
+              key={`map-${merchantLat}-${merchantLng}-${geofenceRadius}`}
+              style={styles.map}
+              provider={PROVIDER_GOOGLE}
+              region={{ ...mapCenter, latitudeDelta: 0.02, longitudeDelta: 0.02 }}
+              showsUserLocation={!!userLocation}
+              showsMyLocationButton={false}
+            >
+              {merchantLat && merchantLng && (
+                <>
+                  <Marker
+                    coordinate={{ latitude: merchantLat, longitude: merchantLng }}
+                    title={merchantName}
+                    description={merchantAddress || 'Your store location'}
+                  >
+                    <View style={styles.storePin}>
+                      <Ionicons name="storefront" size={16} color="#FFFFFF" />
+                    </View>
+                  </Marker>
+                  <Circle
+                    center={{ latitude: merchantLat, longitude: merchantLng }}
+                    radius={geofenceRadius}
+                    strokeColor="rgba(47,67,102,0.5)"
+                    fillColor="rgba(47,67,102,0.08)"
+                    strokeWidth={2}
+                  />
+                </>
+              )}
+              {nearbyCustomers.map((c) => {
+                const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : null;
+                const inside = dist !== null && dist <= geofenceRadius;
+                return (
+                  <Marker
+                    key={c.id}
+                    coordinate={{ latitude: c.latitude, longitude: c.longitude }}
+                    title={c.name}
+                    description={dist !== null ? `${dist}m away` : c.email}
+                  >
+                    <View style={[styles.customerPin, { backgroundColor: inside ? '#27AE60' : '#E74C3C' }]}>
+                      <Ionicons name="person" size={12} color="#FFFFFF" />
+                    </View>
+                  </Marker>
+                );
+              })}
+            </MapView>
+          </View>
+        ) : (
+          <View style={styles.mapPlaceholder}>
+            <Ionicons name="map-outline" size={36} color="#C4CAD4" />
+            <Text style={styles.placeholderText}>Map requires a dev build</Text>
+          </View>
+        )}
 
         {/* Pin / Radius controls */}
         <View style={styles.mapControls}>
@@ -470,6 +508,11 @@ const styles = StyleSheet.create({
 
   // Map
   mapContainer: { marginHorizontal: 24, height: 300, borderRadius: 16, overflow: 'hidden', marginBottom: 12 },
+  map: { flex: 1 },
+  storePin: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2F4366', borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
+  customerPin: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  mapPlaceholder: { marginHorizontal: 24, height: 180, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 8 },
+  placeholderText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
 
   mapControls: { paddingHorizontal: 24, marginBottom: 16 },
   pinButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, backgroundColor: '#2F4366' },
