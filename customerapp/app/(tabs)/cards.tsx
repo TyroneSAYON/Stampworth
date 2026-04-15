@@ -10,6 +10,7 @@ export default function CardsScreen() {
   const [loading, setLoading] = useState(true);
   const [cards, setCards] = useState<any[]>([]);
   const customerIdRef = useRef<string | null>(null);
+  const loadedRef = useRef(false);
 
   const loadCards = async (showLoader = true) => {
     if (showLoader && cards.length === 0) setLoading(true);
@@ -17,15 +18,21 @@ export default function CardsScreen() {
     if (error) console.warn('Cards load error:', error.message);
     setCards(data || []);
     setLoading(false);
+    loadedRef.current = true;
   };
 
   useFocusEffect(
     useCallback(() => {
+      if (loadedRef.current) {
+        // Silently refresh in background — no loading spinner
+        loadCards(false);
+        return;
+      }
       loadCards();
     }, [])
   );
 
-  // Realtime: subscribe to stamp/card changes for this customer
+  // Realtime: listen to transactions table (fires on every stamp add/remove/redeem)
   useEffect(() => {
     let channel: any = null;
     const setup = async () => {
@@ -35,9 +42,11 @@ export default function CardsScreen() {
 
       channel = supabase
         .channel('cards-realtime-' + customer.id)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'loyalty_cards', filter: `customer_id=eq.${customer.id}` }, () => loadCards(false))
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'stamps' }, () => loadCards(false))
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'redeemed_rewards', filter: `customer_id=eq.${customer.id}` }, () => loadCards(false))
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customer.id}` },
+          () => { loadCards(false); }
+        )
         .subscribe();
     };
     setup();

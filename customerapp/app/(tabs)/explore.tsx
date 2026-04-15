@@ -211,7 +211,7 @@ export default function ExploreScreen() {
           {/* Map or Location card */}
           {hasMap ? (
             <View style={styles.mapContainer}>
-              <MapView style={styles.map} initialRegion={mapRegion} showsUserLocation={!!userLocation} showsMyLocationButton={false}>
+              <MapView key={`map-${merchantsOnMap.length}`} style={styles.map} region={mapRegion} showsUserLocation={!!userLocation} showsMyLocationButton={false}>
                 {merchantsOnMap.map((m) => (
                   <MarkerComp key={m.id} coordinate={{ latitude: m.latitude!, longitude: m.longitude! }} title={m.business_name} description={formatDist(getDistance(m)) || formatAddress(m)} onPress={() => { setSelectedMerchant(m); setModalVisible(true); }}>
                     <View style={styles.markerPin}>

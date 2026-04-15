@@ -53,16 +53,27 @@ export default function StampsScreen() {
     }, [params.loyaltyCardId, params.merchantId])
   );
 
-  // Realtime: subscribe to stamp and reward changes for this card
+  // Realtime: listen to transactions for this customer's stamp changes
   useEffect(() => {
-    if (!params.loyaltyCardId) return;
-    const channel = supabase
-      .channel('stamps-realtime-' + params.loyaltyCardId)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stamps', filter: `loyalty_card_id=eq.${params.loyaltyCardId}` }, () => loadStampData(false))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'redeemed_rewards' }, () => loadStampData(false))
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [params.loyaltyCardId]);
+    if (!params.merchantId) return;
+    let channel: any = null;
+    const setup = async () => {
+      const { getOrCreateCustomerProfile } = await import('@/lib/database');
+      const { data: customer } = await getOrCreateCustomerProfile();
+      if (!customer) return;
+
+      channel = supabase
+        .channel('stamps-realtime-' + params.loyaltyCardId)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customer.id}` },
+          () => { loadStampData(false); }
+        )
+        .subscribe();
+    };
+    setup();
+    return () => { if (channel) supabase.removeChannel(channel); };
+  }, [params.loyaltyCardId, params.merchantId]);
 
   const handleDeleteCard = () => {
     Alert.alert(

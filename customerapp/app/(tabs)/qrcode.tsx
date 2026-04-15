@@ -24,9 +24,19 @@ export default function QRCodeScreen() {
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [selectedNotif, setSelectedNotif] = useState<Announcement | null>(null);
   const dropdownAnim = useRef(new Animated.Value(0)).current;
+  const loadedRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
+      // Only do full load once — QR code and profile don't change between tab switches
+      if (loadedRef.current) {
+        // Just refresh announcements silently in background
+        if (customerId) {
+          getCustomerAnnouncements(customerId).then(({ data }) => setAnnouncements(data || []));
+        }
+        return;
+      }
+
       let cancelled = false;
       const load = async () => {
         setLoading(true);
@@ -55,11 +65,12 @@ export default function QRCodeScreen() {
           setCustomerId(customer.id);
           setCustomerCode(customer.id.slice(0, 8).toUpperCase());
           setLoading(false);
+          loadedRef.current = true;
         }
       };
       load();
       return () => { cancelled = true; };
-    }, [])
+    }, [customerId])
   );
 
   // Realtime: auto-navigate to card when merchant scans and performs an action

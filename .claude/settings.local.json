@@ -8,7 +8,9 @@
       "Bash(node -e \":*)",
       "Bash(npx sharp-cli:*)",
       "Bash(npx -y sharp -i customerapp/assets/images/stampworth-logo.png -o customerapp/assets/images/adaptive-icon.png resize 288 288 -- extend 72 72 72 72 --extendBackground \"rgba\\(255,255,255,0\\)\"2)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "Bash(node -e \"const p = require\\(''./package.json''\\); console.log\\(Object.keys\\(p.dependencies\\).filter\\(d => d.includes\\(''webview''\\)\\).join\\('', ''\\) || ''not installed''\\)\")",
+      "Bash(npx expo:*2)"
     ]
   }
 }
