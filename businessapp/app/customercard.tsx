@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, FlatList, StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Modal, StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -12,7 +12,6 @@ import {
   getPendingRewards,
   claimReward,
 } from '@/lib/database';
-import { supabase } from '@/lib/supabase';
 
 const REWARD_CARD_WIDTH = 140;
 
@@ -37,6 +36,7 @@ export default function CustomerCardScreen() {
   const [stampRecords, setStampRecords] = useState<{ id: string; earned_date: string }[]>([]);
   const [pendingRewards, setPendingRewards] = useState<PendingReward[]>([]);
   const [stampQty, setStampQty] = useState(0);
+  const [rewardModal, setRewardModal] = useState<{ name: string; reward: string; code: string } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -44,20 +44,7 @@ export default function CustomerCardScreen() {
     }, [customerId, merchantId])
   );
 
-  // Realtime: subscribe to stamp/reward changes for this customer+merchant
-  useEffect(() => {
-    if (!customerId || !merchantId) return;
-    const channel = supabase
-      .channel('biz-card-' + customerId + '-' + merchantId)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stamps' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'redeemed_rewards', filter: `customer_id=eq.${customerId}` }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'loyalty_cards', filter: `customer_id=eq.${customerId}` }, () => loadData())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [customerId, merchantId]);
-
   const loadData = async () => {
-    // Only show full-screen loader on first load (not on refreshes after stamp ops)
     if (stampCount === 0 && stampRecords.length === 0) setLoading(true);
     const { data, error } = await getCustomerLoyaltyCardProgress(merchantId!, customerId!);
     if (error || !data) { Alert.alert('Error', error?.message || 'Could not load card.'); setLoading(false); return; }
@@ -79,6 +66,25 @@ export default function CustomerCardScreen() {
     setPendingRewards(rewards || []);
     setStampQty(0);
     setLoading(false);
+
+    // Auto-trigger reward if card is already full but wasn't reset
+    const spr = data.stampsPerRedemption || 10;
+    if (data.stampCount >= spr - 1 && data.stampCount > 0) {
+      const rewardResult = await storeCustomerReward(merchantId!, customerId!);
+      if (rewardResult?.data) {
+        const desc = rewardResult.data.rewardDescription || data.rewardDescription || 'Free Reward';
+        setRewardModal({ name: data.customer.full_name || 'Customer', reward: desc, code: rewardResult.data.rewardCode });
+        // Refresh to show reset state
+        const { data: freshData } = await getCustomerLoyaltyCardProgress(merchantId!, customerId!);
+        if (freshData) {
+          setStampCount(freshData.stampCount);
+          const { data: freshRecords } = await getStampRecords(merchantId!, customerId!);
+          setStampRecords(freshRecords || []);
+          const { data: freshRewards } = await getPendingRewards(merchantId!, customerId!);
+          setPendingRewards(freshRewards || []);
+        }
+      }
+    }
   };
 
   const renderIcon = (size: number, color: string) => {
@@ -92,9 +98,6 @@ export default function CustomerCardScreen() {
   const handleOkay = async () => {
     if (!merchantId || !customerId || stampQty <= 0) return;
     setStamping(true);
-    // Optimistic update
-    const optimisticCount = stampCount + stampQty;
-    setStampCount(optimisticCount);
     const qty = stampQty;
     setStampQty(0);
 
@@ -104,24 +107,23 @@ export default function CustomerCardScreen() {
       if (error) { Alert.alert('Failed', error.message); break; }
       if (data?.freeRedemptionReached) {
         freeReached = true;
-        await storeCustomerReward(merchantId, customerId);
+        const rewardResult = await storeCustomerReward(merchantId, customerId);
+        const desc = rewardResult?.data?.rewardDescription || rewardDescription || 'Free Reward';
+        setRewardModal({ name: customerName, reward: desc, code: rewardResult?.data?.rewardCode || '' });
         break;
       }
     }
     setStamping(false);
-    // Refresh in background (don't await — UI already updated)
-    if (freeReached) await loadData();
-    else loadData();
+    await loadData();
   };
 
   const handleRemoveOne = async () => {
     if (!merchantId || !customerId || stampCount <= 0) return;
     setStamping(true);
-    setStampCount(stampCount - 1); // Optimistic
     const { error } = await removeLatestStampForCustomer(merchantId, customerId, (source as 'QR' | 'MANUAL') || 'QR', reference);
     setStamping(false);
-    if (error) { Alert.alert('Failed', error.message); setStampCount(stampCount); return; }
-    loadData(); // Background refresh
+    if (error) { Alert.alert('Failed', error.message); return; }
+    await loadData();
   };
 
   const handleClaim = (reward: PendingReward) => {
@@ -270,6 +272,28 @@ export default function CustomerCardScreen() {
           {stamping ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.okayText}>Okay</Text>}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Reward earned modal */}
+      <Modal visible={!!rewardModal} transparent animationType="fade">
+        <View style={styles.rewardOverlay}>
+          <View style={styles.rewardModalCard}>
+            <View style={[styles.rewardIconBg, { backgroundColor: `${cardColor}14` }]}>
+              <Ionicons name="gift" size={32} color={cardColor} />
+            </View>
+            <Text style={styles.rewardTitle}>Reward Unlocked</Text>
+            <Text style={styles.rewardName}>{rewardModal?.name}</Text>
+            <View style={styles.rewardDivider} />
+            <Text style={styles.rewardLabel}>REWARD</Text>
+            <Text style={[styles.rewardValue, { color: cardColor }]}>{rewardModal?.reward}</Text>
+            <Text style={styles.rewardLabel}>CODE</Text>
+            <Text style={styles.rewardCode}>{rewardModal?.code}</Text>
+            <Text style={styles.rewardNote}>Card has been reset</Text>
+            <TouchableOpacity style={[styles.rewardBtn, { backgroundColor: cardColor }]} onPress={() => setRewardModal(null)}>
+              <Text style={styles.rewardBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -325,4 +349,18 @@ const styles = StyleSheet.create({
   // Okay
   okayBtn: { height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', marginHorizontal: 48 },
   okayText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600', fontFamily: 'Poppins-SemiBold' },
+
+  // Reward modal
+  rewardOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
+  rewardModalCard: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 24, padding: 32, alignItems: 'center' },
+  rewardIconBg: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  rewardTitle: { fontSize: 20, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E', marginBottom: 4 },
+  rewardName: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginBottom: 20 },
+  rewardDivider: { width: 40, height: 2, backgroundColor: '#F0F2F5', borderRadius: 1, marginBottom: 20 },
+  rewardLabel: { fontSize: 9, fontFamily: 'Poppins-SemiBold', color: '#B0B8C4', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 },
+  rewardValue: { fontSize: 16, fontFamily: 'Poppins-SemiBold', marginBottom: 16 },
+  rewardCode: { fontSize: 18, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E', letterSpacing: 2, marginBottom: 16 },
+  rewardNote: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#C4CAD4', marginBottom: 24 },
+  rewardBtn: { width: '100%', height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  rewardBtnText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Poppins-SemiBold' },
 });

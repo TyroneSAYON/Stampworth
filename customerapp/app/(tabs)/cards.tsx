@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { getCustomerLoyaltyCards, getOrCreateCustomerProfile } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
@@ -10,47 +10,41 @@ export default function CardsScreen() {
   const [loading, setLoading] = useState(true);
   const [cards, setCards] = useState<any[]>([]);
   const customerIdRef = useRef<string | null>(null);
-  const loadedRef = useRef(false);
 
-  const loadCards = async (showLoader = true) => {
-    if (showLoader && cards.length === 0) setLoading(true);
+  const initialLoadDone = useRef(false);
+
+  const loadCards = async () => {
     const { data, error } = await getCustomerLoyaltyCards();
     if (error) console.warn('Cards load error:', error.message);
     setCards(data || []);
     setLoading(false);
-    loadedRef.current = true;
+    initialLoadDone.current = true;
   };
 
-  useFocusEffect(
-    useCallback(() => {
-      if (loadedRef.current) {
-        // Silently refresh in background — no loading spinner
-        loadCards(false);
-        return;
-      }
-      loadCards();
-    }, [])
-  );
+  // Load once on first mount only
+  useEffect(() => { loadCards(); }, []);
 
-  // Realtime: listen to transactions table (fires on every stamp add/remove/redeem)
+  // Realtime: single listener, waits for all stamps then refreshes once
   useEffect(() => {
     let channel: any = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const setup = async () => {
       const { data: customer } = await getOrCreateCustomerProfile();
       if (!customer) return;
       customerIdRef.current = customer.id;
-
       channel = supabase
-        .channel('cards-realtime-' + customer.id)
-        .on(
-          'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customer.id}` },
-          () => { loadCards(false); }
-        )
+        .channel('cards-rt-' + customer.id)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customer.id}` }, () => {
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => loadCards(), 2000);
+        })
         .subscribe();
     };
     setup();
-    return () => { if (channel) supabase.removeChannel(channel); };
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   return (
@@ -126,8 +120,8 @@ export default function CardsScreen() {
             const total = card.stamp_settings?.stamps_per_redemption || 10;
             const iconName = card.stamp_settings?.stamp_icon_name || 'star';
             const iconImageUrl = card.stamp_settings?.stamp_icon_image_url || null;
-            const collected = card.stamp_count || 0;
             const rewardDesc = card.stamp_settings?.redemption_reward_description || null;
+            const collected = card.stamp_count || 0;
             const collectableSlots = total - 1;
             const pct = collectableSlots > 0 ? Math.min(100, (collected / collectableSlots) * 100) : 0;
             const hasFreeReward = card.is_free_redemption || collected >= collectableSlots;
@@ -153,8 +147,8 @@ export default function CardsScreen() {
                 <View style={styles.cardRow}>
                   <View style={styles.cardIcon}>
                     {card.merchants?.logo_url
-                      ? <Image source={{ uri: card.merchants.logo_url }} style={{ width: 36, height: 36, borderRadius: 18 }} contentFit="cover" />
-                      : <Ionicons name="business" size={18} color="#FFFFFF" />
+                      ? <Image source={{ uri: card.merchants.logo_url }} style={{ width: 32, height: 32, borderRadius: 16 }} contentFit="cover" />
+                      : <Ionicons name="business" size={16} color="#FFFFFF" />
                     }
                   </View>
                   <View style={{ flex: 1 }}>
@@ -178,15 +172,15 @@ export default function CardsScreen() {
                       ]}>
                         {isFree ? (
                           iconImageUrl ? (
-                            <Image source={{ uri: iconImageUrl }} style={{ width: 10, height: 10 }} contentFit="contain" tintColor="#E67E22" />
+                            <Image source={{ uri: iconImageUrl }} style={{ width: 8, height: 8 }} contentFit="contain" tintColor="#E67E22" />
                           ) : (
-                            <Ionicons name={iconName as any} size={10} color="#E67E22" />
+                            <Ionicons name={iconName as any} size={8} color="#E67E22" />
                           )
                         ) : isFilled ? (
                           iconImageUrl ? (
-                            <Image source={{ uri: iconImageUrl }} style={{ width: 10, height: 10 }} contentFit="contain" />
+                            <Image source={{ uri: iconImageUrl }} style={{ width: 8, height: 8 }} contentFit="contain" />
                           ) : (
-                            <Ionicons name={iconName as any} size={10} color={color} />
+                            <Ionicons name={iconName as any} size={8} color={color} />
                           )
                         ) : null}
                       </View>
@@ -235,25 +229,25 @@ const styles = StyleSheet.create({
   emptySubtext: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
   scroll: { paddingHorizontal: 24, paddingBottom: 120 },
 
-  card: { borderRadius: 18, padding: 18, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5 },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  cardIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  cardMerchant: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
-  cardSub: { fontSize: 10, color: 'rgba(255,255,255,0.65)', fontFamily: 'Poppins-Regular' },
-  cardStamps: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
+  card: { borderRadius: 16, padding: 14, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  cardIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  cardMerchant: { fontSize: 14, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
+  cardSub: { fontSize: 9, color: 'rgba(255,255,255,0.65)', fontFamily: 'Poppins-Regular' },
+  cardStamps: { fontSize: 13, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Poppins-SemiBold' },
 
-  miniGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 12 },
-  miniCircle: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  miniFree: { fontSize: 7, fontFamily: 'Poppins-SemiBold' },
+  miniGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginBottom: 8 },
+  miniCircle: { width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  miniFree: { fontSize: 6, fontFamily: 'Poppins-SemiBold' },
 
-  progressBg: { height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: 5, backgroundColor: '#FFFFFF', borderRadius: 3 },
+  progressBg: { height: 4, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: 4, backgroundColor: '#FFFFFF', borderRadius: 2 },
 
-  rewardRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  rewardDesc: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: 'rgba(255,255,255,0.9)', flex: 1 },
+  rewardRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  rewardDesc: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: 'rgba(255,255,255,0.9)', flex: 1 },
 
-  freeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'stretch', marginTop: 12, backgroundColor: '#FFFFFF', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
-  freeText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#E67E22', letterSpacing: 0.5, flex: 1 },
+  freeBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'stretch', marginTop: 8, backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  freeText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#E67E22', letterSpacing: 0.5, flex: 1 },
 
   // Free redemption banner
   redeemBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginBottom: 16, backgroundColor: '#FFF8F0', borderRadius: 14, padding: 14, gap: 12, borderWidth: 1.5, borderColor: '#F5D5B0' },

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Alert, ActivityIndicator, KeyboardAvoidingView, Linking, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Modal } from 'react-native';
+import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -18,32 +18,41 @@ const NEARBY_REFRESH_MS = 15000; // refresh nearby customers every 15s
 let Location: typeof import('expo-location') | null = null;
 try { Location = require('expo-location'); } catch {}
 
-const GOOGLE_MAPS_KEY = 'AIzaSyC2VkT6Kj7MY1W2ilwIjXevs5cTYJU7OXIc';
+let WebView: any = null;
+try { WebView = require('react-native-webview').default; } catch {}
 
-const buildStaticMapUrl = (
+const buildLeafletHtml = (
   center: { latitude: number; longitude: number },
-  storePin: { lat: number; lng: number; label: string } | null,
-  customers: { lat: number; lng: number; inside: boolean }[],
-  size = '600x350',
-) => {
-  let url = `https://maps.googleapis.com/maps/api/staticmap?center=${center.latitude},${center.longitude}&zoom=15&size=${size}&scale=2&maptype=roadmap&key=${GOOGLE_MAPS_KEY}`;
-  if (storePin) {
-    url += `&markers=color:0x2F4366%7Clabel:${storePin.label}%7C${storePin.lat},${storePin.lng}`;
-  }
-  const insideCustomers = customers.filter((c) => c.inside);
-  const outsideCustomers = customers.filter((c) => !c.inside);
-  if (insideCustomers.length > 0) {
-    url += `&markers=color:0x27AE60%7Csize:small%7C${insideCustomers.map((c) => `${c.lat},${c.lng}`).join('%7C')}`;
-  }
-  if (outsideCustomers.length > 0) {
-    url += `&markers=color:0xE74C3C%7Csize:small%7C${outsideCustomers.map((c) => `${c.lat},${c.lng}`).join('%7C')}`;
-  }
-  return url;
-};
+  storePin: { lat: number; lng: number; name: string; address: string } | null,
+  customers: { id: string; lat: number; lng: number; name: string; dist: number | null; inside: boolean }[],
+  radius: number,
+  userLoc: { latitude: number; longitude: number } | null,
+) => `<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+<style>html,body,#map{width:100%;height:100%;margin:0;padding:0;}</style>
+</head><body>
+<div id="map"></div>
+<script>
+var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${center.latitude},${center.longitude}],15);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+${storePin ? `
+L.circleMarker([${storePin.lat},${storePin.lng}],{radius:14,fillColor:'#2F4366',color:'#fff',weight:3,fillOpacity:1}).addTo(map).bindPopup('<b>${storePin.name.replace(/'/g, "\\'")}</b><br/>${storePin.address.replace(/'/g, "\\'")}');
+L.circle([${storePin.lat},${storePin.lng}],{radius:${radius},color:'#2F4366',fillColor:'#2F4366',fillOpacity:0.08,weight:2}).addTo(map);
+` : ''}
+${customers.map((c) => `
+L.circleMarker([${c.lat},${c.lng}],{radius:8,fillColor:'${c.inside ? '#27AE60' : '#E74C3C'}',color:'#fff',weight:2,fillOpacity:1}).addTo(map).bindPopup('<b>${c.name.replace(/'/g, "\\'")}</b><br/>${c.dist !== null ? c.dist + 'm away' : ''}');
+`).join('')}
+${userLoc ? `L.circleMarker([${userLoc.latitude},${userLoc.longitude}],{radius:6,fillColor:'#4285F4',color:'#fff',weight:3,fillOpacity:1}).addTo(map);` : ''}
+<\/script>
+</body></html>`;
 
 type NearbyCustomer = { id: string; name: string; email: string; latitude: number; longitude: number; updatedAt?: string };
 
 export default function ExploreScreen() {
+  const [mapFullscreen, setMapFullscreen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [merchantId, setMerchantId] = useState<string | null>(null);
   const [merchantName, setMerchantName] = useState('Your Store');
@@ -213,39 +222,40 @@ export default function ExploreScreen() {
             </View>
           )}
         </View>
-        {(() => {
-          const customerPins = nearbyCustomers.map((c) => {
-            const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : null;
-            return { lat: c.latitude, lng: c.longitude, inside: dist !== null && dist <= geofenceRadius };
-          });
-          const storePin = merchantLat && merchantLng ? { lat: merchantLat, lng: merchantLng, label: 'S' } : null;
-          const mapUrl = buildStaticMapUrl(mapCenter, storePin, customerPins);
-
-          return (
-            <TouchableOpacity
-              style={styles.mapContainer}
-              activeOpacity={0.9}
-              onPress={() => {
-                if (merchantLat && merchantLng) {
-                  const url = Platform.select({
-                    ios: `maps://app?ll=${merchantLat},${merchantLng}`,
-                    android: `geo:${merchantLat},${merchantLng}?q=${merchantLat},${merchantLng}(${encodeURIComponent(merchantName)})`,
-                    default: `https://www.google.com/maps/@${merchantLat},${merchantLng},15z`,
-                  });
-                  if (url) Linking.openURL(url).catch(() => {});
-                }
-              }}
-            >
-              <Image source={{ uri: mapUrl }} style={styles.map} contentFit="cover" />
-              {merchantLat && merchantLng && (
-                <View style={styles.mapOverlayBadge}>
-                  <Ionicons name="navigate" size={12} color="#FFFFFF" />
-                  <Text style={styles.mapOverlayText}>Tap to open in Maps</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+        {WebView ? (() => {
+          const mapHtml = buildLeafletHtml(
+            mapCenter,
+            merchantLat && merchantLng ? { lat: merchantLat, lng: merchantLng, name: merchantName, address: merchantAddress || 'Your store' } : null,
+            nearbyCustomers.map((c) => {
+              const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : null;
+              return { id: c.id, lat: c.latitude, lng: c.longitude, name: c.name, dist, inside: dist !== null && dist <= geofenceRadius };
+            }),
+            geofenceRadius,
+            userLocation,
           );
-        })()}
+          return (
+            <View style={styles.mapContainer}>
+              <WebView
+                key={`map-${merchantLat}-${merchantLng}-${geofenceRadius}-${nearbyCustomers.length}`}
+                source={{ html: mapHtml }}
+                style={{ flex: 1 }}
+                javaScriptEnabled
+                domStorageEnabled
+                scrollEnabled={false}
+                originWhitelist={['*']}
+                nestedScrollEnabled={false}
+              />
+              <TouchableOpacity style={styles.fullscreenBtn} onPress={() => setMapFullscreen(true)}>
+                <Ionicons name="expand" size={18} color="#2F4366" />
+              </TouchableOpacity>
+            </View>
+          );
+        })() : (
+          <View style={styles.mapPlaceholder}>
+            <Ionicons name="map-outline" size={36} color="#C4CAD4" />
+            <Text style={styles.placeholderText}>Map unavailable</Text>
+          </View>
+        )}
 
         {/* Pin / Radius controls */}
         <View style={styles.mapControls}>
@@ -426,6 +436,34 @@ export default function ExploreScreen() {
         )}
       </ScrollView>
 
+      {/* Fullscreen map modal */}
+      {WebView && (
+        <Modal visible={mapFullscreen} animationType="slide" onRequestClose={() => setMapFullscreen(false)}>
+          <View style={styles.fullscreenMap}>
+            <WebView
+              key={`fullmap-${merchantLat}-${merchantLng}-${geofenceRadius}-${nearbyCustomers.length}`}
+              source={{ html: buildLeafletHtml(
+                mapCenter,
+                merchantLat && merchantLng ? { lat: merchantLat, lng: merchantLng, name: merchantName, address: merchantAddress || 'Your store' } : null,
+                nearbyCustomers.map((c) => {
+                  const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : null;
+                  return { id: c.id, lat: c.latitude, lng: c.longitude, name: c.name, dist, inside: dist !== null && dist <= geofenceRadius };
+                }),
+                geofenceRadius,
+                userLocation,
+              )}}
+              style={{ flex: 1 }}
+              javaScriptEnabled
+              domStorageEnabled
+              originWhitelist={['*']}
+            />
+            <TouchableOpacity style={styles.fullscreenCloseBtn} onPress={() => setMapFullscreen(false)}>
+              <Ionicons name="close" size={22} color="#2F4366" />
+            </TouchableOpacity>
+          </View>
+        </Modal>
+      )}
+
       {/* Customer card modal */}
       <Modal visible={cardModalVisible} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -495,10 +533,12 @@ const styles = StyleSheet.create({
   liveText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#27AE60', letterSpacing: 0.5 },
 
   // Map
-  mapContainer: { marginHorizontal: 24, height: 220, borderRadius: 16, overflow: 'hidden', marginBottom: 12, backgroundColor: '#E8ECF1' },
-  map: { width: '100%', height: '100%' },
-  mapOverlayBadge: { position: 'absolute', bottom: 10, right: 10, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(47,67,102,0.85)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  mapOverlayText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+  mapContainer: { marginHorizontal: 24, height: 450, borderRadius: 16, overflow: 'hidden', marginBottom: 12, backgroundColor: '#E8ECF1' },
+  fullscreenBtn: { position: 'absolute', top: 10, right: 10, width: 36, height: 36, borderRadius: 10, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
+  fullscreenMap: { flex: 1, backgroundColor: '#000' },
+  fullscreenCloseBtn: { position: 'absolute', top: 50, right: 16, width: 42, height: 42, borderRadius: 21, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 6 },
+  mapPlaceholder: { marginHorizontal: 24, height: 180, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 8 },
+  placeholderText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
 
   mapControls: { paddingHorizontal: 24, marginBottom: 16 },
   pinButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: 12, backgroundColor: '#2F4366' },

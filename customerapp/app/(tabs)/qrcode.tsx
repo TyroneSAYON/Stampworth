@@ -73,7 +73,10 @@ export default function QRCodeScreen() {
     }, [customerId])
   );
 
-  // Realtime: auto-navigate to card when merchant scans and performs an action
+  // Realtime: debounced alert when merchant stamps — one alert after batch completes
+  const stampAlertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTxRef = useRef<{ merchantId: string; type: string }[]>([]);
+
   useEffect(() => {
     if (!customerId) return;
 
@@ -82,32 +85,48 @@ export default function QRCodeScreen() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customerId}` },
-        async (payload) => {
+        (payload) => {
           const tx = payload.new as any;
-          const { data: cards } = await getCustomerLoyaltyCards();
-          const card = (cards || []).find((c: any) => c.merchant_id === tx.merchant_id);
-          if (card) {
-            router.push({
-              pathname: '/stamps',
-              params: {
-                loyaltyCardId: card.id,
-                merchantId: card.merchant_id,
-                merchant: card.merchants?.business_name || 'Store',
-                collected: String(card.stamp_count || 0),
-                total: String(card.stamp_settings?.stamps_per_redemption || 10),
-                color: card.stamp_settings?.card_color || '#2F4366',
-                iconName: card.stamp_settings?.stamp_icon_name || 'star',
-                iconImageUrl: card.stamp_settings?.stamp_icon_image_url || '',
-              },
-            });
-          } else {
-            router.push('/(tabs)/cards');
-          }
+          pendingTxRef.current.push({ merchantId: tx.merchant_id, type: tx.transaction_type });
+
+          // Wait 2s after last event to show a single alert
+          if (stampAlertTimer.current) clearTimeout(stampAlertTimer.current);
+          stampAlertTimer.current = setTimeout(async () => {
+            const pending = [...pendingTxRef.current];
+            pendingTxRef.current = [];
+            if (pending.length === 0) return;
+
+            const lastMerchantId = pending[pending.length - 1].merchantId;
+            const { data: cards } = await getCustomerLoyaltyCards();
+            const card = (cards || []).find((c: any) => c.merchant_id === lastMerchantId);
+            if (!card) return;
+
+            // Navigate: cards tab first, then stamps on top — back goes to cards
+            router.navigate('/(tabs)/cards');
+            setTimeout(() => {
+              router.push({
+                pathname: '/stamps',
+                params: {
+                  loyaltyCardId: card.id,
+                  merchantId: card.merchant_id,
+                  merchant: card.merchants?.business_name || 'Store',
+                  collected: String(card.stamp_count || 0),
+                  total: String(card.stamp_settings?.stamps_per_redemption || 10),
+                  color: card.stamp_settings?.card_color || '#2F4366',
+                  iconName: card.stamp_settings?.stamp_icon_name || 'star',
+                  iconImageUrl: card.stamp_settings?.stamp_icon_image_url || '',
+                },
+              });
+            }, 100);
+          }, 2000);
         }
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+      if (stampAlertTimer.current) clearTimeout(stampAlertTimer.current);
+    };
   }, [customerId]);
 
   const toggleDropdown = () => {

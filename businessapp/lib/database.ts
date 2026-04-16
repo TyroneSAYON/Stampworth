@@ -762,7 +762,7 @@ export const issueStampForCustomer = async (
         merchant_id: merchantId,
       })
       .select('*')
-      .single();
+      .maybeSingle();
 
     if (createCardError || !newCard) {
       return { data: null, error: createCardError || new Error('Unable to create loyalty card.') };
@@ -797,7 +797,7 @@ export const issueStampForCustomer = async (
       earned_date: new Date().toISOString(),
     })
     .select('*')
-    .single();
+    .maybeSingle();
 
   if (stampError || !stamp) {
     return { data: null, error: stampError || new Error('Unable to issue stamp.') };
@@ -841,46 +841,33 @@ export const issueStampForCustomer = async (
 };
 
 export const getCustomerLoyaltyCardProgress = async (merchantId: string, customerId: string) => {
-  const { data: customer, error: customerError } = await supabase
-    .from('customers')
-    .select('id, full_name, username, email')
-    .eq('id', customerId)
-    .single();
+  // Run all queries in parallel
+  const [customerResult, cardResult, merchantResult, settingsResult] = await Promise.all([
+    supabase.from('customers').select('id, full_name, username, email').eq('id', customerId).maybeSingle(),
+    supabase.from('loyalty_cards').select('*').eq('customer_id', customerId).eq('merchant_id', merchantId).maybeSingle(),
+    supabase.from('merchants').select('business_name, logo_url').eq('id', merchantId).maybeSingle(),
+    supabase.from('stamp_settings').select('stamps_per_redemption, redemption_reward_description, promotion_text, card_color, stamp_icon_name, stamp_icon_image_url').eq('merchant_id', merchantId).maybeSingle(),
+  ]);
 
+  const { data: customer, error: customerError } = customerResult;
   if (customerError || !customer) {
     return { data: null, error: customerError || new Error('Customer not found.') };
   }
 
-  const { data: card, error: cardError } = await supabase
-    .from('loyalty_cards')
-    .select('*')
-    .eq('customer_id', customerId)
-    .eq('merchant_id', merchantId)
-    .maybeSingle();
-
+  const { data: card, error: cardError } = cardResult;
   if (cardError) {
     return { data: null, error: cardError };
   }
 
-  const { data: merchant } = await supabase
-    .from('merchants')
-    .select('business_name, logo_url')
-    .eq('id', merchantId)
-    .maybeSingle();
-
-  const { data: settings, error: settingsError } = await supabase
-    .from('stamp_settings')
-    .select('stamps_per_redemption, redemption_reward_description, promotion_text, card_color, stamp_icon_name, stamp_icon_image_url')
-    .eq('merchant_id', merchantId)
-    .maybeSingle();
-
+  const { data: merchant } = merchantResult;
+  const { data: settings, error: settingsError } = settingsResult;
   if (settingsError) {
     return { data: null, error: settingsError };
   }
 
   const stampsPerRedemption = settings?.stamps_per_redemption || 10;
 
-  // Always derive stamp count from actual valid stamp records for accuracy
+  // Derive stamp count from actual valid stamp records
   let stampCount = card?.stamp_count || 0;
   if (card) {
     const { count } = await supabase
@@ -889,10 +876,9 @@ export const getCustomerLoyaltyCardProgress = async (merchantId: string, custome
       .eq('loyalty_card_id', card.id)
       .eq('is_valid', true);
     const actualCount = count ?? stampCount;
-    // Sync if out of date
     if (actualCount !== stampCount) {
       stampCount = actualCount;
-      await supabase.from('loyalty_cards').update({ stamp_count: actualCount }).eq('id', card.id);
+      supabase.from('loyalty_cards').update({ stamp_count: actualCount }).eq('id', card.id).then(() => {});
     }
   }
 
@@ -1266,7 +1252,19 @@ export const claimReward = async (rewardId: string) => {
     .update({ is_used: true, used_at: new Date().toISOString() })
     .eq('id', rewardId)
     .select('*')
-    .single();
+    .maybeSingle();
+
+  // Log a transaction so customer app realtime picks it up
+  if (data && !error) {
+    await supabase.from('transactions').insert({
+      merchant_id: data.merchant_id,
+      customer_id: data.customer_id,
+      loyalty_card_id: data.loyalty_card_id || null,
+      transaction_type: 'REWARD_REDEEMED',
+      stamp_count_after: 0,
+      notes: `Reward claimed: ${data.reward_code}`,
+    });
+  }
 
   return { data, error };
 };
@@ -1281,7 +1279,7 @@ export const saveMerchantLocation = async (latitude: number, longitude: number) 
     .update({ latitude, longitude })
     .eq('id', merchant.id)
     .select('*')
-    .single();
+    .maybeSingle();
 
   return { data, error };
 };

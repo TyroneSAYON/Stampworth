@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View, ScrollView, Dimensions } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, FlatList, StyleSheet, Text, TouchableOpacity, View, ScrollView, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { getStampRecordsForCard, getCustomerPendingRewards, deleteCustomerLoyaltyCard } from '@/lib/database';
+import { router, useLocalSearchParams } from 'expo-router';
+import { getStampRecordsForCard, getCustomerPendingRewards, deleteCustomerLoyaltyCard, getOrCreateCustomerProfile } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
 const REWARD_CARD_W = 130;
@@ -27,52 +27,68 @@ export default function StampsScreen() {
   const iconName = params.iconName || 'star';
   const iconImageUrl = params.iconImageUrl || null;
 
-  const [loading, setLoading] = useState(true);
+  const [loading] = useState(false);
   const [stampCount, setStampCount] = useState(Number(params.collected || 0));
   const [stampRecords, setStampRecords] = useState<{ id: string; earned_date: string }[]>([]);
   const [pendingRewards, setPendingRewards] = useState<any[]>([]);
   const [deleting, setDeleting] = useState(false);
+  const [rewardFlash, setRewardFlash] = useState(false);
+  const flashAnim = useRef(new Animated.Value(0)).current;
 
-  const loadStampData = async (showLoader = true) => {
-    if (showLoader) setLoading(true);
+  // Fetch stamp records and rewards silently in background — no loading spinner
+  useEffect(() => {
     if (params.loyaltyCardId) {
-      const { data } = await getStampRecordsForCard(params.loyaltyCardId);
-      setStampRecords(data || []);
-      setStampCount(data?.length || Number(params.collected || 0));
+      getStampRecordsForCard(params.loyaltyCardId).then(({ data }) => {
+        setStampRecords(data || []);
+        setStampCount(data?.length || Number(params.collected || 0));
+      });
     }
     if (params.merchantId) {
-      const { data: rewards } = await getCustomerPendingRewards(params.merchantId);
-      setPendingRewards(rewards || []);
+      getCustomerPendingRewards(params.merchantId).then(({ data }) => setPendingRewards(data || []));
     }
-    setLoading(false);
-  };
+  }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadStampData();
-    }, [params.loyaltyCardId, params.merchantId])
-  );
-
-  // Realtime: listen to transactions for this customer's stamp changes
+  // Realtime: listen to transactions, debounced
   useEffect(() => {
     if (!params.merchantId) return;
     let channel: any = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const setup = async () => {
-      const { getOrCreateCustomerProfile } = await import('@/lib/database');
       const { data: customer } = await getOrCreateCustomerProfile();
       if (!customer) return;
-
       channel = supabase
-        .channel('stamps-realtime-' + params.loyaltyCardId)
-        .on(
-          'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customer.id}` },
-          () => { loadStampData(false); }
-        )
+        .channel('stamps-rt-' + params.loyaltyCardId)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customer.id}` }, (payload) => {
+          const tx = payload.new as any;
+          if (tx.transaction_type === 'REWARD_REDEEMED') {
+            setPendingRewards((prev) => prev.slice(1));
+          } else if (tx.transaction_type === 'STAMP_EARNED') {
+            setStampCount((prev) => prev + 1);
+          } else if (tx.transaction_type === 'REWARD_STORED') {
+            setStampCount(0);
+            setStampRecords([]);
+            // Flash reward banner
+            setRewardFlash(true);
+            Animated.sequence([
+              Animated.timing(flashAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+              Animated.delay(3000),
+              Animated.timing(flashAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+            ]).start(() => setRewardFlash(false));
+            // Fetch new pending reward in background
+            if (params.merchantId) {
+              getCustomerPendingRewards(params.merchantId).then(({ data }) => setPendingRewards(data || []));
+            }
+          } else if (tx.transaction_type === 'STAMP_REMOVED') {
+            setStampCount((prev) => Math.max(0, prev - 1));
+          }
+        })
         .subscribe();
     };
     setup();
-    return () => { if (channel) supabase.removeChannel(channel); };
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+      if (timer) clearTimeout(timer);
+    };
   }, [params.loyaltyCardId, params.merchantId]);
 
   const handleDeleteCard = () => {
@@ -155,11 +171,22 @@ export default function StampsScreen() {
           </View>
         )}
 
+        {/* Free reward flash banner */}
+        {rewardFlash && (
+          <Animated.View style={[styles.rewardFlash, { opacity: flashAnim, transform: [{ scale: flashAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) }] }]}>
+            <Ionicons name="gift" size={22} color="#FFFFFF" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rewardFlashTitle}>Free Reward Earned!</Text>
+              <Text style={styles.rewardFlashText}>Your stamp card has been reset</Text>
+            </View>
+          </Animated.View>
+        )}
+
         {/* Stamp card */}
         <View style={[styles.card, { backgroundColor: cardColor }]}>
           <View style={styles.cardTop}>
             <View style={styles.cardLogoCircle}>
-              <Ionicons name="business" size={16} color="#FFFFFF" />
+              <Ionicons name="business" size={14} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.cardName} numberOfLines={1}>{merchantName}</Text>
@@ -182,7 +209,7 @@ export default function StampsScreen() {
                   {slot.isFree ? (
                     <Text style={[styles.freeLabel, { color: cardColor }]}>FREE</Text>
                   ) : slot.isFilled ? (
-                    renderIcon(20, cardColor)
+                    renderIcon(16, cardColor)
                   ) : null}
                 </View>
                 {slot.record && !slot.isFree ? (
@@ -204,11 +231,6 @@ export default function StampsScreen() {
           </View>
         </View>
 
-        {loading && (
-          <View style={{ alignItems: 'center', paddingVertical: 12 }}>
-            <ActivityIndicator size="small" color={cardColor} />
-          </View>
-        )}
 
       </View>
     </View>
@@ -219,11 +241,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F6F8FB' },
   scroll: { flex: 1, paddingHorizontal: 24, paddingTop: 56, paddingBottom: 24 },
 
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   backBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   deleteBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#FDE8E8', alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A2E', fontFamily: 'Poppins-SemiBold' },
-  headerSub: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 1 },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A2E', fontFamily: 'Poppins-SemiBold' },
+  headerSub: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 1 },
 
   // Rewards carousel
   rewardsSection: { marginBottom: 20 },
@@ -233,26 +255,31 @@ const styles = StyleSheet.create({
   rewardCardDate: { fontSize: 9, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
 
   // Card
-  card: { flex: 1, minHeight: 480, borderRadius: 20, padding: 24, marginBottom: 16, justifyContent: 'space-between' },
-  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-  cardLogoCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  cardName: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
-  cardLabel: { fontSize: 10, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.65)' },
-  cardCount: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+  card: { borderRadius: 18, padding: 16, marginBottom: 16 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  cardLogoCircle: { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  cardName: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+  cardLabel: { fontSize: 9, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.65)' },
+  cardCount: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', alignItems: 'center', flex: 1 },
-  slot: { alignItems: 'center', width: '22%' },
-  circle: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
-  freeLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', letterSpacing: 0.5 },
-  dateText: { fontSize: 8, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.65)', marginTop: 4 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', alignItems: 'center' },
+  slot: { alignItems: 'center', width: '18%' },
+  circle: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  freeLabel: { fontSize: 9, fontFamily: 'Poppins-SemiBold', letterSpacing: 0.5 },
+  dateText: { fontSize: 7, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.65)', marginTop: 2 },
 
   // Progress
-  progressSection: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, marginBottom: 12 },
-  progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  progressLabel: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
-  progressValue: { fontSize: 14, fontFamily: 'Poppins-SemiBold' },
-  progressBar: { height: 7, backgroundColor: '#F0F2F5', borderRadius: 4, overflow: 'hidden' },
-  progressFill: { height: 7, borderRadius: 4 },
+  progressSection: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 12, marginBottom: 12 },
+  progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  progressLabel: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
+  progressValue: { fontSize: 13, fontFamily: 'Poppins-SemiBold' },
+  progressBar: { height: 5, backgroundColor: '#F0F2F5', borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: 5, borderRadius: 3 },
 
   helperText: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', textAlign: 'center' },
+
+  // Reward flash
+  rewardFlash: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#E67E22', borderRadius: 14, padding: 16, marginBottom: 16 },
+  rewardFlashTitle: { fontSize: 15, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+  rewardFlashText: { fontSize: 11, fontFamily: 'Poppins-Regular', color: 'rgba(255,255,255,0.85)', marginTop: 1 },
 });

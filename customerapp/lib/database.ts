@@ -99,29 +99,18 @@ export const getUserLoyaltyCards = async (customerId: string) => {
     return { data: cards || [], error: cardsError };
   }
 
-  // Then fetch merchants and stamp_settings separately to avoid RLS join issues
+  // Fetch merchants, settings, and stamp counts in parallel
   const merchantIds = [...new Set(cards.map((c: any) => c.merchant_id))];
+  const cardIds = cards.map((c: any) => c.id);
 
-  const { data: merchants } = await supabase
-    .from('merchants')
-    .select('id, business_name, logo_url, latitude, longitude')
-    .in('id', merchantIds);
-
-  const { data: settings } = await supabase
-    .from('stamp_settings')
-    .select('*')
-    .in('merchant_id', merchantIds);
+  const [{ data: merchants }, { data: settings }, { data: allStamps }] = await Promise.all([
+    supabase.from('merchants').select('id, business_name, logo_url, latitude, longitude').in('id', merchantIds),
+    supabase.from('stamp_settings').select('*').in('merchant_id', merchantIds),
+    supabase.from('stamps').select('loyalty_card_id').in('loyalty_card_id', cardIds).eq('is_valid', true),
+  ]);
 
   const merchantMap = new Map((merchants || []).map((m: any) => [m.id, m]));
   const settingsMap = new Map((settings || []).map((s: any) => [s.merchant_id, s]));
-
-  // Verify stamp counts from actual valid stamp records for accuracy
-  const cardIds = cards.map((c: any) => c.id);
-  const { data: allStamps } = await supabase
-    .from('stamps')
-    .select('loyalty_card_id')
-    .in('loyalty_card_id', cardIds)
-    .eq('is_valid', true);
 
   const stampCountMap: Record<string, number> = {};
   for (const s of allStamps || []) {
