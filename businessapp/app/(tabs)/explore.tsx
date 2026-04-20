@@ -21,33 +21,64 @@ try { Location = require('expo-location'); } catch {}
 let WebView: any = null;
 try { WebView = require('react-native-webview').default; } catch {}
 
+const esc = (s: string) => s.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
 const buildLeafletHtml = (
   center: { latitude: number; longitude: number },
   storePin: { lat: number; lng: number; name: string; address: string } | null,
   customers: { id: string; lat: number; lng: number; name: string; dist: number | null; inside: boolean }[],
   radius: number,
   userLoc: { latitude: number; longitude: number } | null,
-) => `<!DOCTYPE html>
+) => {
+  const customerMarkers = customers.map((c) => {
+    const color = c.inside ? '#27AE60' : '#E74C3C';
+    const popup = '<b>' + esc(c.name) + '</b><br/>' + (c.dist !== null ? c.dist + 'm away' : '');
+    return `L.circleMarker([${c.lat},${c.lng}],{radius:8,fillColor:'${color}',color:'#fff',weight:2,fillOpacity:1}).addTo(map).bindPopup('${popup}');`;
+  }).join('\n');
+
+  // Zoom to fit the geofence radius around the store
+  let viewSetup = '';
+  if (storePin) {
+    viewSetup = `var rc=L.circle([${storePin.lat},${storePin.lng}],{radius:${Math.max(radius, 200)}}).addTo(map).remove();map.fitBounds(rc.getBounds(),{padding:[30,30],maxZoom:17});`;
+  }
+
+  return `<!DOCTYPE html>
 <html><head>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
-<style>html,body,#map{width:100%;height:100%;margin:0;padding:0;}</style>
+<style>
+html,body,#map{width:100%;height:100%;margin:0;padding:0;}
+@keyframes pulse{0%{transform:scale(1);opacity:0.5}100%{transform:scale(3);opacity:0}}
+.store-pin{width:28px;height:28px;position:relative}
+.store-pin .dot{width:28px;height:28px;border-radius:50%;background:#2F4366;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;position:absolute;z-index:2}
+.store-pin .dot svg{width:14px;height:14px}
+.user-pulse{width:14px;height:14px;position:relative}
+.user-pulse .dot{width:14px;height:14px;border-radius:50%;background:#4285F4;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);position:absolute;z-index:2}
+.user-pulse .ring{width:14px;height:14px;border-radius:50%;background:#4285F4;position:absolute;animation:pulse 2s ease-out infinite}
+.cust-green{width:12px;height:12px;position:relative}
+.cust-green .dot{width:12px;height:12px;border-radius:50%;background:#27AE60;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);position:absolute;z-index:2}
+.cust-green .ring{width:12px;height:12px;border-radius:50%;background:#27AE60;position:absolute;animation:pulse 2.5s ease-out infinite}
+</style>
 </head><body>
 <div id="map"></div>
 <script>
 var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${center.latitude},${center.longitude}],15);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 ${storePin ? `
-L.circleMarker([${storePin.lat},${storePin.lng}],{radius:14,fillColor:'#2F4366',color:'#fff',weight:3,fillOpacity:1}).addTo(map).bindPopup('<b>${storePin.name.replace(/'/g, "\\'")}</b><br/>${storePin.address.replace(/'/g, "\\'")}');
-L.circle([${storePin.lat},${storePin.lng}],{radius:${radius},color:'#2F4366',fillColor:'#2F4366',fillOpacity:0.08,weight:2}).addTo(map);
+var storeIcon=L.divIcon({className:'',html:'<div class="store-pin"><div class="dot"><svg viewBox="0 0 24 24" fill="white"><path d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/></svg></div></div>',iconSize:[28,28],iconAnchor:[14,14]});
+L.marker([${storePin.lat},${storePin.lng}],{icon:storeIcon,zIndexOffset:900}).addTo(map).bindPopup('<b>${esc(storePin.name)}</b><br/>${esc(storePin.address)}');
+L.circle([${storePin.lat},${storePin.lng}],{radius:${radius},color:'#2F4366',fillColor:'#2F4366',fillOpacity:0.06,weight:1.5,dashArray:'6,4'}).addTo(map);
 ` : ''}
-${customers.map((c) => `
-L.circleMarker([${c.lat},${c.lng}],{radius:8,fillColor:'${c.inside ? '#27AE60' : '#E74C3C'}',color:'#fff',weight:2,fillOpacity:1}).addTo(map).bindPopup('<b>${c.name.replace(/'/g, "\\'")}</b><br/>${c.dist !== null ? c.dist + 'm away' : ''}');
-`).join('')}
-${userLoc ? `L.circleMarker([${userLoc.latitude},${userLoc.longitude}],{radius:6,fillColor:'#4285F4',color:'#fff',weight:3,fillOpacity:1}).addTo(map);` : ''}
+${customerMarkers}
+${userLoc ? `
+var userIcon=L.divIcon({className:'',html:'<div class="user-pulse"><div class="ring"></div><div class="dot"></div></div>',iconSize:[14,14],iconAnchor:[7,7]});
+L.marker([${userLoc.latitude},${userLoc.longitude}],{icon:userIcon,zIndexOffset:1000}).addTo(map).bindPopup('You (merchant)');
+` : ''}
+${viewSetup}
 <\/script>
 </body></html>`;
+};
 
 type NearbyCustomer = { id: string; name: string; email: string; latitude: number; longitude: number; updatedAt?: string };
 
@@ -245,8 +276,8 @@ export default function ExploreScreen() {
                 originWhitelist={['*']}
                 nestedScrollEnabled={false}
               />
-              <TouchableOpacity style={styles.fullscreenBtn} onPress={() => setMapFullscreen(true)}>
-                <Ionicons name="expand" size={18} color="#2F4366" />
+              <TouchableOpacity style={styles.mapExpandBtn} onPress={() => setMapFullscreen(true)}>
+                <Ionicons name="expand" size={16} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           );
@@ -457,8 +488,28 @@ export default function ExploreScreen() {
               domStorageEnabled
               originWhitelist={['*']}
             />
+            {/* Radius chips overlay */}
+            <View style={styles.fullscreenRadiusRow}>
+              {[22, 500, 1000, 2000].map((r) => (
+                <TouchableOpacity key={r} style={[styles.fullscreenRadiusChip, geofenceRadius === r && styles.fullscreenRadiusChipActive]} onPress={() => setGeofenceRadius(r)}>
+                  <Text style={[styles.fullscreenRadiusText, geofenceRadius === r && styles.fullscreenRadiusTextActive]}>{r >= 1000 ? `${r / 1000}km` : `${r}m`}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {/* Nearby count badge */}
+            <View style={styles.fullscreenBadge}>
+              <View style={styles.fullscreenBadgeDot} />
+              <Text style={styles.fullscreenBadgeText}>
+                {merchantLat && merchantLng
+                  ? nearbyCustomers.filter((c) => haversine(merchantLat, merchantLng, c.latitude, c.longitude) <= geofenceRadius).length
+                  : 0} nearby
+              </Text>
+              <Text style={styles.fullscreenBadgeSep}>·</Text>
+              <Text style={styles.fullscreenBadgeText}>{nearbyCustomers.length} tracked</Text>
+            </View>
+            {/* Close button */}
             <TouchableOpacity style={styles.fullscreenCloseBtn} onPress={() => setMapFullscreen(false)}>
-              <Ionicons name="close" size={22} color="#2F4366" />
+              <Ionicons name="contract" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </Modal>
@@ -534,9 +585,20 @@ const styles = StyleSheet.create({
 
   // Map
   mapContainer: { marginHorizontal: 24, height: 450, borderRadius: 16, overflow: 'hidden', marginBottom: 12, backgroundColor: '#E8ECF1' },
-  fullscreenBtn: { position: 'absolute', top: 10, right: 10, width: 36, height: 36, borderRadius: 10, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
+  mapExpandBtn: { position: 'absolute', top: 10, right: 10, width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(47, 67, 102, 0.85)', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 4 },
+
+  // Fullscreen map
   fullscreenMap: { flex: 1, backgroundColor: '#000' },
-  fullscreenCloseBtn: { position: 'absolute', top: 50, right: 16, width: 42, height: 42, borderRadius: 21, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 6 },
+  fullscreenCloseBtn: { position: 'absolute', top: 56, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(47, 67, 102, 0.9)', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 6 },
+  fullscreenRadiusRow: { position: 'absolute', top: 56, left: 16, flexDirection: 'row', gap: 6 },
+  fullscreenRadiusChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.9)', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
+  fullscreenRadiusChipActive: { backgroundColor: '#2F4366' },
+  fullscreenRadiusText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  fullscreenRadiusTextActive: { color: '#FFFFFF' },
+  fullscreenBadge: { position: 'absolute', bottom: 40, left: 16, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(47, 67, 102, 0.9)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
+  fullscreenBadgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#27AE60' },
+  fullscreenBadgeText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+  fullscreenBadgeSep: { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
   mapPlaceholder: { marginHorizontal: 24, height: 180, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 8 },
   placeholderText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
 

@@ -744,94 +744,104 @@ export const issueStampForCustomer = async (
   source: 'QR' | 'MANUAL',
   sourceReference?: string,
 ) => {
-  // Always fetch the latest card state to avoid stale stamp_count
-  const { data: existingCard } = await supabase
-    .from('loyalty_cards')
-    .select('id, stamp_count, total_stamps_earned, status, is_free_redemption, customer_id, merchant_id')
-    .eq('customer_id', customerId)
-    .eq('merchant_id', merchantId)
-    .maybeSingle();
+  return issueBatchStamps(merchantId, customerId, 1, source, sourceReference);
+};
 
-  let loyaltyCard = existingCard;
+// Issue multiple stamps in one fast batch — single card fetch, single settings fetch,
+// parallel stamp inserts, single card update, single transaction insert.
+export const issueBatchStamps = async (
+  merchantId: string,
+  customerId: string,
+  qty: number,
+  source: 'QR' | 'MANUAL',
+  sourceReference?: string,
+) => {
+  // Fetch card + settings in parallel (2 calls instead of sequential)
+  const [cardResult, settingsResult] = await Promise.all([
+    supabase
+      .from('loyalty_cards')
+      .select('id, stamp_count, total_stamps_earned, status, is_free_redemption, customer_id, merchant_id')
+      .eq('customer_id', customerId)
+      .eq('merchant_id', merchantId)
+      .maybeSingle(),
+    supabase
+      .from('stamp_settings')
+      .select('stamps_per_redemption')
+      .eq('merchant_id', merchantId)
+      .maybeSingle(),
+  ]);
+
+  let loyaltyCard = cardResult.data;
 
   if (!loyaltyCard) {
     const { data: newCard, error: createCardError } = await supabase
       .from('loyalty_cards')
-      .insert({
-        customer_id: customerId,
-        merchant_id: merchantId,
-      })
+      .insert({ customer_id: customerId, merchant_id: merchantId })
       .select('*')
       .maybeSingle();
 
     if (createCardError || !newCard) {
       return { data: null, error: createCardError || new Error('Unable to create loyalty card.') };
     }
-
     loyaltyCard = newCard;
   }
 
   if (!loyaltyCard) return { data: null, error: new Error('Unable to find or create loyalty card.') };
 
-  // Use the DB values directly for accuracy
   const currentCount = loyaltyCard.stamp_count ?? 0;
   const currentTotal = loyaltyCard.total_stamps_earned ?? 0;
-  const nextStampCount = currentCount + 1;
-  const totalStampsEarned = currentTotal + 1;
+  const stampsPerRedemption = settingsResult.data?.stamps_per_redemption || 10;
 
-  const { data: settings } = await supabase
-    .from('stamp_settings')
-    .select('stamps_per_redemption')
-    .eq('merchant_id', merchantId)
-    .maybeSingle();
+  // Cap qty so we don't exceed redemption threshold
+  const collectableSlots = (stampsPerRedemption - 1) - currentCount;
+  const actualQty = Math.min(qty, Math.max(0, collectableSlots));
+  if (actualQty <= 0) {
+    return { data: { stamp: null, loyaltyCardId: loyaltyCard.id, stampCount: currentCount, freeRedemptionReached: currentCount >= stampsPerRedemption - 1 }, error: null };
+  }
 
-  const stampsPerRedemption = settings?.stamps_per_redemption || 10;
+  const nextStampCount = currentCount + actualQty;
+  const totalStampsEarned = currentTotal + actualQty;
   const freeRedemptionReached = nextStampCount >= stampsPerRedemption - 1;
+  const now = new Date().toISOString();
 
-  const { data: stamp, error: stampError } = await supabase
-    .from('stamps')
-    .insert({
-      loyalty_card_id: loyaltyCard.id,
-      merchant_id: merchantId,
-      customer_id: customerId,
-      earned_date: new Date().toISOString(),
-    })
-    .select('*')
-    .maybeSingle();
-
-  if (stampError || !stamp) {
-    return { data: null, error: stampError || new Error('Unable to issue stamp.') };
-  }
-
-  const { error: cardUpdateError } = await supabase
-    .from('loyalty_cards')
-    .update({
-      stamp_count: nextStampCount,
-      total_stamps_earned: totalStampsEarned,
-      is_free_redemption: freeRedemptionReached,
-      status: freeRedemptionReached ? 'FREE_REDEMPTION' : 'ACTIVE',
-    })
-    .eq('id', loyaltyCard.id);
-
-  if (cardUpdateError) {
-    return { data: null, error: cardUpdateError };
-  }
+  // Insert all stamps + update card + insert transaction in parallel
+  const stampRows = Array.from({ length: actualQty }, () => ({
+    loyalty_card_id: loyaltyCard!.id,
+    merchant_id: merchantId,
+    customer_id: customerId,
+    earned_date: now,
+  }));
 
   const notePrefix = source === 'QR' ? 'Issued from customer QR scan' : 'Issued from manual customer ID entry';
   const notes = sourceReference ? `${notePrefix} (${sourceReference.slice(0, 24)})` : notePrefix;
 
-  await supabase.from('transactions').insert({
-    merchant_id: merchantId,
-    customer_id: customerId,
-    loyalty_card_id: loyaltyCard.id,
-    transaction_type: 'STAMP_EARNED',
-    stamp_count_after: nextStampCount,
-    notes,
-  });
+  const [stampResult, cardUpdateResult] = await Promise.all([
+    // Batch insert all stamps at once
+    supabase.from('stamps').insert(stampRows).select('*'),
+    // Update card count
+    supabase.from('loyalty_cards').update({
+      stamp_count: nextStampCount,
+      total_stamps_earned: totalStampsEarned,
+      is_free_redemption: freeRedemptionReached,
+      status: freeRedemptionReached ? 'FREE_REDEMPTION' : 'ACTIVE',
+    }).eq('id', loyaltyCard!.id),
+    // Insert transaction (fire and forget)
+    supabase.from('transactions').insert({
+      merchant_id: merchantId,
+      customer_id: customerId,
+      loyalty_card_id: loyaltyCard!.id,
+      transaction_type: 'STAMP_EARNED',
+      stamp_count_after: nextStampCount,
+      notes: actualQty > 1 ? `${notes} (${actualQty} stamps)` : notes,
+    }),
+  ]);
+
+  if (stampResult.error) return { data: null, error: stampResult.error };
+  if (cardUpdateResult.error) return { data: null, error: cardUpdateResult.error };
 
   return {
     data: {
-      stamp,
+      stamp: stampResult.data?.[0] || null,
       loyaltyCardId: loyaltyCard.id,
       stampCount: nextStampCount,
       freeRedemptionReached,

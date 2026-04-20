@@ -4,23 +4,85 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { getAllMerchants } from '@/lib/database';
+import { getGeofenceRadius, setGeofenceRadius, checkNearbyStores } from '@/lib/geofence';
 
-const NEARBY_THRESHOLD = 2000; // 2000m
+const RADIUS_OPTIONS = [
+  { label: '22m', value: 22 },
+  { label: '500m', value: 500 },
+  { label: '1km', value: 1000 },
+  { label: '2km', value: 2000 },
+];
+
+// Persists across remounts — stores that already triggered an alert this session
+const alertedStoresThisSession = new Set<string>();
 
 let Location: typeof import('expo-location') | null = null;
 try { Location = require('expo-location'); } catch {}
 
-let MapView: any = null;
-let MarkerComp: any = null;
-let PROVIDER_GOOGLE: any = null;
-if (Platform.OS !== 'web') {
-  try {
-    const M = require('react-native-maps');
-    MapView = M.default;
-    MarkerComp = M.Marker;
-    PROVIDER_GOOGLE = M.PROVIDER_GOOGLE;
-  } catch {}
-}
+let WebView: any = null;
+try { WebView = require('react-native-webview').default; } catch {}
+
+const esc = (s: string) => s.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+const buildLeafletHtml = (
+  center: { latitude: number; longitude: number },
+  stores: { id: string; lat: number; lng: number; name: string; address: string; logoUrl?: string | null; dist: string }[],
+  radiusMeters: number,
+  userLoc: { latitude: number; longitude: number } | null,
+) => {
+  const storeMarkers = stores.map((s) => {
+    const popup = '<b>' + esc(s.name) + '</b><br/>' + esc(s.address) + '<br/><span style="color:#2F4366;font-weight:600">' + s.dist + '</span>';
+    if (s.logoUrl) {
+      return `(function(){
+        var el='<div style="width:34px;height:34px;border-radius:50%;border:3px solid #fff;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.3);background:#2F4366;display:flex;align-items:center;justify-content:center"><img src="${esc(s.logoUrl)}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\\'none\\'"/></div>';
+        var ic=L.divIcon({className:'',html:el,iconSize:[34,34],iconAnchor:[17,17]});
+        L.marker([${s.lat},${s.lng}],{icon:ic}).addTo(map).bindPopup('${popup}');
+      })();`;
+    }
+    return `L.circleMarker([${s.lat},${s.lng}],{radius:12,fillColor:'#2F4366',color:'#fff',weight:3,fillOpacity:1}).addTo(map).bindPopup('${popup}');`;
+  }).join('\n');
+
+  // Zoom: fit radius circle around user, or show nearby stores
+  let viewSetup: string;
+  if (userLoc) {
+    // Zoom to fit the geofence radius around user location
+    viewSetup = `
+      var radiusCircle = L.circle([${userLoc.latitude},${userLoc.longitude}],{radius:${radiusMeters},color:'#2F4366',fillColor:'#2F4366',fillOpacity:0.06,weight:1.5,dashArray:'6,4'}).addTo(map);
+      map.fitBounds(radiusCircle.getBounds(),{padding:[30,30],maxZoom:17});
+    `;
+  } else if (stores.length > 0) {
+    const bounds = stores.map((s) => `[${s.lat},${s.lng}]`);
+    viewSetup = `map.fitBounds([${bounds.join(',')}],{padding:[40,40],maxZoom:15});`;
+  } else {
+    viewSetup = '';
+  }
+
+  return `<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+<style>
+html,body,#map{width:100%;height:100%;margin:0;padding:0;}
+@keyframes pulse{0%{transform:scale(1);opacity:0.6}100%{transform:scale(3);opacity:0}}
+.user-pulse{width:14px;height:14px;position:relative}
+.user-pulse .dot{width:14px;height:14px;border-radius:50%;background:#4285F4;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);position:absolute;z-index:2}
+.user-pulse .ring{width:14px;height:14px;border-radius:50%;background:#4285F4;position:absolute;animation:pulse 2s ease-out infinite}
+</style>
+</head><body>
+<div id="map"></div>
+<script>
+var map=L.map('map',{zoomControl:false,attributionControl:false}).setView([${center.latitude},${center.longitude}],15);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+${userLoc ? `
+var userIcon=L.divIcon({className:'',html:'<div class="user-pulse"><div class="ring"></div><div class="dot"></div></div>',iconSize:[14,14],iconAnchor:[7,7]});
+L.marker([${userLoc.latitude},${userLoc.longitude}],{icon:userIcon,zIndexOffset:1000}).addTo(map).bindPopup('You are here');
+` : ''}
+${storeMarkers}
+${viewSetup}
+<\/script>
+</body></html>`;
+};
 
 type Merchant = {
   id: string;
@@ -36,6 +98,7 @@ type Merchant = {
 };
 
 export default function ExploreScreen() {
+  const [mapExpanded, setMapExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -44,8 +107,33 @@ export default function ExploreScreen() {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [nearbyAlert, setNearbyAlert] = useState<Merchant | null>(null);
+  const [radius, setRadius] = useState(getGeofenceRadius());
   const dismissedNearbyRef = useRef<Set<string>>(new Set());
   const nearbySlideAnim = useRef(new Animated.Value(-150)).current;
+
+  const handleRadiusChange = (value: number) => {
+    setRadius(value);
+    setGeofenceRadius(value);
+    // Re-check nearby stores with new radius
+    if (userLocation) {
+      dismissedNearbyRef.current.clear();
+      setNearbyAlert(null);
+      checkWithRadius(userLocation.latitude, userLocation.longitude, value);
+    }
+  };
+
+  const checkWithRadius = (lat: number, lng: number, r: number) => {
+    for (const m of merchants) {
+      if (!m.latitude || !m.longitude || alertedStoresThisSession.has(m.id)) continue;
+      const dist = getDistance(m);
+      if (dist !== null && dist <= r) {
+        alertedStoresThisSession.add(m.id);
+        setNearbyAlert(m);
+        break;
+      }
+    }
+    checkNearbyStores(lat, lng).catch(() => {});
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -73,22 +161,27 @@ export default function ExploreScreen() {
     setLoading(false);
     setLoaded(true);
 
-    // Check for nearby stores
+    // Check for nearby stores using geofence radius — only alert once per store per session
     if (locationResult?.coords) {
       const loc = locationResult.coords;
+      const currentRadius = getGeofenceRadius();
       for (const m of allMerchants) {
-        if (!m.latitude || !m.longitude || dismissedNearbyRef.current.has(m.id)) continue;
+        if (!m.latitude || !m.longitude) continue;
+        if (alertedStoresThisSession.has(m.id)) continue;
         const toRad = (v: number) => (v * Math.PI) / 180;
         const R = 6371000;
         const dLat = toRad(m.latitude - loc.latitude);
         const dLon = toRad(m.longitude - loc.longitude);
         const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(loc.latitude)) * Math.cos(toRad(m.latitude)) * Math.sin(dLon / 2) ** 2;
         const dist = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-        if (dist <= NEARBY_THRESHOLD) {
+        if (dist <= currentRadius) {
+          alertedStoresThisSession.add(m.id);
           setNearbyAlert(m);
           break;
         }
       }
+      // Also trigger push notifications for nearby stores
+      checkNearbyStores(loc.latitude, loc.longitude).catch(() => {});
     }
   };
 
@@ -126,7 +219,6 @@ export default function ExploreScreen() {
   }, [nearbyAlert]);
 
   const dismissNearbyAlert = () => {
-    if (nearbyAlert) dismissedNearbyRef.current.add(nearbyAlert.id);
     setNearbyAlert(null);
   };
 
@@ -148,13 +240,23 @@ export default function ExploreScreen() {
   });
 
   const merchantsOnMap = sorted.filter((m) => Number.isFinite(m.latitude) && Number.isFinite(m.longitude));
-  const hasMap = !!MapView;
+  const hasMap = !!WebView;
 
-  const mapRegion = userLocation
-    ? { latitude: userLocation.latitude, longitude: userLocation.longitude, latitudeDelta: 0.05, longitudeDelta: 0.05 }
+  const mapCenter = userLocation
+    ? { latitude: userLocation.latitude, longitude: userLocation.longitude }
     : merchantsOnMap.length > 0
-      ? { latitude: merchantsOnMap[0].latitude!, longitude: merchantsOnMap[0].longitude!, latitudeDelta: 0.05, longitudeDelta: 0.05 }
-      : { latitude: 14.5995, longitude: 120.9842, latitudeDelta: 0.08, longitudeDelta: 0.04 };
+      ? { latitude: merchantsOnMap[0].latitude!, longitude: merchantsOnMap[0].longitude! }
+      : { latitude: 14.5995, longitude: 120.9842 };
+
+  const mapStores = merchantsOnMap.map((m) => ({
+    id: m.id,
+    lat: m.latitude!,
+    lng: m.longitude!,
+    name: m.business_name,
+    address: formatAddress(m),
+    logoUrl: m.logo_url,
+    dist: formatDist(getDistance(m)),
+  }));
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -169,6 +271,25 @@ export default function ExploreScreen() {
 
       <Text style={styles.pageTitle}>Explore</Text>
       <Text style={styles.pageSubtitle}>Discover Stampworth partner stores</Text>
+
+      {/* Geofence radius selector */}
+      <View style={styles.radiusRow}>
+        <View style={styles.radiusLabelRow}>
+          <Ionicons name="navigate-circle" size={16} color="#2F4366" />
+          <Text style={styles.radiusLabel}>Alert radius</Text>
+        </View>
+        <View style={styles.radiusChips}>
+          {RADIUS_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={[styles.radiusChip, radius === opt.value && styles.radiusChipActive]}
+              onPress={() => handleRadiusChange(opt.value)}
+            >
+              <Text style={[styles.radiusChipText, radius === opt.value && styles.radiusChipTextActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
 
       {/* Nearby store alert */}
       {nearbyAlert && (
@@ -211,19 +332,19 @@ export default function ExploreScreen() {
           {/* Map or Location card */}
           {hasMap ? (
             <View style={styles.mapContainer}>
-              <MapView key={`map-${merchantsOnMap.length}`} style={styles.map} region={mapRegion} showsUserLocation={!!userLocation} showsMyLocationButton={false}>
-                {merchantsOnMap.map((m) => (
-                  <MarkerComp key={m.id} coordinate={{ latitude: m.latitude!, longitude: m.longitude! }} title={m.business_name} description={formatDist(getDistance(m)) || formatAddress(m)} onPress={() => { setSelectedMerchant(m); setModalVisible(true); }}>
-                    <View style={styles.markerPin}>
-                      {m.logo_url ? (
-                        <Image source={{ uri: m.logo_url }} style={styles.markerLogo} contentFit="cover" />
-                      ) : (
-                        <Ionicons name="storefront" size={14} color="#FFFFFF" />
-                      )}
-                    </View>
-                  </MarkerComp>
-                ))}
-              </MapView>
+              <WebView
+                key={`map-${merchantsOnMap.length}-${radius}`}
+                source={{ html: buildLeafletHtml(mapCenter, mapStores, radius, userLocation) }}
+                style={{ flex: 1 }}
+                javaScriptEnabled
+                domStorageEnabled
+                scrollEnabled={false}
+                originWhitelist={['*']}
+                nestedScrollEnabled={false}
+              />
+              <TouchableOpacity style={styles.mapExpandBtn} onPress={() => setMapExpanded(true)}>
+                <Ionicons name="expand" size={16} color="#FFFFFF" />
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={styles.locationCard}>
@@ -312,6 +433,43 @@ export default function ExploreScreen() {
         </ScrollView>
       )}
 
+      {/* Fullscreen map modal */}
+      <Modal visible={mapExpanded} animationType="slide" onRequestClose={() => setMapExpanded(false)}>
+        <View style={styles.fullscreenMap}>
+          {WebView && (
+            <WebView
+              key={`fullmap-${merchantsOnMap.length}-${radius}`}
+              source={{ html: buildLeafletHtml(mapCenter, mapStores, radius, userLocation) }}
+              style={{ flex: 1 }}
+              javaScriptEnabled
+              domStorageEnabled
+              originWhitelist={['*']}
+            />
+          )}
+          {/* Radius chips overlay */}
+          <View style={styles.fullscreenRadiusRow}>
+            {RADIUS_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.fullscreenRadiusChip, radius === opt.value && styles.fullscreenRadiusChipActive]}
+                onPress={() => handleRadiusChange(opt.value)}
+              >
+                <Text style={[styles.fullscreenRadiusText, radius === opt.value && styles.fullscreenRadiusTextActive]}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {/* Store count badge */}
+          <View style={styles.fullscreenBadge}>
+            <Ionicons name="storefront" size={14} color="#FFFFFF" />
+            <Text style={styles.fullscreenBadgeText}>{merchantsOnMap.length} stores</Text>
+          </View>
+          {/* Close button */}
+          <TouchableOpacity style={styles.fullscreenCloseBtn} onPress={() => setMapExpanded(false)}>
+            <Ionicons name="contract" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
       {/* Detail modal */}
       <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -372,8 +530,23 @@ const styles = StyleSheet.create({
   scroll: { paddingBottom: 120 },
 
   // Map
-  mapContainer: { marginHorizontal: 24, height: 340, borderRadius: 16, overflow: 'hidden', marginBottom: 16 },
+  mapContainer: { marginHorizontal: 16, height: 440, borderRadius: 16, overflow: 'hidden', marginBottom: 16, backgroundColor: '#E8ECF1' },
   map: { flex: 1 },
+  markerPin: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2F4366', borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  markerLogo: { width: 36, height: 36, borderRadius: 18 },
+
+  mapExpandBtn: { position: 'absolute', top: 10, right: 10, width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(47, 67, 102, 0.85)', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 4 },
+
+  // Fullscreen map
+  fullscreenMap: { flex: 1, backgroundColor: '#000' },
+  fullscreenCloseBtn: { position: 'absolute', top: 56, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(47, 67, 102, 0.9)', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 6 },
+  fullscreenRadiusRow: { position: 'absolute', top: 56, left: 16, flexDirection: 'row', gap: 6 },
+  fullscreenRadiusChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.9)', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
+  fullscreenRadiusChipActive: { backgroundColor: '#2F4366' },
+  fullscreenRadiusText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  fullscreenRadiusTextActive: { color: '#FFFFFF' },
+  fullscreenBadge: { position: 'absolute', bottom: 40, left: 16, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(47, 67, 102, 0.9)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
+  fullscreenBadgeText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
   markerPin: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2F4366', borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
   markerLogo: { width: 36, height: 36, borderRadius: 18 },
 
@@ -415,6 +588,16 @@ const styles = StyleSheet.create({
   navButtonText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Poppins-SemiBold' },
   noLocationBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F6F8FB', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8 },
   noLocationText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
+
+  // Radius selector
+  radiusRow: { paddingHorizontal: 24, marginBottom: 14 },
+  radiusLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  radiusLabel: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  radiusChips: { flexDirection: 'row', gap: 8 },
+  radiusChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E4EA' },
+  radiusChipActive: { backgroundColor: '#2F4366', borderColor: '#2F4366' },
+  radiusChipText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
+  radiusChipTextActive: { color: '#FFFFFF' },
 
   // Nearby alert
   nearbyBanner: { paddingHorizontal: 24, marginBottom: 12 },

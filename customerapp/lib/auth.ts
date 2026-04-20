@@ -5,6 +5,17 @@ import * as WebBrowser from 'expo-web-browser';
 
 WebBrowser.maybeCompleteAuthSession();
 
+// Native Google Sign-In — only available in dev builds, not Expo Go
+let GoogleSignin: any = null;
+try {
+  GoogleSignin = require('@react-native-google-signin/google-signin').GoogleSignin;
+  GoogleSignin.configure({
+    webClientId: '1015682996713-k0c5r661lvnfs2opacvgu3ij7f4fl0pj.apps.googleusercontent.com',
+  });
+} catch {
+  // Not available (Expo Go) — will fall back to web OAuth
+}
+
 type SupportedOAuthProvider = 'google' | 'facebook';
 
 // Sign up
@@ -39,7 +50,40 @@ export const signIn = async (email: string, password: string) => {
   return { data, error };
 };
 
-export const signInWithOAuth = async (provider: SupportedOAuthProvider) => {
+// Native Google Sign-In — no browser, near-instant
+// Falls back to web OAuth in Expo Go
+export const signInWithGoogle = async () => {
+  if (!GoogleSignin) {
+    // Expo Go fallback — use web OAuth
+    return webOAuth('google');
+  }
+  try {
+    await GoogleSignin.hasPlayServices();
+    const response = await GoogleSignin.signIn();
+
+    const idToken = response.data?.idToken;
+    if (!idToken) {
+      return { data: null, error: new Error('Google sign-in failed: no ID token returned.') };
+    }
+
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: idToken,
+    });
+
+    if (error) return { data: null, error };
+    if (data.user) await getOrCreateCustomerProfile();
+    return { data, error: null };
+  } catch (err: any) {
+    if (err?.code === 'SIGN_IN_CANCELLED') {
+      return { data: null, error: new Error('Google sign-in was cancelled.') };
+    }
+    return { data: null, error: err };
+  }
+};
+
+// Web-based OAuth flow
+const webOAuth = async (provider: SupportedOAuthProvider) => {
   const redirectTo = Linking.createURL('auth/callback');
 
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -83,6 +127,12 @@ export const signInWithOAuth = async (provider: SupportedOAuthProvider) => {
   }
 
   return { data: null, error: new Error('OAuth callback did not include a valid session.') };
+};
+
+// Public OAuth handler — routes Google to native, others to web
+export const signInWithOAuth = async (provider: SupportedOAuthProvider) => {
+  if (provider === 'google') return signInWithGoogle();
+  return webOAuth(provider);
 };
 
 // Sign out

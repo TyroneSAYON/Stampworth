@@ -7,6 +7,7 @@ import {
   getCustomerLoyaltyCardProgress,
   getStampRecords,
   issueStampForCustomer,
+  issueBatchStamps,
   removeLatestStampForCustomer,
   storeCustomerReward,
   getPendingRewards,
@@ -101,18 +102,15 @@ export default function CustomerCardScreen() {
     const qty = stampQty;
     setStampQty(0);
 
-    let freeReached = false;
-    for (let i = 0; i < qty; i++) {
-      const { data, error } = await issueStampForCustomer(merchantId, customerId, (source as 'QR' | 'MANUAL') || 'QR', reference);
-      if (error) { Alert.alert('Failed', error.message); break; }
-      if (data?.freeRedemptionReached) {
-        freeReached = true;
-        const rewardResult = await storeCustomerReward(merchantId, customerId);
-        const desc = rewardResult?.data?.rewardDescription || rewardDescription || 'Free Reward';
-        setRewardModal({ name: customerName, reward: desc, code: rewardResult?.data?.rewardCode || '' });
-        break;
-      }
+    const { data, error } = await issueBatchStamps(merchantId, customerId, qty, (source as 'QR' | 'MANUAL') || 'QR', reference);
+    if (error) { Alert.alert('Failed', error.message); setStamping(false); return; }
+
+    if (data?.freeRedemptionReached) {
+      const rewardResult = await storeCustomerReward(merchantId, customerId);
+      const desc = rewardResult?.data?.rewardDescription || rewardDescription || 'Free Reward';
+      setRewardModal({ name: customerName, reward: desc, code: rewardResult?.data?.rewardCode || '' });
     }
+
     setStamping(false);
     await loadData();
   };

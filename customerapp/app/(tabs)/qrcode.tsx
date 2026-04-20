@@ -7,6 +7,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { getOrCreateCustomerProfile, getOrCreateCustomerQRCode, getCustomerAnnouncements, getCustomerLoyaltyCards } from '@/lib/database';
 import { getCurrentUser } from '@/lib/auth';
 import { setupPushNotifications } from '@/lib/notifications';
+import { startGeofenceMonitoring } from '@/lib/geofence';
 import { supabase } from '@/lib/supabase';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -59,6 +60,7 @@ export default function QRCodeScreen() {
         if (!cancelled) setAnnouncements(annData || []);
 
         setupPushNotifications().catch(() => {});
+        startGeofenceMonitoring().catch(() => {});
 
         if (!cancelled) {
           setQrValue(qrData.qr_code_value);

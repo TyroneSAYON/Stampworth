@@ -292,4 +292,5 @@ const styles = StyleSheet.create({
   contactTextarea: { minHeight: 120, paddingTop: 12 },
   contactSendBtn: { backgroundColor: '#2F4366', borderRadius: 12, height: 50, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   contactSendText: { color: '#FFFFFF', fontSize: 15, fontFamily: 'Poppins-SemiBold' },
+
 });
