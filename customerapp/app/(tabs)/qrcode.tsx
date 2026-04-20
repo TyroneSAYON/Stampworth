@@ -29,9 +29,12 @@ export default function QRCodeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Only do full load once — QR code and profile don't change between tab switches
+      // Refresh display name + announcements on every focus
       if (loadedRef.current) {
-        // Just refresh announcements silently in background
+        getOrCreateCustomerProfile().then(({ data: customer }) => {
+          if (customer?.full_name) setDisplayName(customer.full_name);
+          else if (customer?.username) setDisplayName(customer.username);
+        });
         if (customerId) {
           getCustomerAnnouncements(customerId).then(({ data }) => setAnnouncements(data || []));
         }
