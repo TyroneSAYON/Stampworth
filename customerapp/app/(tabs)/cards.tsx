@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { getCustomerLoyaltyCards, getOrCreateCustomerProfile } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
@@ -21,23 +21,30 @@ export default function CardsScreen() {
     initialLoadDone.current = true;
   };
 
-  // Load once on first mount only
-  useEffect(() => { loadCards(); }, []);
+  // Reload cards every time the tab is focused — picks up config changes
+  useFocusEffect(
+    useCallback(() => {
+      loadCards();
+    }, [])
+  );
 
-  // Realtime: single listener, waits for all stamps then refreshes once
+  // Realtime: refresh on transactions AND stamp_settings changes
   useEffect(() => {
     let channel: any = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedReload = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => loadCards(), 1500);
+    };
     const setup = async () => {
       const { data: customer } = await getOrCreateCustomerProfile();
       if (!customer) return;
       customerIdRef.current = customer.id;
       channel = supabase
         .channel('cards-rt-' + customer.id)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customer.id}` }, () => {
-          if (timer) clearTimeout(timer);
-          timer = setTimeout(() => loadCards(), 2000);
-        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customer.id}` }, debouncedReload)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'stamp_settings' }, debouncedReload)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'merchants' }, debouncedReload)
         .subscribe();
     };
     setup();

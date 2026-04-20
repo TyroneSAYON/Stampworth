@@ -1356,43 +1356,39 @@ export const getMerchantDashboardSnapshot = async () => {
     return { data: null, error: merchantError || new Error('Merchant account not found') };
   }
 
-  const { data: settings, error: settingsError } = await supabase
-    .from('stamp_settings')
-    .select('stamps_per_redemption, card_color, stamp_icon_name, stamp_icon_image_url')
-    .eq('merchant_id', merchant.id)
-    .maybeSingle();
+  // Run all 4 queries in parallel instead of sequentially
+  const [settingsResult, usersResult, stampsResult, rewardsResult] = await Promise.all([
+    supabase
+      .from('stamp_settings')
+      .select('stamps_per_redemption, card_color, stamp_icon_name, stamp_icon_image_url')
+      .eq('merchant_id', merchant.id)
+      .maybeSingle(),
+    supabase
+      .from('loyalty_cards')
+      .select('id', { count: 'exact', head: true })
+      .eq('merchant_id', merchant.id),
+    supabase
+      .from('stamps')
+      .select('id', { count: 'exact', head: true })
+      .eq('merchant_id', merchant.id),
+    supabase
+      .from('redeemed_rewards')
+      .select('id', { count: 'exact', head: true })
+      .eq('merchant_id', merchant.id),
+  ]);
 
-  if (settingsError) {
-    return { data: null, error: settingsError };
-  }
-
-  const { count: activeUsers, error: usersError } = await supabase
-    .from('loyalty_cards')
-    .select('id', { count: 'exact', head: true })
-    .eq('merchant_id', merchant.id);
-
-  const { count: stampsIssued, error: stampsError } = await supabase
-    .from('stamps')
-    .select('id', { count: 'exact', head: true })
-    .eq('merchant_id', merchant.id);
-
-  const { count: rewardsRedeemed, error: rewardsError } = await supabase
-    .from('redeemed_rewards')
-    .select('id', { count: 'exact', head: true })
-    .eq('merchant_id', merchant.id);
-
-  if (usersError || stampsError || rewardsError) {
-    return { data: null, error: usersError || stampsError || rewardsError };
+  if (settingsResult.error || usersResult.error || stampsResult.error || rewardsResult.error) {
+    return { data: null, error: settingsResult.error || usersResult.error || stampsResult.error || rewardsResult.error };
   }
 
   return {
     data: {
       merchant,
-      settings: settings || null,
+      settings: settingsResult.data || null,
       stats: {
-        activeUsers: activeUsers || 0,
-        stampsIssued: stampsIssued || 0,
-        rewardsRedeemed: rewardsRedeemed || 0,
+        activeUsers: usersResult.count || 0,
+        stampsIssued: stampsResult.count || 0,
+        rewardsRedeemed: rewardsResult.count || 0,
       },
     },
     error: null,

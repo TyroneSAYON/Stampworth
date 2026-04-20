@@ -24,8 +24,11 @@ export default function OptionsScreen() {
   const [stampsIssued, setStampsIssued] = useState(0);
   const [rewardsRedeemed, setRewardsRedeemed] = useState(0);
 
+  const [loadedOnce, setLoadedOnce] = useState(false);
+
   useFocusEffect(
     useCallback(() => {
+      if (loadedOnce) return; // Don't re-fetch on every focus
       let cancelled = false;
 
       const loadDashboard = async () => {
@@ -55,12 +58,13 @@ export default function OptionsScreen() {
         setStampsIssued(data.stats.stampsIssued);
         setRewardsRedeemed(data.stats.rewardsRedeemed);
         setLoading(false);
+        setLoadedOnce(true);
       };
 
       loadDashboard();
 
       return () => { cancelled = true; };
-    }, [])
+    }, [loadedOnce])
   );
 
   // Realtime: refresh stats when stamps/rewards change

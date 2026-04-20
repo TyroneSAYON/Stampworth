@@ -137,8 +137,8 @@ export default function ExploreScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!loaded) loadData();
-    }, [loaded])
+      loadData();
+    }, [])
   );
 
   const loadData = async () => {
