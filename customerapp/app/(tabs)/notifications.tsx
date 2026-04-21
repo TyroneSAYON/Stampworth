@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View, Text, TouchableOpacity, FlatList } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, View, Text, TouchableOpacity, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -12,7 +12,6 @@ type Announcement = {
   message: string;
   created_at: string;
   merchants: { business_name: string } | null;
-  isRead?: boolean;
 };
 
 export default function NotificationsScreen() {
@@ -20,7 +19,9 @@ export default function NotificationsScreen() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const customerIdRef = useRef<string | null>(null);
+  const loadedOnce = useRef(false);
 
   const loadAnnouncements = async (showLoader = true) => {
     if (showLoader) setLoading(true);
@@ -30,15 +31,16 @@ export default function NotificationsScreen() {
     const { data } = await getCustomerAnnouncements(customer.id);
     setAnnouncements(data || []);
     setLoading(false);
+    loadedOnce.current = true;
   };
 
   useFocusEffect(
     useCallback(() => {
-      loadAnnouncements();
+      if (!loadedOnce.current) loadAnnouncements(true);
+      else loadAnnouncements(false);
     }, [])
   );
 
-  // Realtime: subscribe to new announcements
   useEffect(() => {
     const channel = supabase
       .channel('announcements-realtime')
@@ -51,6 +53,19 @@ export default function NotificationsScreen() {
     setExpandedId(expandedId === id ? null : id);
     setReadIds((prev) => new Set(prev).add(id));
   };
+
+  const deleteNotification = (id: string) => {
+    setDeletedIds((prev) => new Set(prev).add(id));
+  };
+
+  const deleteAllNotifications = () => {
+    Alert.alert('Delete all', 'Remove all notifications?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete All', style: 'destructive', onPress: () => setDeletedIds(new Set(announcements.map((a) => a.id))) },
+    ]);
+  };
+
+  const markAllRead = () => setReadIds(new Set(visible.map((a) => a.id)));
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -65,7 +80,8 @@ export default function NotificationsScreen() {
     return date.toLocaleDateString();
   };
 
-  const unreadCount = announcements.filter((a) => !readIds.has(a.id)).length;
+  const visible = announcements.filter((a) => !deletedIds.has(a.id));
+  const unreadCount = visible.filter((a) => !readIds.has(a.id)).length;
 
   return (
     <View style={styles.container}>
@@ -75,29 +91,40 @@ export default function NotificationsScreen() {
           <Ionicons name="arrow-back" size={22} color="#2F4366" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={{ width: 38 }} />
+        {visible.length > 0 ? (
+          <TouchableOpacity onPress={deleteAllNotifications} style={styles.headerAction}>
+            <Ionicons name="trash-outline" size={18} color="#E74C3C" />
+          </TouchableOpacity>
+        ) : <View style={{ width: 38 }} />}
       </View>
 
-      {unreadCount > 0 && (
-        <View style={styles.unreadRow}>
-          <Text style={styles.unreadLabel}>{unreadCount} new</Text>
-          <TouchableOpacity onPress={() => setReadIds(new Set(announcements.map((a) => a.id)))}>
-            <Text style={styles.readAllBtn}>Mark all as read</Text>
-          </TouchableOpacity>
+      {/* Action bar */}
+      {visible.length > 0 && (
+        <View style={styles.actionRow}>
+          {unreadCount > 0 ? (
+            <>
+              <Text style={styles.unreadLabel}>{unreadCount} unread</Text>
+              <TouchableOpacity onPress={markAllRead}>
+                <Text style={styles.actionBtn}>Read all</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={styles.unreadLabel}>All read</Text>
+          )}
         </View>
       )}
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator size="large" color="#2F4366" /></View>
-      ) : announcements.length === 0 ? (
+      ) : visible.length === 0 ? (
         <View style={styles.center}>
           <Ionicons name="notifications-off-outline" size={48} color="#C4CAD4" />
-          <Text style={styles.emptyText}>No notifications yet</Text>
+          <Text style={styles.emptyText}>No notifications</Text>
           <Text style={styles.emptySubtext}>Announcements from your favourite stores will appear here</Text>
         </View>
       ) : (
         <FlatList
-          data={announcements}
+          data={visible}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
@@ -127,6 +154,13 @@ export default function NotificationsScreen() {
                   </View>
                   {!isRead && <View style={styles.dot} />}
                 </View>
+                {/* Delete button — visible when expanded */}
+                {isExpanded && (
+                  <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteNotification(item.id)}>
+                    <Ionicons name="trash-outline" size={14} color="#E74C3C" />
+                    <Text style={styles.deleteBtnText}>Delete</Text>
+                  </TouchableOpacity>
+                )}
               </TouchableOpacity>
             );
           }}
@@ -143,10 +177,11 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 8 },
   backBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, fontSize: 20, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold', textAlign: 'center' },
+  headerAction: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
 
-  unreadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginTop: 12, marginBottom: 8 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginTop: 12, marginBottom: 8 },
   unreadLabel: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
-  readAllBtn: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
+  actionBtn: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#2F4366', backgroundColor: '#E8F4FD', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
 
   emptyText: { fontSize: 16, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
   emptySubtext: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
@@ -166,4 +201,7 @@ const styles = StyleSheet.create({
   notifPreview: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', lineHeight: 19 },
 
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#2F4366', marginTop: 4 },
+
+  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F0F2F5' },
+  deleteBtnText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#E74C3C' },
 });
