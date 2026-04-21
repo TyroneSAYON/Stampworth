@@ -101,7 +101,6 @@ export default function QRCodeScreen() {
           if (!tx?.merchant_id) return;
           pendingTxRef.current.push({ merchantId: tx.merchant_id, type: tx.transaction_type });
 
-          // Wait 3s after last event — gives business app time to finish batch + reward
           if (stampAlertTimer.current) clearTimeout(stampAlertTimer.current);
           stampAlertTimer.current = setTimeout(async () => {
             const pending = [...pendingTxRef.current];
@@ -116,7 +115,7 @@ export default function QRCodeScreen() {
               const { data: cards } = await getCustomerLoyaltyCards();
               card = (cards || []).find((c: any) => c.merchant_id === lastMerchantId);
               if (card) break;
-              await new Promise((r) => setTimeout(r, 1000));
+              await new Promise((r) => setTimeout(r, 300));
             }
             if (!card) return;
 
@@ -134,7 +133,7 @@ export default function QRCodeScreen() {
                 iconImageUrl: card.stamp_settings?.stamp_icon_image_url || '',
               },
             });
-          }, 3000);
+          }, 500);
         }
       )
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stamps', filter: `customer_id=eq.${customerId}` }, (payload) => {
@@ -152,11 +151,11 @@ export default function QRCodeScreen() {
             const { data: cards } = await getCustomerLoyaltyCards();
             card = (cards || []).find((c: any) => c.merchant_id === lastMerchantId);
             if (card) break;
-            await new Promise((r) => setTimeout(r, 1000));
+            await new Promise((r) => setTimeout(r, 300));
           }
           if (!card) return;
           router.push({ pathname: '/stamps', params: { loyaltyCardId: card.id, merchantId: card.merchant_id, merchant: card.merchants?.business_name || 'Store', collected: String(card.stamp_count || 0), total: String(card.stamp_settings?.stamps_per_redemption || 10), color: card.stamp_settings?.card_color || '#2F4366', iconName: card.stamp_settings?.stamp_icon_name || 'star', iconImageUrl: card.stamp_settings?.stamp_icon_image_url || '' } });
-        }, 3000);
+        }, 500);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'merchant_announcements' }, () => {
         if (customerId) getCustomerAnnouncements(customerId).then(({ data }) => setAnnouncements(data || []));

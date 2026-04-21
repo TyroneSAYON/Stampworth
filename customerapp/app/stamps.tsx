@@ -57,7 +57,7 @@ export default function StampsScreen() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const debouncedRefresh = () => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => refreshData(), 1500);
+      timer = setTimeout(() => refreshData(), 500);
     };
     const setup = async () => {
       const { data: customer } = await getOrCreateCustomerProfile();
