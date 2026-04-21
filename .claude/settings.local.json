@@ -11,7 +11,14 @@
       "Bash(npm uninstall:*)",
       "Bash(node -e \"const p = require\\(''./package.json''\\); console.log\\(Object.keys\\(p.dependencies\\).filter\\(d => d.includes\\(''webview''\\)\\).join\\('', ''\\) || ''not installed''\\)\")",
       "Bash(git checkout:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(cat /c/Users/AARON/Stampworth/customerapp/app/\\\\\\(tabs\\\\\\)/notifications.tsx)",
+      "Bash(FILE=\"/c/Users/AARON/Stampworth/customerapp/app/\\(tabs\\)/qrcode.tsx\")",
+      "Bash(perl -pi -e 's/}, 3000\\\\\\);/}, 500\\);/g' \"$FILE\")",
+      "Bash(perl -pi -e 's/await new Promise\\\\\\(\\\\\\(r\\\\\\) => setTimeout\\\\\\(r, 1000\\\\\\)\\\\\\);/await new Promise\\(\\(r\\) => setTimeout\\(r, 300\\)\\);/g' /c/Users/AARON/Stampworth/customerapp/app/\\\\\\(tabs\\\\\\)/qrcode.tsx)"
     ]
   }
 }

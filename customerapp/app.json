@@ -15,7 +15,7 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses your location to show nearby merchants and provide navigation."
       },
       "config": {
-        "googleMapsApiKey": "AIzaSyAZyqmXzl9ZD3ItUQ0EJDfq4GFqz_kkWIE"
+        "googleMapsApiKey": "AIzaSyAZyqmXzl9ZD3ItUQ0EJDfq4GFkWIE"
       }
     },
     "android": {

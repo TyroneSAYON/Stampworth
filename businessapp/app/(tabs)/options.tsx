@@ -339,20 +339,20 @@ export default function OptionsScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.planName}>Starter</Text>
-              <Text style={styles.planTagline}>For small shops getting started</Text>
+              <Text style={styles.planTagline}>For sari-sari stores & small shops</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={[styles.planPrice, { color: '#2F4366' }]}>₱499</Text>
+              <Text style={[styles.planPrice, { color: '#2F4366' }]}>₱149</Text>
               <Text style={styles.planPeriod}>/month</Text>
             </View>
           </View>
           <View style={styles.planDivider} />
           <View style={styles.planFeatures}>
-            <PlanFeature icon="people-outline" text="Up to 50 loyalty card holders" />
-            <PlanFeature icon="qr-code-outline" text="200 QR stamp scans / month" />
+            <PlanFeature icon="people-outline" text="Up to 100 loyalty card holders" />
+            <PlanFeature icon="qr-code-outline" text="500 QR stamp scans / month" />
             <PlanFeature icon="card-outline" text="1 loyalty card design" />
             <PlanFeature icon="bar-chart-outline" text="Basic stamp & redemption stats" />
-            <PlanFeature icon="megaphone-outline" text="5 announcements / month" />
+            <PlanFeature icon="megaphone-outline" text="10 announcements / month" />
             <PlanFeature icon="mail-outline" text="Email support" />
           </View>
           <TouchableOpacity
@@ -367,7 +367,7 @@ export default function OptionsScreen() {
         <View style={[styles.planCard, { borderColor: '#27AE60', borderWidth: 2 }]}>
           <View style={styles.popularBanner}>
             <Ionicons name="star" size={10} color="#FFFFFF" />
-            <Text style={styles.popularBannerText}>RECOMMENDED</Text>
+            <Text style={styles.popularBannerText}>BEST VALUE</Text>
           </View>
           <View style={styles.planCardTop}>
             <View style={[styles.planIconCircle, { backgroundColor: '#E8F8EE' }]}>
@@ -375,18 +375,18 @@ export default function OptionsScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.planName}>Growth</Text>
-              <Text style={styles.planTagline}>For growing businesses</Text>
+              <Text style={styles.planTagline}>For cafés, restaurants & growing SMEs</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={[styles.planPrice, { color: '#27AE60' }]}>₱999</Text>
+              <Text style={[styles.planPrice, { color: '#27AE60' }]}>₱349</Text>
               <Text style={styles.planPeriod}>/month</Text>
             </View>
           </View>
           <View style={styles.planDivider} />
           <View style={styles.planFeatures}>
-            <PlanFeature icon="people-outline" text="Up to 500 loyalty card holders" color="#27AE60" />
+            <PlanFeature icon="people-outline" text="Up to 1,000 loyalty card holders" color="#27AE60" />
             <PlanFeature icon="qr-code-outline" text="Unlimited QR stamp scans" color="#27AE60" />
-            <PlanFeature icon="color-palette-outline" text="5 card designs + custom colors" color="#27AE60" />
+            <PlanFeature icon="color-palette-outline" text="Custom card colors & designs" color="#27AE60" />
             <PlanFeature icon="image-outline" text="Custom stamp icons (upload your own)" color="#27AE60" />
             <PlanFeature icon="analytics-outline" text="Advanced analytics & customer insights" color="#27AE60" />
             <PlanFeature icon="megaphone-outline" text="Unlimited announcements" color="#27AE60" />
@@ -409,10 +409,10 @@ export default function OptionsScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.planName}>Scale</Text>
-              <Text style={styles.planTagline}>For multi-location brands</Text>
+              <Text style={styles.planTagline}>For franchises & multi-branch businesses</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={[styles.planPrice, { color: '#E67E22' }]}>₱1,999</Text>
+              <Text style={[styles.planPrice, { color: '#E67E22' }]}>₱799</Text>
               <Text style={styles.planPeriod}>/month</Text>
             </View>
           </View>
@@ -420,12 +420,12 @@ export default function OptionsScreen() {
           <View style={styles.planFeatures}>
             <PlanFeature icon="people-outline" text="Unlimited loyalty card holders" color="#E67E22" />
             <PlanFeature icon="qr-code-outline" text="Unlimited QR stamp scans" color="#E67E22" />
-            <PlanFeature icon="color-palette-outline" text="Unlimited card designs + full branding" color="#E67E22" />
+            <PlanFeature icon="color-palette-outline" text="Full branding customization" color="#E67E22" />
             <PlanFeature icon="image-outline" text="Custom stamp icons + animated stamps" color="#E67E22" />
             <PlanFeature icon="analytics-outline" text="Full analytics suite + export reports" color="#E67E22" />
             <PlanFeature icon="megaphone-outline" text="Unlimited announcements + push notifications" color="#E67E22" />
-            <PlanFeature icon="map-outline" text="Multi-location store management" color="#E67E22" />
-            <PlanFeature icon="code-slash-outline" text="API access for custom integrations" color="#E67E22" />
+            <PlanFeature icon="map-outline" text="Multi-branch store management" color="#E67E22" />
+            <PlanFeature icon="code-slash-outline" text="API access for POS integration" color="#E67E22" />
             <PlanFeature icon="headset-outline" text="Dedicated account manager" color="#E67E22" />
           </View>
           <TouchableOpacity
