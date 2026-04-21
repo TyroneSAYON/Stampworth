@@ -168,18 +168,32 @@ export default function DashboardPage() {
     load();
 
     // Realtime: subscribe to all key tables
+    const reloadFn = () => {
+      if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+      reloadTimerRef.current = setTimeout(async () => {
+        try {
+          const res = await fetch("/api/data");
+          const d = await res.json();
+          setStats(d.stats); setCustomers(d.customers || []); setMerchants(d.merchants || []); setTransactions(d.transactions || []); setRewards(d.rewards || []); setMerchantStatsMap(d.merchantStats || {}); setAnalytics(d.analytics || null); setSupportMessages(d.supportMessages || []); setDevBroadcasts(d.devBroadcasts || []);
+          setLastUpdate(new Date().toLocaleTimeString());
+          setRealtimeFlash(true);
+          setTimeout(() => setRealtimeFlash(false), 2000);
+        } catch {}
+      }, 800);
+    };
+
     const channel = supabase
       .channel("admin-dashboard-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, debouncedReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "merchants" }, debouncedReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_cards" }, debouncedReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "stamps" }, debouncedReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, debouncedReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "redeemed_rewards" }, debouncedReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "merchant_announcements" }, debouncedReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "support_messages" }, debouncedReload)
-      .on("postgres_changes", { event: "*", schema: "public", table: "dev_broadcasts" }, debouncedReload)
-      .subscribe();
+      .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, reloadFn)
+      .on("postgres_changes", { event: "*", schema: "public", table: "merchants" }, reloadFn)
+      .on("postgres_changes", { event: "*", schema: "public", table: "loyalty_cards" }, reloadFn)
+      .on("postgres_changes", { event: "*", schema: "public", table: "stamps" }, reloadFn)
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, reloadFn)
+      .on("postgres_changes", { event: "*", schema: "public", table: "redeemed_rewards" }, reloadFn)
+      .on("postgres_changes", { event: "*", schema: "public", table: "merchant_announcements" }, reloadFn)
+      .on("postgres_changes", { event: "*", schema: "public", table: "support_messages" }, reloadFn)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dev_broadcasts" }, reloadFn)
+      .subscribe((status) => { console.log("Realtime status:", status); });
 
     return () => {
       supabase.removeChannel(channel);

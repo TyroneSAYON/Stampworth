@@ -5,7 +5,11 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 // Client-side supabase (uses anon key, respects RLS)
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  realtime: {
+    params: { eventsPerSecond: 10 },
+  },
+});
 
 // Server-side supabase (uses service role key, bypasses RLS)
 export const supabaseAdmin = SUPABASE_SERVICE_KEY
