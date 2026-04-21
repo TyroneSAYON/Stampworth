@@ -91,7 +91,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [tab]);
 
-  // Date filter (for businesses tab only) — "all" means no filter
+  // Date filter — shared across overview, merchants, rewards tabs
   const todayStr = new Date().toISOString().split("T")[0];
   const [selectedDate, setSelectedDate] = useState<string>("all");
   const [showCalendar, setShowCalendar] = useState(false);
@@ -414,9 +414,21 @@ export default function DashboardPage() {
         ) : (
           <>
             {/* OVERVIEW */}
-            {tab === "overview" && stats && (
+            {tab === "overview" && stats && (() => {
+              const filteredTx = selectedDate === "all" ? transactions : transactions.filter((t) => t.created_at.startsWith(selectedDate));
+              const filteredCustomers = selectedDate === "all" ? customers : customers.filter((c) => c.created_at.startsWith(selectedDate));
+              const filteredMerchants = selectedDate === "all" ? merchants : merchants.filter((m) => m.created_at.startsWith(selectedDate));
+              const filteredRewards = selectedDate === "all" ? rewards : rewards.filter((r) => r.created_at.startsWith(selectedDate));
+              return (
               <>
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4">Overview</p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Overview {selectedDate !== "all" ? `— ${dateLabel(selectedDate)}` : ""}</p>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setSelectedDate("all")} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${selectedDate === "all" ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"}`}>All</button>
+                    <button onClick={() => setSelectedDate(todayStr)} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${selectedDate === todayStr ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"}`}>Today</button>
+                    <input type="date" value={selectedDate === "all" ? "" : selectedDate} onChange={(e) => setSelectedDate(e.target.value || "all")} className="h-8 px-2 rounded-lg text-[11px] font-semibold bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300" />
+                  </div>
+                </div>
                 {(badgeCounts.customers > 0 || badgeCounts.merchants > 0 || badgeCounts.support > 0 || badgeCounts.rewards > 0) && (
                   <div className="flex flex-wrap gap-2 mb-5">
                     {badgeCounts.customers > 0 && <NotifPill color="blue" icon="👤" text={`${badgeCounts.customers} new customer${badgeCounts.customers > 1 ? "s" : ""}`} onClick={() => switchTab("customers")} />}
@@ -425,18 +437,27 @@ export default function DashboardPage() {
                     {badgeCounts.rewards > 0 && <NotifPill color="purple" icon="🎁" text={`${badgeCounts.rewards} new reward${badgeCounts.rewards > 1 ? "s" : ""}`} onClick={() => switchTab("rewards")} />}
                   </div>
                 )}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
-                  <StatCard label="Customers" value={stats.totalCustomers} />
-                  <StatCard label="Businesses" value={stats.totalMerchants} />
-                  <StatCard label="Loyalty Cards" value={stats.totalLoyaltyCards} />
-                  <StatCard label="Stamps" value={stats.totalStampsIssued} />
-                  <StatCard label="Rewards" value={stats.totalRewardsRedeemed} />
-                  <StatCard label="Announcements" value={stats.totalAnnouncements} />
-                  <StatCard label="Transactions" value={stats.totalTransactions} />
-                </div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Recent Activity</p>
+                {selectedDate === "all" ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+                    <StatCard label="Customers" value={stats.totalCustomers} />
+                    <StatCard label="Businesses" value={stats.totalMerchants} />
+                    <StatCard label="Loyalty Cards" value={stats.totalLoyaltyCards} />
+                    <StatCard label="Stamps" value={stats.totalStampsIssued} />
+                    <StatCard label="Rewards" value={stats.totalRewardsRedeemed} />
+                    <StatCard label="Announcements" value={stats.totalAnnouncements} />
+                    <StatCard label="Transactions" value={stats.totalTransactions} />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+                    <StatCard label="New Customers" value={filteredCustomers.length} />
+                    <StatCard label="New Businesses" value={filteredMerchants.length} />
+                    <StatCard label="Transactions" value={filteredTx.length} />
+                    <StatCard label="Rewards" value={filteredRewards.length} />
+                  </div>
+                )}
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">{selectedDate === "all" ? "Recent Activity" : `Activity on ${dateLabel(selectedDate)}`}</p>
                 <Table heads={["Type", "Customer", "Business", "Date"]}>
-                  {transactions.slice(0, 8).map((tx) => (
+                  {(selectedDate === "all" ? transactions.slice(0, 8) : filteredTx).map((tx) => (
                     <tr key={tx.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
                       <td className="px-4 py-2.5"><TypeBadge type={tx.transaction_type} /></td>
                       <td className="px-4 py-2 text-[12px] text-gray-600 dark:text-gray-400">{tx.customers?.full_name || tx.customers?.email || "-"}</td>
@@ -445,8 +466,10 @@ export default function DashboardPage() {
                     </tr>
                   ))}
                 </Table>
+                {selectedDate !== "all" && filteredTx.length === 0 && <p className="text-center text-gray-400 dark:text-gray-500 text-[12px] py-6">No activity on {dateLabel(selectedDate)}</p>}
               </>
-            )}
+              );
+            })()}
 
             {/* ANALYTICS */}
             {tab === "analytics" && analytics && stats && (
@@ -1211,17 +1234,34 @@ export default function DashboardPage() {
             })()}
 
             {/* REWARDS */}
-            {tab === "rewards" && (
+            {tab === "rewards" && (() => {
+              const filteredRewards = selectedDate === "all" ? rewards : rewards.filter((r: any) => r.created_at.startsWith(selectedDate));
+              const pendingCount = filteredRewards.filter((r: any) => !r.is_used).length;
+              const claimedCount = filteredRewards.filter((r: any) => r.is_used).length;
+              return (
               <>
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4">All Rewards <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({rewards.length})</span></h2>
-                { rewards.filter((r) => !r.is_used).length > 0 && (
-                  <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800">
-                    <span className="w-2 h-2 rounded-full bg-purple-500" />
-                    <p className="text-[12px] font-semibold text-purple-600 dark:text-purple-400">{ rewards.filter((r) => !r.is_used).length} reward{rewards.filter((r) => !r.is_used).length > 1 ? "s" : ""} pending redemption</p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Rewards {selectedDate !== "all" ? `— ${dateLabel(selectedDate)}` : ""} <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({filteredRewards.length})</span></h2>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setSelectedDate("all")} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${selectedDate === "all" ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"}`}>All</button>
+                    <button onClick={() => setSelectedDate(todayStr)} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${selectedDate === todayStr ? "bg-indigo-600 text-white" : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400"}`}>Today</button>
+                    <input type="date" value={selectedDate === "all" ? "" : selectedDate} onChange={(e) => setSelectedDate(e.target.value || "all")} className="h-8 px-2 rounded-lg text-[11px] font-semibold bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300" />
+                  </div>
+                </div>
+                {(pendingCount > 0 || claimedCount > 0) && (
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                      <p className="text-[12px] font-semibold text-amber-600 dark:text-amber-400">{pendingCount} pending</p>
+                    </div>
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                      <span className="w-2 h-2 rounded-full bg-green-500" />
+                      <p className="text-[12px] font-semibold text-green-600 dark:text-green-400">{claimedCount} claimed</p>
+                    </div>
                   </div>
                 )}
                 <div className="sm:hidden space-y-2">
-                  {rewards.map((r: any) => (
+                  {filteredRewards.map((r: any) => (
                     <div key={r.id} className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm p-4">
                       <div className="flex items-center justify-between mb-1">
                         <p className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{r.reward_code}</p>
@@ -1231,11 +1271,11 @@ export default function DashboardPage() {
                       <p className="text-[11px] text-gray-500 dark:text-gray-400">{r.merchants?.business_name || "-"} · {r.stamps_used} stamps</p>
                     </div>
                   ))}
-                  {rewards.length === 0 && <Empty />}
+                  {filteredRewards.length === 0 && <Empty />}
                 </div>
                 <div className="hidden sm:block">
                   <Table heads={["Code", "Customer", "Business", "Stamps", "Status", "Earned", "Used"]}>
-                    {rewards.map((r: any) => (
+                    {filteredRewards.map((r: any) => (
                       <tr key={r.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
                         <td className="px-4 py-2.5 font-mono text-[10px] text-gray-500 dark:text-gray-400">{r.reward_code}</td>
                         <td className="px-4 py-2 text-[12px] text-gray-600 dark:text-gray-400">{r.customers?.full_name || r.customers?.email || "-"}</td>
@@ -1247,10 +1287,11 @@ export default function DashboardPage() {
                       </tr>
                     ))}
                   </Table>
-                  {rewards.length === 0 && <Empty />}
+                  {filteredRewards.length === 0 && <Empty />}
                 </div>
               </>
-            )}
+              );
+            })()}
           </>
         )}
       </main>
