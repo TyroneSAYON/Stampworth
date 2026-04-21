@@ -1,71 +1,77 @@
-import { useState, useCallback } from 'react';
-import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList } from 'react-native';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, SectionList } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
-import { saveMerchantAnnouncement, getMerchantAnnouncements, getCurrentMerchantProfile } from '@/lib/database';
+import { saveMerchantAnnouncement, getMerchantAnnouncements, getCurrentMerchantProfile, getMerchantNotifications } from '@/lib/database';
 import { sendAnnouncementNotification } from '@/lib/notifications';
+import { supabase } from '@/lib/supabase';
 
-interface Announcement {
-  id: string;
-  message: string;
-  created_at: string;
-  is_active: boolean;
-}
+type Notification = { id: string; type: string; title: string; body: string; isRead: boolean; createdAt: string };
+type Announcement = { id: string; message: string; created_at: string; is_active: boolean };
 
 export default function AnnouncementScreen() {
   const [message, setMessage] = useState('');
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [activeSection, setActiveSection] = useState<'inbox' | 'compose'>('inbox');
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const loadedOnce = useRef(false);
+
+  const loadAll = async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+    const [annResult, notifResult] = await Promise.all([
+      getMerchantAnnouncements(),
+      getMerchantNotifications(),
+    ]);
+    if (annResult.data) setAnnouncements(annResult.data);
+    if (notifResult.data) setNotifications(notifResult.data);
+    setLoading(false);
+    loadedOnce.current = true;
+  };
 
   useFocusEffect(
     useCallback(() => {
-      loadAnnouncements();
+      if (!loadedOnce.current) loadAll(true);
+      else loadAll(false);
     }, [])
   );
 
-  const loadAnnouncements = async () => {
-    setLoading(true);
-    const { data, error } = await getMerchantAnnouncements();
-    if (data) setAnnouncements(data);
-    setLoading(false);
-  };
+  // Realtime: new messages and broadcasts
+  useEffect(() => {
+    const channel = supabase
+      .channel('biz-notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, () => loadAll(false))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dev_broadcasts' }, () => loadAll(false))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const handleSend = async () => {
     if (!message.trim()) { Alert.alert('Required', 'Enter an announcement message.'); return; }
     setSending(true);
-
-    // Save to database
     const { data, error } = await saveMerchantAnnouncement(message.trim());
-    if (error) {
-      setSending(false);
-      Alert.alert('Failed', error.message || 'Could not save announcement.');
-      return;
-    }
-
-    // Send push notifications
+    if (error) { setSending(false); Alert.alert('Failed', error.message); return; }
     const { data: merchant } = await getCurrentMerchantProfile();
     let notifCount = 0;
     if (merchant) {
-      const { sent } = await sendAnnouncementNotification(
-        merchant.id,
-        merchant.business_name || 'Stampworth',
-        message.trim(),
-      );
+      const { sent } = await sendAnnouncementNotification(merchant.id, merchant.business_name || 'Stampworth', message.trim());
       notifCount = sent;
     }
-
     setSending(false);
     setMessage('');
     if (data) setAnnouncements([data, ...announcements]);
+    setActiveSection('inbox');
     Alert.alert('Sent', `Announcement saved.${notifCount > 0 ? `\nNotified ${notifCount} customer${notifCount > 1 ? 's' : ''}.` : '\nNo customers to notify yet.'}`);
   };
 
+  const markAllRead = () => setReadIds(new Set(notifications.map((n) => n.id)));
+
   const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    const diff = Date.now() - date.getTime();
+    const diff = Date.now() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'Just now';
     if (mins < 60) return `${mins}m ago`;
@@ -73,8 +79,10 @@ export default function AnnouncementScreen() {
     if (hrs < 24) return `${hrs}h ago`;
     const days = Math.floor(diff / 86400000);
     if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
+    return new Date(dateStr).toLocaleDateString();
   };
+
+  const unreadCount = notifications.filter((n) => !n.isRead && !readIds.has(n.id)).length;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -90,47 +98,109 @@ export default function AnnouncementScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.pageTitle}>Announcements</Text>
-      <Text style={styles.pageSubtitle}>Broadcast to all loyalty card holders</Text>
+      <Text style={styles.pageTitle}>Notifications</Text>
 
-      {/* Compose */}
-      <View style={styles.composeCard}>
-        <TextInput
-          value={message}
-          onChangeText={setMessage}
-          style={styles.composeInput}
-          placeholder="Type your announcement..."
-          placeholderTextColor="#C4CAD4"
-          multiline
-          textAlignVertical="top"
-        />
-        <TouchableOpacity style={styles.sendButton} onPress={handleSend} disabled={sending}>
-          <Ionicons name="send" size={16} color="#FFFFFF" />
-          <Text style={styles.sendButtonText}>{sending ? 'Sending...' : 'Send to All'}</Text>
+      {/* Tabs */}
+      <View style={styles.tabRow}>
+        <TouchableOpacity style={[styles.tabBtn, activeSection === 'inbox' && styles.tabBtnActive]} onPress={() => setActiveSection('inbox')}>
+          <Ionicons name="mail" size={16} color={activeSection === 'inbox' ? '#2F4366' : '#8A94A6'} />
+          <Text style={[styles.tabText, activeSection === 'inbox' && styles.tabTextActive]}>Inbox</Text>
+          {unreadCount > 0 && <View style={styles.tabBadge}><Text style={styles.tabBadgeText}>{unreadCount}</Text></View>}
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tabBtn, activeSection === 'compose' && styles.tabBtnActive]} onPress={() => setActiveSection('compose')}>
+          <Ionicons name="megaphone" size={16} color={activeSection === 'compose' ? '#2F4366' : '#8A94A6'} />
+          <Text style={[styles.tabText, activeSection === 'compose' && styles.tabTextActive]}>Broadcast</Text>
         </TouchableOpacity>
       </View>
 
-      {/* List */}
-      <Text style={styles.sectionTitle}>Recent</Text>
       {loading ? (
-        <View style={styles.loadingRow}><ActivityIndicator size="small" color="#2F4366" /></View>
-      ) : (
-        <FlatList
-          data={announcements}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<View style={styles.emptyCard}><Text style={styles.emptyText}>No announcements yet</Text></View>}
-          renderItem={({ item }) => (
-            <View style={styles.messageCard}>
-              <View style={styles.messageHeader}>
-                <Ionicons name="checkmark-circle" size={14} color="#27AE60" />
-                <Text style={styles.messageTime}>{formatTime(item.created_at)}</Text>
-              </View>
-              <Text style={styles.messageText}>{item.message}</Text>
+        <View style={styles.center}><ActivityIndicator size="large" color="#2F4366" /></View>
+      ) : activeSection === 'inbox' ? (
+        <>
+          {unreadCount > 0 && (
+            <View style={styles.unreadRow}>
+              <Text style={styles.unreadLabel}>{unreadCount} new</Text>
+              <TouchableOpacity onPress={markAllRead}><Text style={styles.readAllBtn}>Mark all as read</Text></TouchableOpacity>
             </View>
           )}
-        />
+          {notifications.length === 0 ? (
+            <View style={styles.center}>
+              <Ionicons name="notifications-off-outline" size={48} color="#C4CAD4" />
+              <Text style={styles.emptyText}>No notifications yet</Text>
+              <Text style={styles.emptySubtext}>Messages from customers and developers will appear here</Text>
+            </View>
+          ) : (
+            <SectionList
+              sections={[{ title: '', data: notifications }]}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.list}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const isRead = item.isRead || readIds.has(item.id);
+                const icon = item.type === 'dev_broadcast' ? 'megaphone' : 'person-circle';
+                const iconColor = item.type === 'dev_broadcast' ? '#E67E22' : '#2F4366';
+                const bgColor = item.type === 'dev_broadcast' ? '#FFF4E6' : '#E8F4FD';
+                return (
+                  <TouchableOpacity
+                    style={[styles.notifCard, !isRead && styles.notifCardUnread]}
+                    onPress={() => {
+                      setReadIds((prev) => new Set(prev).add(item.id));
+                      Alert.alert(item.title, item.body);
+                    }}
+                  >
+                    <View style={[styles.notifIcon, { backgroundColor: bgColor }]}>
+                      <Ionicons name={icon as any} size={18} color={iconColor} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.notifTopRow}>
+                        <Text style={[styles.notifTitle, !isRead && { color: '#1A1A2E' }]} numberOfLines={1}>{item.title}</Text>
+                        <Text style={styles.notifTime}>{formatTime(item.createdAt)}</Text>
+                      </View>
+                      <Text style={styles.notifBody} numberOfLines={2}>{item.body}</Text>
+                      <Text style={styles.notifType}>{item.type === 'dev_broadcast' ? 'From Stampworth' : 'Customer message'}</Text>
+                    </View>
+                    {!isRead && <View style={styles.unreadDot} />}
+                  </TouchableOpacity>
+                );
+              }}
+              renderSectionHeader={() => null}
+            />
+          )}
+        </>
+      ) : (
+        <>
+          <View style={styles.composeCard}>
+            <Text style={styles.composeLabel}>Send announcement to all your loyalty card holders</Text>
+            <TextInput
+              value={message}
+              onChangeText={setMessage}
+              style={styles.composeInput}
+              placeholder="Type your announcement..."
+              placeholderTextColor="#C4CAD4"
+              multiline
+              textAlignVertical="top"
+            />
+            <TouchableOpacity style={styles.sendButton} onPress={handleSend} disabled={sending}>
+              <Ionicons name="send" size={16} color="#FFFFFF" />
+              <Text style={styles.sendButtonText}>{sending ? 'Sending...' : 'Send to All'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.sectionTitle}>Sent Announcements</Text>
+          {announcements.length === 0 ? (
+            <View style={styles.emptyCard}><Text style={styles.emptyCardText}>No announcements sent yet</Text></View>
+          ) : (
+            announcements.map((item) => (
+              <View key={item.id} style={styles.sentCard}>
+                <View style={styles.sentHeader}>
+                  <Ionicons name="checkmark-circle" size={14} color="#27AE60" />
+                  <Text style={styles.sentTime}>{formatTime(item.created_at)}</Text>
+                </View>
+                <Text style={styles.sentText}>{item.message}</Text>
+              </View>
+            ))
+          )}
+        </>
       )}
     </ThemedView>
     </KeyboardAvoidingView>
@@ -139,24 +209,55 @@ export default function AnnouncementScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 32 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 8 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logo: { width: 32, height: 32 },
   brandName: { fontSize: 20, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
   profileButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#E0E4EA' },
-  pageTitle: { fontSize: 26, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold', paddingHorizontal: 24, marginTop: 20 },
-  pageSubtitle: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', paddingHorizontal: 24, marginTop: 4, marginBottom: 20 },
-  composeCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 24 },
-  composeInput: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#1A1A2E', minHeight: 80, marginBottom: 14, padding: 0 },
+  pageTitle: { fontSize: 26, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold', paddingHorizontal: 24, marginTop: 20, marginBottom: 16 },
+
+  // Tabs
+  tabRow: { flexDirection: 'row', marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 12, padding: 4, marginBottom: 16 },
+  tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10 },
+  tabBtnActive: { backgroundColor: '#E8F4FD' },
+  tabText: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
+  tabTextActive: { color: '#2F4366' },
+  tabBadge: { backgroundColor: '#E74C3C', borderRadius: 8, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  tabBadgeText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+
+  // Inbox
+  unreadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 },
+  unreadLabel: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  readAllBtn: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
+  list: { paddingHorizontal: 24, paddingBottom: 120 },
+  notifCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, marginBottom: 8, gap: 12 },
+  notifCardUnread: { borderLeftWidth: 3, borderLeftColor: '#2F4366' },
+  notifIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  notifTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
+  notifTitle: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#8A94A6', flex: 1, marginRight: 8 },
+  notifTime: { fontSize: 10, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
+  notifBody: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#1A1A2E', lineHeight: 18, marginBottom: 4 },
+  notifType: { fontSize: 10, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#2F4366', marginTop: 4 },
+
+  // Empty
+  emptyText: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
+  emptySubtext: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
+  emptyCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 24, alignItems: 'center' },
+  emptyCardText: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
+
+  // Compose
+  composeCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 20 },
+  composeLabel: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginBottom: 12 },
+  composeInput: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#1A1A2E', minHeight: 100, marginBottom: 14, padding: 0 },
   sendButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 46, borderRadius: 12, backgroundColor: '#2F4366', gap: 8 },
   sendButtonText: { color: '#FFFFFF', fontSize: 14, fontFamily: 'Poppins-SemiBold' },
+
+  // Sent
   sectionTitle: { fontSize: 15, fontFamily: 'Poppins-SemiBold', color: '#2F4366', paddingHorizontal: 24, marginBottom: 12 },
-  list: { paddingHorizontal: 24, paddingBottom: 120 },
-  loadingRow: { alignItems: 'center', paddingTop: 24 },
-  emptyCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 24, alignItems: 'center' },
-  emptyText: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
-  messageCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 10 },
-  messageHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  messageTime: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
-  messageText: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#1A1A2E', lineHeight: 20 },
+  sentCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 10 },
+  sentHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  sentTime: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
+  sentText: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#1A1A2E', lineHeight: 20 },
 });

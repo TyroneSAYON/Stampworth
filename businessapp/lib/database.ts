@@ -1033,6 +1033,46 @@ export const sendSupportMessage = async (subject: string, message: string) => {
   return { error: insertError };
 };
 
+// Get incoming messages for this merchant (from customers + dev broadcasts)
+export const getMerchantNotifications = async () => {
+  const { data: merchant, error } = await ensureCurrentMerchantProfile();
+  if (error || !merchant) return { data: [], error };
+
+  // Fetch customer messages + dev broadcasts in parallel
+  const [messagesResult, broadcastsResult] = await Promise.all([
+    supabase
+      .from('support_messages')
+      .select('id, sender_type, sender_name, sender_email, subject, message, is_read, created_at')
+      .eq('sender_type', 'customer')
+      .order('created_at', { ascending: false })
+      .limit(50),
+    supabase
+      .from('dev_broadcasts')
+      .select('id, title, message, target, is_active, created_at')
+      .eq('is_active', true)
+      .or('target.eq.all,target.eq.merchants')
+      .order('created_at', { ascending: false })
+      .limit(20),
+  ]);
+
+  const notifications: any[] = [];
+
+  // Add customer messages
+  for (const m of messagesResult.data || []) {
+    notifications.push({ id: m.id, type: 'customer_message', title: m.sender_name || m.sender_email || 'Customer', body: m.subject ? `${m.subject}: ${m.message}` : m.message, isRead: m.is_read, createdAt: m.created_at });
+  }
+
+  // Add dev broadcasts
+  for (const b of broadcastsResult.data || []) {
+    notifications.push({ id: b.id, type: 'dev_broadcast', title: b.title || 'Stampworth', body: b.message, isRead: false, createdAt: b.created_at });
+  }
+
+  // Sort by date
+  notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return { data: notifications, error: null };
+};
+
 // Reset loyalty program — clears all stamps, cards, rewards, and transactions for this merchant
 export const resetLoyaltyProgram = async () => {
   const { data: merchant, error: merchantError } = await ensureCurrentMerchantProfile();
