@@ -1296,13 +1296,13 @@ export const saveMerchantLocation = async (latitude: number, longitude: number) 
 
 // Get all customers who have recent location data (active Stampworth users)
 export const getNearbyCustomersWithLocation = async (_merchantId: string) => {
-  // Get recent locations (last 30 minutes) to show active users
-  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  // Get recent locations (last 2 hours) to show active users
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
   const { data: locations } = await supabase
     .from('user_locations')
     .select('customer_id, latitude, longitude, created_at')
-    .gte('created_at', thirtyMinAgo)
+    .gte('created_at', twoHoursAgo)
     .order('created_at', { ascending: false });
 
   if (!locations || locations.length === 0) return { data: [], error: null };

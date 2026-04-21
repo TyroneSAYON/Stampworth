@@ -12,6 +12,7 @@ import {
   saveMerchantLocation,
   getNearbyCustomersWithLocation,
 } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
 
 const NEARBY_REFRESH_MS = 15000; // refresh nearby customers every 15s
 
@@ -112,18 +113,20 @@ export default function ExploreScreen() {
   const [cardModalVisible, setCardModalVisible] = useState(false);
   const [loadingCard, setLoadingCard] = useState(false);
 
+  const refreshNearby = useCallback(() => {
+    if (merchantIdRef.current) {
+      getNearbyCustomersWithLocation(merchantIdRef.current).then(({ data }) => {
+        setNearbyCustomers(data || []);
+        setLastRefreshed(new Date());
+      });
+    }
+  }, []);
+
   useFocusEffect(useCallback(() => {
     if (!loaded) init();
 
-    // Start auto-refresh for nearby customers when screen is focused
-    refreshIntervalRef.current = setInterval(() => {
-      if (merchantIdRef.current) {
-        getNearbyCustomersWithLocation(merchantIdRef.current).then(({ data }) => {
-          setNearbyCustomers(data || []);
-          setLastRefreshed(new Date());
-        });
-      }
-    }, NEARBY_REFRESH_MS);
+    // Auto-refresh every 15s
+    refreshIntervalRef.current = setInterval(refreshNearby, NEARBY_REFRESH_MS);
 
     return () => {
       if (refreshIntervalRef.current) {
@@ -132,6 +135,16 @@ export default function ExploreScreen() {
       }
     };
   }, [loaded]));
+
+  // Realtime: instant updates when customer locations change or scans happen
+  useEffect(() => {
+    const channel = supabase
+      .channel('explore-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'user_locations' }, refreshNearby)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, refreshNearby)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [refreshNearby]);
 
   const init = async () => {
     setLoading(true);

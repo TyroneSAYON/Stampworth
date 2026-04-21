@@ -63,6 +63,10 @@ export default function DashboardPage() {
   const [broadcastTarget, setBroadcastTarget] = useState<"all" | "customers" | "merchants">("all");
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
+  // Realtime indicator
+  const [realtimeFlash, setRealtimeFlash] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<string>("");
+
   // Monitoring
   const [monitor, setMonitor] = useState<MonitorData | null>(null);
   const [monitorLoading, setMonitorLoading] = useState(false);
@@ -151,7 +155,12 @@ export default function DashboardPage() {
   const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedReload = useCallback(() => {
     if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
-    reloadTimerRef.current = setTimeout(() => { load(); }, 800);
+    reloadTimerRef.current = setTimeout(() => {
+      load();
+      // Flash the realtime indicator
+      setRealtimeFlash(true);
+      setTimeout(() => setRealtimeFlash(false), 2000);
+    }, 800);
   }, []);
 
   useEffect(() => {
@@ -184,6 +193,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/data");
       const d = await res.json();
       setStats(d.stats); setCustomers(d.customers || []); setMerchants(d.merchants || []); setTransactions(d.transactions || []); setRewards(d.rewards || []); setMerchantStatsMap(d.merchantStats || {}); setAnalytics(d.analytics || null); setSupportMessages(d.supportMessages || []); setDevBroadcasts(d.devBroadcasts || []);
+      setLastUpdate(new Date().toLocaleTimeString());
     } catch {}
     setLoading(false);
   };
@@ -360,7 +370,11 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500">
             {stats && <><span className="hidden sm:inline font-mono">{stats.totalCustomers} users</span><span className="hidden sm:inline">·</span><span className="hidden sm:inline font-mono">{stats.totalMerchants} stores</span></>}
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /><span className="hidden sm:inline">Live</span></span>
+            {lastUpdate && <span className="hidden md:inline font-mono text-gray-300 dark:text-gray-600">{lastUpdate}</span>}
+            <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full transition-colors duration-500 ${realtimeFlash ? "bg-green-100 dark:bg-green-900/30" : ""}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${realtimeFlash ? "bg-green-400 scale-125" : "bg-green-500"} animate-pulse transition-transform`} />
+              <span className="hidden sm:inline">{realtimeFlash ? "Updated" : "Live"}</span>
+            </span>
           </div>
         </header>
 
@@ -1448,45 +1462,95 @@ function Sparkline({ label, data, color }: { label: string; data: { date: string
 }
 
 function StoreMap({ merchants, onSelect }: { merchants: Merchant[]; onSelect: (m: Merchant) => void }) {
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [expanded, setExpanded] = useState(false);
 
+  const esc = (s: string) => s.replace(/'/g, "&#39;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+  const center = merchants.find((m) => m.latitude && m.longitude);
+  const centerLat = center?.latitude || 14.5995;
+  const centerLng = center?.longitude || 120.9842;
+
+  const storeMarkers = merchants.filter((m) => m.latitude && m.longitude).map((m) => {
+    const popup = `<div style="font-family:system-ui;padding:2px 0"><b style="color:#4f46e5">${esc(m.business_name)}</b><br/><span style="color:#888;font-size:11px">${esc([m.address, m.city].filter(Boolean).join(", ") || "No address")}</span></div>`;
+    const nameLabel = `(function(){var n='${esc(m.business_name)}';var el=document.createElement('span');el.textContent=n;el.style.cssText='position:absolute;visibility:hidden;font:600 10px system-ui';document.body.appendChild(el);var w=el.offsetWidth+18;document.body.removeChild(el);L.marker([${m.latitude},${m.longitude}],{icon:L.divIcon({className:'',html:'<div style="width:'+w+'px;font-family:system-ui;font-size:10px;font-weight:600;color:#fff;background:#4f46e5;padding:4px 9px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.25);text-align:center;pointer-events:none;line-height:1.2">'+n+'</div>',iconSize:[w,18],iconAnchor:[w/2,-20]}),interactive:false}).addTo(map)})();`;
+    if (m.logo_url) {
+      return `(function(){
+        var ic=L.divIcon({className:'',html:'<div style="width:34px;height:34px;border-radius:50%;border:3px solid #fff;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.3);background:#4f46e5;display:flex;align-items:center;justify-content:center"><img src="${esc(m.logo_url)}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display=\\'none\\'"/></div>',iconSize:[34,34],iconAnchor:[17,17]});
+        L.marker([${m.latitude},${m.longitude}],{icon:ic}).addTo(map).bindPopup('${popup.replace(/'/g, "\\'")}').on('click',function(){window.parent.postMessage({type:'store',id:'${m.id}'},'*')});
+        ${nameLabel}
+      })();`;
+    }
+    return `L.circleMarker([${m.latitude},${m.longitude}],{radius:12,fillColor:'#4f46e5',color:'#fff',weight:3,fillOpacity:1}).addTo(map).bindPopup('${popup.replace(/'/g, "\\'")}').on('click',function(){window.parent.postMessage({type:'store',id:'${m.id}'},'*')});
+    ${nameLabel}`;
+  }).join("\n");
+
+  const bounds = merchants.filter((m) => m.latitude && m.longitude).map((m) => `[${m.latitude},${m.longitude}]`);
+  const fitBounds = bounds.length > 1 ? `map.fitBounds([${bounds.join(",")}],{padding:[40,40],maxZoom:14});` : "";
+
+  const html = `<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+<style>html,body,#map{width:100%;height:100%;margin:0;padding:0;}</style>
+</head><body>
+<div id="map"></div>
+<script>
+var map=L.map('map',{attributionControl:false}).setView([${centerLat},${centerLng}],12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:''}).addTo(map);
+${storeMarkers}
+${fitBounds}
+<\/script>
+</body></html>`;
+
+  // Handle clicks from iframe
   useEffect(() => {
-    if (!mapContainer.current || mapRef.current) return;
-    let cancelled = false;
-    (async () => {
-      const mgl = await import("maplibre-gl");
-      await import("maplibre-gl/dist/maplibre-gl.css");
-      if (cancelled || !mapContainer.current) return;
-      const center: [number, number] = merchants.length > 0 ? [merchants[0].longitude!, merchants[0].latitude!] : [120.9842, 14.5995];
-      const map = new mgl.Map({ container: mapContainer.current, style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json", center, zoom: 12 });
-      map.addControl(new mgl.NavigationControl(), "top-right");
-      map.on("load", () => {
-        merchants.forEach((m) => {
-          if (!m.latitude || !m.longitude) return;
-          const el = document.createElement("div");
-          if (m.logo_url) {
-            el.style.cssText = "width:36px;height:36px;border-radius:50%;border:3px solid #fff;cursor:pointer;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.3);background:#4f46e5;";
-            const img = document.createElement("img");
-            img.src = m.logo_url;
-            img.style.cssText = "width:100%;height:100%;object-fit:cover;";
-            img.onerror = () => { el.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="white" style="margin:auto"><path d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/></svg>'; el.style.display = "flex"; el.style.alignItems = "center"; el.style.justifyContent = "center"; };
-            el.appendChild(img);
-          } else {
-            el.style.cssText = "width:32px;height:32px;border-radius:50%;background:#4f46e5;border:3px solid #fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.3);";
-            el.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/></svg>';
-          }
-          el.title = m.business_name;
-          const popup = new mgl.Popup({ offset: 20, closeButton: false }).setHTML(`<div style="font-family:system-ui;padding:4px 0"><strong style="color:#4f46e5">${m.business_name}</strong><br/><span style="color:#888;font-size:11px">${[m.address, m.city].filter(Boolean).join(", ") || "No address"}</span></div>`);
-          new mgl.Marker({ element: el }).setLngLat([m.longitude, m.latitude]).setPopup(popup).addTo(map);
-          el.addEventListener("click", () => onSelect(m));
-        });
-        if (merchants.length > 1) { const bounds = new mgl.LngLatBounds(); merchants.forEach((m) => { if (m.latitude && m.longitude) bounds.extend([m.longitude, m.latitude]); }); map.fitBounds(bounds, { padding: 60, maxZoom: 14 }); }
-      });
-      mapRef.current = map;
-    })();
-    return () => { cancelled = true; if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
-  }, [merchants]);
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "store") {
+        const m = merchants.find((x) => x.id === e.data.id);
+        if (m) onSelect(m);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [merchants, onSelect]);
 
-  return <div ref={mapContainer} className="w-full rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden" style={{ height: "clamp(280px, 50vw, 480px)" }} />;
+  return (
+    <>
+      <div className="relative w-full rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden" style={{ height: "clamp(360px, 55vw, 540px)" }}>
+        <iframe
+          ref={iframeRef}
+          srcDoc={html}
+          className="w-full h-full"
+          style={{ border: "none" }}
+          sandbox="allow-scripts allow-same-origin"
+        />
+        <button onClick={() => setExpanded(true)} className="absolute top-3 right-3 w-9 h-9 rounded-lg bg-indigo-600/90 hover:bg-indigo-600 text-white flex items-center justify-center shadow-md transition-colors" title="Expand map">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+        </button>
+        <div className="absolute bottom-3 left-3 bg-white/90 dark:bg-gray-900/90 backdrop-blur px-2.5 py-1 rounded-md shadow-sm text-[10px] font-mono text-gray-500 dark:text-gray-400">
+          {merchants.filter((m) => m.latitude && m.longitude).length} stores on map
+        </div>
+      </div>
+      {expanded && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="relative w-full h-full max-w-[95vw] max-h-[90vh] rounded-xl overflow-hidden shadow-2xl">
+            <iframe
+              srcDoc={html}
+              className="w-full h-full"
+              style={{ border: "none" }}
+              sandbox="allow-scripts allow-same-origin"
+            />
+            <button onClick={() => setExpanded(false)} className="absolute top-4 right-4 w-10 h-10 rounded-lg bg-indigo-600/90 hover:bg-indigo-600 text-white flex items-center justify-center shadow-lg transition-colors" title="Close">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21h6v-6M15 3H9v6M3 21l7-7M21 3l-7 7"/></svg>
+            </button>
+            <div className="absolute bottom-4 left-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur px-3 py-1.5 rounded-lg shadow-md text-xs font-mono text-gray-600 dark:text-gray-300">
+              {merchants.filter((m) => m.latitude && m.longitude).length} stores on map
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
