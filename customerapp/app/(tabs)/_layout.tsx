@@ -7,7 +7,6 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useLocationTracking } from '@/hooks/use-location-tracking';
-import { DevBroadcastListener } from '@/components/dev-broadcast-listener';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -15,7 +14,6 @@ export default function TabLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-    <DevBroadcastListener />
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
