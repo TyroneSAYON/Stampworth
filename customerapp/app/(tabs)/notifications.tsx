@@ -21,16 +21,29 @@ export default function NotificationsScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [lastSeenTime, setLastSeenTime] = useState<string | null>(null);
   const customerIdRef = useRef<string | null>(null);
   const loadedOnce = useRef(false);
+  const storageLoaded = useRef(false);
 
-  // Persist read/deleted IDs
+  // Load persisted state (shared with QR page)
   useEffect(() => {
-    AsyncStorage.getItem('stampworth_read_notifs').then((v) => { if (v) setReadIds(new Set(JSON.parse(v))); }).catch(() => {});
-    AsyncStorage.getItem('stampworth_deleted_notifs').then((v) => { if (v) setDeletedIds(new Set(JSON.parse(v))); }).catch(() => {});
+    Promise.all([
+      AsyncStorage.getItem('stampworth_read_notifs'),
+      AsyncStorage.getItem('stampworth_deleted_notifs'),
+      AsyncStorage.getItem('stampworth_last_seen_notif'),
+    ]).then(([r, d, t]) => {
+      if (r) setReadIds(new Set(JSON.parse(r)));
+      if (d) setDeletedIds(new Set(JSON.parse(d)));
+      if (t) setLastSeenTime(t);
+      storageLoaded.current = true;
+    }).catch(() => { storageLoaded.current = true; });
   }, []);
-  useEffect(() => { if (readIds.size > 0) AsyncStorage.setItem('stampworth_read_notifs', JSON.stringify([...readIds])).catch(() => {}); }, [readIds]);
-  useEffect(() => { if (deletedIds.size > 0) AsyncStorage.setItem('stampworth_deleted_notifs', JSON.stringify([...deletedIds])).catch(() => {}); }, [deletedIds]);
+  useEffect(() => { if (storageLoaded.current) AsyncStorage.setItem('stampworth_read_notifs', JSON.stringify([...readIds])).catch(() => {}); }, [readIds]);
+  useEffect(() => { if (storageLoaded.current) AsyncStorage.setItem('stampworth_deleted_notifs', JSON.stringify([...deletedIds])).catch(() => {}); }, [deletedIds]);
+  useEffect(() => { if (lastSeenTime) AsyncStorage.setItem('stampworth_last_seen_notif', lastSeenTime).catch(() => {}); }, [lastSeenTime]);
+
+  const isNotifRead = (a: Announcement) => readIds.has(a.id) || (lastSeenTime && new Date(a.created_at).getTime() <= new Date(lastSeenTime).getTime());
 
   const loadAnnouncements = async (showLoader = true) => {
     if (showLoader) setLoading(true);
@@ -71,11 +84,11 @@ export default function NotificationsScreen() {
   const deleteAllNotifications = () => {
     Alert.alert('Delete all', 'Remove all notifications?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete All', style: 'destructive', onPress: () => setDeletedIds(new Set(announcements.map((a) => a.id))) },
+      { text: 'Delete All', style: 'destructive', onPress: () => { setDeletedIds(new Set(announcements.map((a) => a.id))); setLastSeenTime(new Date().toISOString()); } },
     ]);
   };
 
-  const markAllRead = () => setReadIds(new Set(visible.map((a) => a.id)));
+  const markAllRead = () => { setReadIds(new Set(visible.map((a) => a.id))); setLastSeenTime(new Date().toISOString()); };
 
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -91,7 +104,7 @@ export default function NotificationsScreen() {
   };
 
   const visible = announcements.filter((a) => !deletedIds.has(a.id));
-  const unreadCount = visible.filter((a) => !readIds.has(a.id)).length;
+  const unreadCount = visible.filter((a) => !isNotifRead(a)).length;
 
   return (
     <View style={styles.container}>
@@ -139,7 +152,7 @@ export default function NotificationsScreen() {
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => {
-            const isRead = readIds.has(item.id);
+            const isRead = isNotifRead(item);
             const isExpanded = expandedId === item.id;
             const merchantName = item.merchants?.business_name || 'Store';
 

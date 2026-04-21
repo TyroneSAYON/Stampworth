@@ -25,17 +25,30 @@ export default function QRCodeScreen() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [lastSeenTime, setLastSeenTime] = useState<string | null>(null);
   const [selectedNotif, setSelectedNotif] = useState<Announcement | null>(null);
   const dropdownAnim = useRef(new Animated.Value(0)).current;
   const loadedRef = useRef(false);
+  const storageLoaded = useRef(false);
 
-  // Persist read/deleted IDs
+  // Load persisted state
   useEffect(() => {
-    AsyncStorage.getItem('stampworth_read_notifs').then((v) => { if (v) setReadIds(new Set(JSON.parse(v))); }).catch(() => {});
-    AsyncStorage.getItem('stampworth_deleted_notifs').then((v) => { if (v) setDeletedIds(new Set(JSON.parse(v))); }).catch(() => {});
+    Promise.all([
+      AsyncStorage.getItem('stampworth_read_notifs'),
+      AsyncStorage.getItem('stampworth_deleted_notifs'),
+      AsyncStorage.getItem('stampworth_last_seen_notif'),
+    ]).then(([r, d, t]) => {
+      if (r) setReadIds(new Set(JSON.parse(r)));
+      if (d) setDeletedIds(new Set(JSON.parse(d)));
+      if (t) setLastSeenTime(t);
+      storageLoaded.current = true;
+    }).catch(() => { storageLoaded.current = true; });
   }, []);
-  useEffect(() => { if (readIds.size > 0) AsyncStorage.setItem('stampworth_read_notifs', JSON.stringify([...readIds])).catch(() => {}); }, [readIds]);
-  useEffect(() => { if (deletedIds.size > 0) AsyncStorage.setItem('stampworth_deleted_notifs', JSON.stringify([...deletedIds])).catch(() => {}); }, [deletedIds]);
+
+  // Save persisted state
+  useEffect(() => { if (storageLoaded.current) AsyncStorage.setItem('stampworth_read_notifs', JSON.stringify([...readIds])).catch(() => {}); }, [readIds]);
+  useEffect(() => { if (storageLoaded.current) AsyncStorage.setItem('stampworth_deleted_notifs', JSON.stringify([...deletedIds])).catch(() => {}); }, [deletedIds]);
+  useEffect(() => { if (lastSeenTime) AsyncStorage.setItem('stampworth_last_seen_notif', lastSeenTime).catch(() => {}); }, [lastSeenTime]);
 
   useFocusEffect(
     useCallback(() => {
@@ -191,11 +204,16 @@ export default function QRCodeScreen() {
   };
 
   const visibleAnnouncements = announcements.filter((a) => !deletedIds.has(a.id));
-  const unreadCount = visibleAnnouncements.filter((a) => !readIds.has(a.id)).length;
+  const isRead = (a: Announcement) => readIds.has(a.id) || (lastSeenTime && new Date(a.created_at).getTime() <= new Date(lastSeenTime).getTime());
+  const unreadCount = visibleAnnouncements.filter((a) => !isRead(a)).length;
 
-  const markAllRead = () => setReadIds(new Set(visibleAnnouncements.map((a) => a.id)));
+  const markAllRead = () => {
+    setReadIds(new Set(visibleAnnouncements.map((a) => a.id)));
+    setLastSeenTime(new Date().toISOString());
+  };
   const clearAllNotifs = () => {
     setDeletedIds(new Set(announcements.map((a) => a.id)));
+    setLastSeenTime(new Date().toISOString());
     closeDropdown();
   };
 
@@ -265,22 +283,22 @@ export default function QRCodeScreen() {
                 style={styles.dropdownList}
                 showsVerticalScrollIndicator={false}
                 renderItem={({ item }) => {
-                  const isRead = readIds.has(item.id);
+                  const itemRead = isRead(item);
                   return (
                     <TouchableOpacity
-                      style={[styles.notifItem, !isRead && styles.notifItemUnread]}
+                      style={[styles.notifItem, !itemRead && styles.notifItemUnread]}
                       onPress={() => openNotif(item)}
                       activeOpacity={0.7}
                     >
-                      <View style={[styles.notifDot, !isRead && styles.notifDotActive]} />
+                      <View style={[styles.notifDot, !itemRead && styles.notifDotActive]} />
                       <View style={{ flex: 1 }}>
                         <View style={styles.notifTop}>
-                          <Text style={[styles.notifMerchant, !isRead && { color: '#1A1A2E' }]} numberOfLines={1}>
+                          <Text style={[styles.notifMerchant, !itemRead && { color: '#1A1A2E' }]} numberOfLines={1}>
                             {item.merchants?.business_name || 'Store'}
                           </Text>
                           <Text style={styles.notifTime}>{formatTime(item.created_at)}</Text>
                         </View>
-                        <Text style={[styles.notifMsg, !isRead && { color: '#1A1A2E' }]} numberOfLines={2}>
+                        <Text style={[styles.notifMsg, !itemRead && { color: '#1A1A2E' }]} numberOfLines={2}>
                           {item.message}
                         </Text>
                       </View>

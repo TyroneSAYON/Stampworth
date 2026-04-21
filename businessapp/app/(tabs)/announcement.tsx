@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Alert, ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, Text, TextInput, TouchableOpacity, SectionList } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -19,8 +20,26 @@ export default function AnnouncementScreen() {
   const [sending, setSending] = useState(false);
   const [activeSection, setActiveSection] = useState<'inbox' | 'compose'>('inbox');
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [lastSeenTime, setLastSeenTime] = useState<string | null>(null);
   const [selectedNotif, setSelectedNotif] = useState<Notification | null>(null);
   const loadedOnce = useRef(false);
+  const storageLoaded = useRef(false);
+
+  // Persist read state
+  useEffect(() => {
+    Promise.all([
+      AsyncStorage.getItem('biz_read_notifs'),
+      AsyncStorage.getItem('biz_last_seen_notif'),
+    ]).then(([r, t]) => {
+      if (r) setReadIds(new Set(JSON.parse(r)));
+      if (t) setLastSeenTime(t);
+      storageLoaded.current = true;
+    }).catch(() => { storageLoaded.current = true; });
+  }, []);
+  useEffect(() => { if (storageLoaded.current) AsyncStorage.setItem('biz_read_notifs', JSON.stringify([...readIds])).catch(() => {}); }, [readIds]);
+  useEffect(() => { if (lastSeenTime) AsyncStorage.setItem('biz_last_seen_notif', lastSeenTime).catch(() => {}); }, [lastSeenTime]);
+
+  const isNotifRead = (n: Notification) => n.isRead || readIds.has(n.id) || (lastSeenTime && new Date(n.createdAt).getTime() <= new Date(lastSeenTime).getTime());
 
   const loadAll = async (showLoader = true) => {
     if (showLoader) setLoading(true);
@@ -69,7 +88,7 @@ export default function AnnouncementScreen() {
     Alert.alert('Sent', `Announcement saved.${notifCount > 0 ? `\nNotified ${notifCount} customer${notifCount > 1 ? 's' : ''}.` : '\nNo customers to notify yet.'}`);
   };
 
-  const markAllRead = () => setReadIds(new Set(notifications.map((n) => n.id)));
+  const markAllRead = () => { setReadIds(new Set(notifications.map((n) => n.id))); setLastSeenTime(new Date().toISOString()); };
 
   const formatTime = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -83,7 +102,7 @@ export default function AnnouncementScreen() {
     return new Date(dateStr).toLocaleDateString();
   };
 
-  const unreadCount = notifications.filter((n) => !n.isRead && !readIds.has(n.id)).length;
+  const unreadCount = notifications.filter((n) => !isNotifRead(n)).length;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -137,7 +156,7 @@ export default function AnnouncementScreen() {
               contentContainerStyle={styles.list}
               showsVerticalScrollIndicator={false}
               renderItem={({ item }) => {
-                const isRead = item.isRead || readIds.has(item.id);
+                const isRead = isNotifRead(item);
                 const icon = item.type === 'dev_broadcast' ? 'megaphone' : 'person-circle';
                 const iconColor = item.type === 'dev_broadcast' ? '#E67E22' : '#2F4366';
                 const bgColor = item.type === 'dev_broadcast' ? '#FFF4E6' : '#E8F4FD';
