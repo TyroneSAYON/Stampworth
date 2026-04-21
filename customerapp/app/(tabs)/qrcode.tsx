@@ -98,9 +98,10 @@ export default function QRCodeScreen() {
         { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customerId}` },
         (payload) => {
           const tx = payload.new as any;
+          if (!tx?.merchant_id) return;
           pendingTxRef.current.push({ merchantId: tx.merchant_id, type: tx.transaction_type });
 
-          // Wait 2s after last event to show a single alert
+          // Wait 3s after last event — gives business app time to finish batch + reward
           if (stampAlertTimer.current) clearTimeout(stampAlertTimer.current);
           stampAlertTimer.current = setTimeout(async () => {
             const pending = [...pendingTxRef.current];
@@ -108,30 +109,55 @@ export default function QRCodeScreen() {
             if (pending.length === 0) return;
 
             const lastMerchantId = pending[pending.length - 1].merchantId;
-            const { data: cards } = await getCustomerLoyaltyCards();
-            const card = (cards || []).find((c: any) => c.merchant_id === lastMerchantId);
+
+            // Retry fetching card data — it may take a moment to propagate
+            let card: any = null;
+            for (let attempt = 0; attempt < 3; attempt++) {
+              const { data: cards } = await getCustomerLoyaltyCards();
+              card = (cards || []).find((c: any) => c.merchant_id === lastMerchantId);
+              if (card) break;
+              await new Promise((r) => setTimeout(r, 1000));
+            }
             if (!card) return;
 
-            // Navigate: cards tab first, then stamps on top — back goes to cards
-            router.navigate('/(tabs)/cards');
-            setTimeout(() => {
-              router.push({
-                pathname: '/stamps',
-                params: {
-                  loyaltyCardId: card.id,
-                  merchantId: card.merchant_id,
-                  merchant: card.merchants?.business_name || 'Store',
-                  collected: String(card.stamp_count || 0),
-                  total: String(card.stamp_settings?.stamps_per_redemption || 10),
-                  color: card.stamp_settings?.card_color || '#2F4366',
-                  iconName: card.stamp_settings?.stamp_icon_name || 'star',
-                  iconImageUrl: card.stamp_settings?.stamp_icon_image_url || '',
-                },
-              });
-            }, 100);
-          }, 2000);
+            // Navigate directly to the stamps screen
+            router.push({
+              pathname: '/stamps',
+              params: {
+                loyaltyCardId: card.id,
+                merchantId: card.merchant_id,
+                merchant: card.merchants?.business_name || 'Store',
+                collected: String(card.stamp_count || 0),
+                total: String(card.stamp_settings?.stamps_per_redemption || 10),
+                color: card.stamp_settings?.card_color || '#2F4366',
+                iconName: card.stamp_settings?.stamp_icon_name || 'star',
+                iconImageUrl: card.stamp_settings?.stamp_icon_image_url || '',
+              },
+            });
+          }, 3000);
         }
       )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stamps', filter: `customer_id=eq.${customerId}` }, (payload) => {
+        const stamp = payload.new as any;
+        if (!stamp?.merchant_id) return;
+        pendingTxRef.current.push({ merchantId: stamp.merchant_id, type: 'STAMP_EARNED' });
+        if (stampAlertTimer.current) clearTimeout(stampAlertTimer.current);
+        stampAlertTimer.current = setTimeout(async () => {
+          const pending = [...pendingTxRef.current];
+          pendingTxRef.current = [];
+          if (pending.length === 0) return;
+          const lastMerchantId = pending[pending.length - 1].merchantId;
+          let card: any = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const { data: cards } = await getCustomerLoyaltyCards();
+            card = (cards || []).find((c: any) => c.merchant_id === lastMerchantId);
+            if (card) break;
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+          if (!card) return;
+          router.push({ pathname: '/stamps', params: { loyaltyCardId: card.id, merchantId: card.merchant_id, merchant: card.merchants?.business_name || 'Store', collected: String(card.stamp_count || 0), total: String(card.stamp_settings?.stamps_per_redemption || 10), color: card.stamp_settings?.card_color || '#2F4366', iconName: card.stamp_settings?.stamp_icon_name || 'star', iconImageUrl: card.stamp_settings?.stamp_icon_image_url || '' } });
+        }, 3000);
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'merchant_announcements' }, () => {
         if (customerId) getCustomerAnnouncements(customerId).then(({ data }) => setAnnouncements(data || []));
       })
