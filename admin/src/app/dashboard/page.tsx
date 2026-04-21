@@ -53,9 +53,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [viewedSnapshots, setViewedSnapshots] = useState<Record<string, number>>(() => {
+  const [tabLastSeen, setTabLastSeen] = useState<Record<string, string>>(() => {
     if (typeof window === "undefined") return {};
-    try { return JSON.parse(localStorage.getItem("stampworth_viewed_snapshots") || "{}"); } catch { return {}; }
+    try { return JSON.parse(localStorage.getItem("stampworth_tab_last_seen") || "{}"); } catch { return {}; }
   });
   const [devBroadcasts, setDevBroadcasts] = useState<DevBroadcast[]>([]);
   const [broadcastTitle, setBroadcastTitle] = useState("");
@@ -230,14 +230,14 @@ export default function DashboardPage() {
   };
 
   const fmt = (d: string) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
-  const markTabViewed = (t: Tab, counts: Record<string, number>) => {
-    setViewedSnapshots((prev) => {
-      const next = { ...prev, [t]: counts[t] ?? 0 };
-      try { localStorage.setItem("stampworth_viewed_snapshots", JSON.stringify(next)); } catch {}
+  const markTabViewed = (t: Tab) => {
+    setTabLastSeen((prev) => {
+      const next = { ...prev, [t]: new Date().toISOString() };
+      try { localStorage.setItem("stampworth_tab_last_seen", JSON.stringify(next)); } catch {}
       return next;
     });
   };
-  const switchTab = (t: Tab) => { setTab(t); setSelectedMerchant(null); setSidebarOpen(false); markTabViewed(t, badgeCounts); };
+  const switchTab = (t: Tab) => { setTab(t); setSelectedMerchant(null); setSidebarOpen(false); markTabViewed(t); };
 
   const handleDelete = async () => {
     if (!deleteConfirm) return;
@@ -281,28 +281,27 @@ export default function DashboardPage() {
   const merchantRewards = selectedMerchant ? rewards.filter((r) => r.merchant_id === selectedMerchant.id) : [];
   const merchantsWithLocation = merchants.filter((m) => m.latitude && m.longitude);
 
-  // Notification badge counts per section
-  const newCustomersToday = customers.filter((c) => c.created_at.startsWith(todayStr)).length;
-  const newMerchantsToday = merchants.filter((m) => m.created_at.startsWith(todayStr)).length;
-  const unreadSupport = supportMessages.filter((m) => !m.is_read).length;
-  const pendingRewardsCount = rewards.filter((r) => !r.is_used).length;
-  const merchantsNoLocation = merchants.length - merchantsWithLocation.length;
-  const degradedServices = monitor?.services.filter((s) => s.status !== "up").length || 0;
-  const inactiveMerchants = merchants.filter((m) => !m.is_active).length;
-  const todayTransactions = transactions.filter((t) => t.created_at.startsWith(todayStr)).length;
+  // Count items newer than when the tab was last opened
+  const newSince = (t: Tab, items: { created_at: string }[]) => {
+    const since = tabLastSeen[t];
+    if (!since) return items.length > 0 ? items.length : 0;
+    const sinceTime = new Date(since).getTime();
+    return items.filter((i) => new Date(i.created_at).getTime() > sinceTime).length;
+  };
 
-  const activeBroadcasts = devBroadcasts.filter((b) => b.is_active).length;
+  const unreadSupport = supportMessages.filter((m) => !m.is_read).length;
+  const degradedServices = monitor?.services.filter((s) => s.status !== "up").length || 0;
 
   const badgeCounts: Record<Tab, number> = {
-    overview: newCustomersToday + newMerchantsToday + todayTransactions,
-    analytics: analytics?.customersThisWeek || 0,
+    overview: newSince("overview", [...customers, ...merchants, ...transactions].filter((i) => i.created_at?.startsWith(todayStr))),
+    analytics: 0,
     monitor: degradedServices,
-    support: unreadSupport,
-    broadcast: activeBroadcasts,
-    map: merchantsNoLocation,
-    customers: newCustomersToday,
-    merchants: newMerchantsToday + inactiveMerchants,
-    rewards: pendingRewardsCount,
+    support: tabLastSeen.support ? supportMessages.filter((m) => !m.is_read && new Date(m.created_at).getTime() > new Date(tabLastSeen.support).getTime()).length : unreadSupport,
+    broadcast: 0,
+    map: 0,
+    customers: newSince("customers", customers),
+    merchants: newSince("merchants", merchants),
+    rewards: newSince("rewards", rewards.filter((r) => !r.is_used)),
   };
 
   const badgeColors: Record<Tab, string> = {
@@ -369,7 +368,7 @@ export default function DashboardPage() {
                   <button key={key} onClick={() => switchTab(key)} className={`w-full text-left px-3 py-2 rounded text-[12px] font-medium mb-px transition-colors flex items-center gap-2.5 ${tab === key ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"}`}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-75"><path d={navIcons[key]}/></svg>
                     <span className="flex-1">{tabLabels[key]}</span>
-                    {count > 0 && count !== (viewedSnapshots[key] ?? -1) && (
+                    {count > 0 && (
                       <span className={`min-w-[18px] h-[18px] px-1 rounded text-[9px] font-bold text-white flex items-center justify-center ${tab === key ? "bg-white/20" : color}`}>
                         {count > 99 ? "99+" : count}
                       </span>
@@ -418,13 +417,12 @@ export default function DashboardPage() {
             {tab === "overview" && stats && (
               <>
                 <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4">Overview</p>
-                {(newCustomersToday > 0 || newMerchantsToday > 0 || todayTransactions > 0 || unreadSupport > 0 || pendingRewardsCount > 0) && (
+                {(badgeCounts.customers > 0 || badgeCounts.merchants > 0 || badgeCounts.support > 0 || badgeCounts.rewards > 0) && (
                   <div className="flex flex-wrap gap-2 mb-5">
-                    {newCustomersToday > 0 && <NotifPill color="blue" icon="👤" text={`${newCustomersToday} new customer${newCustomersToday > 1 ? "s" : ""} today`} onClick={() => switchTab("customers")} />}
-                    {newMerchantsToday > 0 && <NotifPill color="green" icon="🏪" text={`${newMerchantsToday} new business${newMerchantsToday > 1 ? "es" : ""} today`} onClick={() => switchTab("merchants")} />}
-                    {todayTransactions > 0 && <NotifPill color="indigo" icon="⚡" text={`${todayTransactions} transaction${todayTransactions > 1 ? "s" : ""} today`} />}
-                    {unreadSupport > 0 && <NotifPill color="orange" icon="💬" text={`${unreadSupport} unread message${unreadSupport > 1 ? "s" : ""}`} onClick={() => switchTab("support")} />}
-                    {pendingRewardsCount > 0 && <NotifPill color="purple" icon="🎁" text={`${pendingRewardsCount} pending reward${pendingRewardsCount > 1 ? "s" : ""}`} onClick={() => switchTab("rewards")} />}
+                    {badgeCounts.customers > 0 && <NotifPill color="blue" icon="👤" text={`${badgeCounts.customers} new customer${badgeCounts.customers > 1 ? "s" : ""}`} onClick={() => switchTab("customers")} />}
+                    {badgeCounts.merchants > 0 && <NotifPill color="green" icon="🏪" text={`${badgeCounts.merchants} new business${badgeCounts.merchants > 1 ? "es" : ""}`} onClick={() => switchTab("merchants")} />}
+                    {badgeCounts.support > 0 && <NotifPill color="orange" icon="💬" text={`${badgeCounts.support} unread message${badgeCounts.support > 1 ? "s" : ""}`} onClick={() => switchTab("support")} />}
+                    {badgeCounts.rewards > 0 && <NotifPill color="purple" icon="🎁" text={`${badgeCounts.rewards} new reward${badgeCounts.rewards > 1 ? "s" : ""}`} onClick={() => switchTab("rewards")} />}
                   </div>
                 )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
