@@ -132,6 +132,12 @@ export default function QRCodeScreen() {
           }, 2000);
         }
       )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'merchant_announcements' }, () => {
+        if (customerId) getCustomerAnnouncements(customerId).then(({ data }) => setAnnouncements(data || []));
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dev_broadcasts' }, () => {
+        if (customerId) getCustomerAnnouncements(customerId).then(({ data }) => setAnnouncements(data || []));
+      })
       .subscribe();
 
     return () => {

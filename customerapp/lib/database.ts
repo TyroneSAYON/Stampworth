@@ -138,34 +138,65 @@ export const getCustomerAnnouncements = async (customerId: string) => {
     .eq('customer_id', customerId);
 
   const merchantIds = [...new Set((cards || []).map((c: any) => c.merchant_id).filter(Boolean))];
-  if (merchantIds.length === 0) return { data: [], error: null };
 
-  // Get announcements
-  const { data: announcements, error } = await supabase
-    .from('merchant_announcements')
-    .select('id, merchant_id, message, created_at')
-    .eq('is_active', true)
-    .in('merchant_id', merchantIds)
-    .order('created_at', { ascending: false })
-    .limit(20);
+  // Fetch merchant announcements + dev broadcasts in parallel
+  const [annResult, broadcastResult] = await Promise.all([
+    merchantIds.length > 0
+      ? supabase
+          .from('merchant_announcements')
+          .select('id, merchant_id, message, created_at')
+          .eq('is_active', true)
+          .in('merchant_id', merchantIds)
+          .order('created_at', { ascending: false })
+          .limit(20)
+      : Promise.resolve({ data: [], error: null }),
+    supabase
+      .from('dev_broadcasts')
+      .select('id, title, message, target, created_at')
+      .eq('is_active', true)
+      .or('target.eq.all,target.eq.customers')
+      .order('created_at', { ascending: false })
+      .limit(10),
+  ]);
 
-  if (error || !announcements) return { data: [], error };
+  const announcements = annResult.data || [];
+  const broadcasts = broadcastResult.data || [];
 
-  // Get merchant names separately to avoid RLS join issues
+  // Get merchant names
   const annMerchantIds = [...new Set(announcements.map((a: any) => a.merchant_id))];
-  const { data: merchants } = await supabase
-    .from('merchants')
-    .select('id, business_name')
-    .in('id', annMerchantIds);
+  let merchantMap = new Map();
+  if (annMerchantIds.length > 0) {
+    const { data: merchants } = await supabase.from('merchants').select('id, business_name').in('id', annMerchantIds);
+    merchantMap = new Map((merchants || []).map((m: any) => [m.id, m]));
+  }
 
-  const merchantMap = new Map((merchants || []).map((m: any) => [m.id, m]));
+  // Merge: merchant announcements + dev broadcasts
+  const all: any[] = [];
 
-  const enriched = announcements.map((a: any) => ({
-    ...a,
-    merchants: merchantMap.get(a.merchant_id) || { business_name: 'Store' },
-  }));
+  for (const a of announcements) {
+    all.push({
+      id: a.id,
+      merchant_id: a.merchant_id,
+      message: a.message,
+      created_at: a.created_at,
+      merchants: merchantMap.get(a.merchant_id) || { business_name: 'Store' },
+    });
+  }
 
-  return { data: enriched, error: null };
+  for (const b of broadcasts) {
+    all.push({
+      id: `broadcast-${b.id}`,
+      merchant_id: null,
+      message: b.title ? `${b.title}: ${b.message}` : b.message,
+      created_at: b.created_at,
+      merchants: { business_name: 'Stampworth' },
+    });
+  }
+
+  // Sort by date descending
+  all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  return { data: all, error: null };
 };
 
 export const findNearbyStores = async (latitude: number, longitude: number, maxDistance: number = 5000) => {

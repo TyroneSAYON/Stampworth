@@ -54,6 +54,7 @@ export default function NotificationsScreen() {
     const channel = supabase
       .channel('announcements-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'merchant_announcements' }, () => loadAnnouncements(false))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dev_broadcasts' }, () => loadAnnouncements(false))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
