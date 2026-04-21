@@ -312,7 +312,7 @@ export default function DashboardPage() {
     broadcast: "bg-teal-500",
     map: "bg-amber-500",
     customers: "bg-blue-500",
-    merchants: inactiveMerchants > 0 ? "bg-red-500" : "bg-blue-500",
+    merchants: merchants.some((m) => !m.is_active) ? "bg-red-500" : "bg-blue-500",
     rewards: "bg-purple-500",
   };
 
