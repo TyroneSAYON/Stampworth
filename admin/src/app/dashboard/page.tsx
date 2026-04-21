@@ -861,10 +861,10 @@ export default function DashboardPage() {
             {tab === "map" && (
               <>
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4">Store Locations</h2>
-                {merchantsNoLocation > 0 && (
+                { merchants.filter((m) => !m.latitude || !m.longitude).length > 0 && (
                   <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
                     <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <p className="text-[12px] font-semibold text-amber-600 dark:text-amber-400">{merchantsNoLocation} business{merchantsNoLocation > 1 ? "es" : ""} ha{merchantsNoLocation > 1 ? "ve" : "s"} not set their store location yet</p>
+                    <p className="text-[12px] font-semibold text-amber-600 dark:text-amber-400">{ merchants.filter((m) => !m.latitude || !m.longitude).length} business{merchants.filter((m) => !m.latitude || !m.longitude).length > 1 ? "es" : ""} ha{merchants.filter((m) => !m.latitude || !m.longitude).length > 1 ? "ve" : "s"} not set their store location yet</p>
                   </div>
                 )}
                 <StoreMap merchants={merchantsWithLocation} onSelect={(m) => { setSelectedMerchant(m); setTab("merchants"); }} />
@@ -891,10 +891,10 @@ export default function DashboardPage() {
             {tab === "customers" && (
               <>
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4">Customers <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({customers.length})</span></h2>
-                {newCustomersToday > 0 && (
+                { customers.filter((c) => c.created_at.startsWith(todayStr)).length > 0 && (
                   <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
                     <span className="w-2 h-2 rounded-full bg-blue-500" />
-                    <p className="text-[12px] font-semibold text-blue-600 dark:text-blue-400">{newCustomersToday} new customer{newCustomersToday > 1 ? "s" : ""} registered today</p>
+                    <p className="text-[12px] font-semibold text-blue-600 dark:text-blue-400">{ customers.filter((c) => c.created_at.startsWith(todayStr)).length} new customer{customers.filter((c) => c.created_at.startsWith(todayStr)).length > 1 ? "s" : ""} registered today</p>
                   </div>
                 )}
                 <div className="sm:hidden space-y-2">
@@ -942,12 +942,12 @@ export default function DashboardPage() {
               const displayMerchants = selectedDate === "all" ? merchants : merchants.filter((m) => m.created_at.startsWith(selectedDate));
               return (
               <>
-                {(newMerchantsToday > 0 || inactiveMerchants > 0) && (
+                {(() => { const newToday = merchants.filter((m) => m.created_at.startsWith(todayStr)).length; const inactive = merchants.filter((m) => !m.is_active).length; return (newToday > 0 || inactive > 0) ? (
                   <div className="flex flex-wrap gap-2 mb-4">
-                    {newMerchantsToday > 0 && <NotifPill color="green" icon="🆕" text={`${newMerchantsToday} new business${newMerchantsToday > 1 ? "es" : ""} registered today`} />}
-                    {inactiveMerchants > 0 && <NotifPill color="red" icon="⚠️" text={`${inactiveMerchants} inactive business${inactiveMerchants > 1 ? "es" : ""}`} />}
+                    {newToday > 0 && <NotifPill color="green" icon="🆕" text={`${newToday} new business${newToday > 1 ? "es" : ""} registered today`} />}
+                    {inactive > 0 && <NotifPill color="red" icon="⚠️" text={`${inactive} inactive business${inactive > 1 ? "es" : ""}`} />}
                   </div>
-                )}
+                ) : null; })()}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
                   <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Businesses <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({displayMerchants.length}{selectedDate !== "all" ? ` on ${dateLabel(selectedDate).toLowerCase()} · ${merchants.length} total` : " total"})</span></h2>
                   <div className="flex items-center gap-2 relative">
@@ -1214,10 +1214,10 @@ export default function DashboardPage() {
             {tab === "rewards" && (
               <>
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4">All Rewards <span className="text-gray-400 dark:text-gray-500 font-normal text-sm">({rewards.length})</span></h2>
-                {pendingRewardsCount > 0 && (
+                { rewards.filter((r) => !r.is_used).length > 0 && (
                   <div className="flex items-center gap-2 mb-4 px-4 py-3 rounded-xl bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800">
                     <span className="w-2 h-2 rounded-full bg-purple-500" />
-                    <p className="text-[12px] font-semibold text-purple-600 dark:text-purple-400">{pendingRewardsCount} reward{pendingRewardsCount > 1 ? "s" : ""} pending redemption</p>
+                    <p className="text-[12px] font-semibold text-purple-600 dark:text-purple-400">{ rewards.filter((r) => !r.is_used).length} reward{rewards.filter((r) => !r.is_used).length > 1 ? "s" : ""} pending redemption</p>
                   </div>
                 )}
                 <div className="sm:hidden space-y-2">
