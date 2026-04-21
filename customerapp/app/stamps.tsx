@@ -35,58 +35,55 @@ export default function StampsScreen() {
   const [rewardFlash, setRewardFlash] = useState(false);
   const flashAnim = useRef(new Animated.Value(0)).current;
 
-  // Fetch stamp records and rewards silently in background — no loading spinner
-  useEffect(() => {
-    if (params.loyaltyCardId) {
-      getStampRecordsForCard(params.loyaltyCardId).then(({ data }) => {
-        setStampRecords(data || []);
-        setStampCount(data?.length || Number(params.collected || 0));
-      });
-    }
-    if (params.merchantId) {
-      getCustomerPendingRewards(params.merchantId).then(({ data }) => setPendingRewards(data || []));
-    }
-  }, []);
+  // Fetch fresh data from DB
+  const refreshData = async () => {
+    const [stampsResult, rewardsResult] = await Promise.all([
+      params.loyaltyCardId ? getStampRecordsForCard(params.loyaltyCardId) : Promise.resolve({ data: [] }),
+      params.merchantId ? getCustomerPendingRewards(params.merchantId) : Promise.resolve({ data: [] }),
+    ]);
+    const records = stampsResult.data || [];
+    setStampRecords(records);
+    setStampCount(records.length);
+    setPendingRewards(rewardsResult.data || []);
+  };
 
-  // Realtime: listen to transactions, debounced
+  // Fetch on mount
+  useEffect(() => { refreshData(); }, []);
+
+  // Realtime: listen to stamps + transactions for this customer
   useEffect(() => {
     if (!params.merchantId) return;
     let channel: any = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedRefresh = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => refreshData(), 1500);
+    };
     const setup = async () => {
       const { data: customer } = await getOrCreateCustomerProfile();
       if (!customer) return;
       channel = supabase
         .channel('stamps-rt-' + params.loyaltyCardId)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stamps', filter: `customer_id=eq.${customer.id}` }, debouncedRefresh)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions', filter: `customer_id=eq.${customer.id}` }, (payload) => {
           const tx = payload.new as any;
-          if (tx.transaction_type === 'REWARD_REDEEMED') {
-            setPendingRewards((prev) => prev.slice(1));
-          } else if (tx.transaction_type === 'STAMP_EARNED') {
-            setStampCount((prev) => prev + 1);
-          } else if (tx.transaction_type === 'REWARD_STORED') {
-            setStampCount(0);
-            setStampRecords([]);
-            // Flash reward banner
+          if (tx.transaction_type === 'REWARD_STORED') {
+            // Flash reward banner immediately
             setRewardFlash(true);
             Animated.sequence([
               Animated.timing(flashAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
               Animated.delay(3000),
               Animated.timing(flashAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
             ]).start(() => setRewardFlash(false));
-            // Fetch new pending reward in background
-            if (params.merchantId) {
-              getCustomerPendingRewards(params.merchantId).then(({ data }) => setPendingRewards(data || []));
-            }
-          } else if (tx.transaction_type === 'STAMP_REMOVED') {
-            setStampCount((prev) => Math.max(0, prev - 1));
           }
+          debouncedRefresh();
         })
         .subscribe();
     };
     setup();
     return () => {
       if (channel) supabase.removeChannel(channel);
+      if (timer) clearTimeout(timer);
       if (timer) clearTimeout(timer);
     };
   }, [params.loyaltyCardId, params.merchantId]);
