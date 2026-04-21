@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, SectionList } from 'react-native';
+import { Alert, ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, Text, TextInput, TouchableOpacity, SectionList } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -19,6 +19,7 @@ export default function AnnouncementScreen() {
   const [sending, setSending] = useState(false);
   const [activeSection, setActiveSection] = useState<'inbox' | 'compose'>('inbox');
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [selectedNotif, setSelectedNotif] = useState<Notification | null>(null);
   const loadedOnce = useRef(false);
 
   const loadAll = async (showLoader = true) => {
@@ -145,7 +146,7 @@ export default function AnnouncementScreen() {
                     style={[styles.notifCard, !isRead && styles.notifCardUnread]}
                     onPress={() => {
                       setReadIds((prev) => new Set(prev).add(item.id));
-                      Alert.alert(item.title, item.body);
+                      setSelectedNotif(item);
                     }}
                   >
                     <View style={[styles.notifIcon, { backgroundColor: bgColor }]}>
@@ -202,6 +203,45 @@ export default function AnnouncementScreen() {
           )}
         </>
       )}
+      {/* Notification detail modal */}
+      <Modal visible={!!selectedNotif} transparent animationType="fade" onRequestClose={() => setSelectedNotif(null)}>
+        <Pressable style={styles.msgOverlay} onPress={() => setSelectedNotif(null)}>
+          <Pressable style={styles.msgCard} onPress={() => {}}>
+            {selectedNotif && (
+              <>
+                <View style={styles.msgAccent} />
+                <View style={styles.msgInner}>
+                  <View style={styles.msgHeader}>
+                    <View style={[styles.msgIconCircle, { backgroundColor: selectedNotif.type === 'dev_broadcast' ? '#E67E22' : '#2F4366' }]}>
+                      <Ionicons name={selectedNotif.type === 'dev_broadcast' ? 'megaphone' : 'person-circle'} size={20} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.msgTitle}>{selectedNotif.title}</Text>
+                      <View style={styles.msgMeta}>
+                        <Ionicons name="time-outline" size={11} color="#8A94A6" />
+                        <Text style={styles.msgTime}>{new Date(selectedNotif.createdAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</Text>
+                        <View style={styles.msgTypeBadge}>
+                          <Text style={styles.msgTypeText}>{selectedNotif.type === 'dev_broadcast' ? 'Stampworth' : 'Customer'}</Text>
+                        </View>
+                      </View>
+                    </View>
+                    <TouchableOpacity style={styles.msgCloseBtn} onPress={() => setSelectedNotif(null)}>
+                      <Ionicons name="close" size={18} color="#8A94A6" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.msgDivider} />
+                  <ScrollView style={styles.msgBody} showsVerticalScrollIndicator={false}>
+                    <Text style={styles.msgText}>{selectedNotif.body}</Text>
+                  </ScrollView>
+                  <TouchableOpacity style={styles.msgDismissBtn} onPress={() => setSelectedNotif(null)}>
+                    <Text style={styles.msgDismissText}>Dismiss</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ThemedView>
     </KeyboardAvoidingView>
   );
@@ -260,4 +300,23 @@ const styles = StyleSheet.create({
   sentHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
   sentTime: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
   sentText: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#1A1A2E', lineHeight: 20 },
+
+  // Notification detail modal
+  msgOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
+  msgCard: { width: '100%', maxHeight: '75%', backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 24, elevation: 12 },
+  msgAccent: { height: 4, backgroundColor: '#2F4366' },
+  msgInner: { padding: 20 },
+  msgHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  msgIconCircle: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  msgTitle: { fontSize: 16, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
+  msgMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  msgTime: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
+  msgTypeBadge: { backgroundColor: '#F0F2F5', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, marginLeft: 4 },
+  msgTypeText: { fontSize: 9, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
+  msgCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F0F2F5', alignItems: 'center', justifyContent: 'center' },
+  msgDivider: { height: 1, backgroundColor: '#F0F2F5', marginVertical: 16 },
+  msgBody: { maxHeight: 300 },
+  msgText: { fontSize: 15, fontFamily: 'Poppins-Regular', color: '#3A3A4A', lineHeight: 24 },
+  msgDismissBtn: { marginTop: 16, height: 44, borderRadius: 12, backgroundColor: '#F6F8FB', alignItems: 'center', justifyContent: 'center' },
+  msgDismissText: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
 });

@@ -294,21 +294,32 @@ export default function QRCodeScreen() {
           <Pressable style={styles.modalCard} onPress={() => {}}>
             {selectedNotif && (
               <>
-                <View style={styles.modalHeader}>
-                  <View style={styles.modalIconCircle}>
-                    <Ionicons name="megaphone" size={20} color="#2F4366" />
+                {/* Accent bar */}
+                <View style={styles.modalAccent} />
+                <View style={styles.modalInner}>
+                  <View style={styles.modalHeader}>
+                    <View style={styles.modalIconCircle}>
+                      <Ionicons name={selectedNotif.merchant_id ? "megaphone" : "globe"} size={20} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalMerchant}>{selectedNotif.merchants?.business_name || 'Stampworth'}</Text>
+                      <View style={styles.modalMeta}>
+                        <Ionicons name="time-outline" size={11} color="#8A94A6" />
+                        <Text style={styles.modalTime}>{new Date(selectedNotif.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setSelectedNotif(null)}>
+                      <Ionicons name="close" size={18} color="#8A94A6" />
+                    </TouchableOpacity>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.modalMerchant}>{selectedNotif.merchants?.business_name || 'Store'}</Text>
-                    <Text style={styles.modalTime}>{new Date(selectedNotif.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => setSelectedNotif(null)}>
-                    <Ionicons name="close" size={22} color="#8A94A6" />
+                  <View style={styles.modalDivider} />
+                  <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                    <Text style={styles.modalMessage}>{selectedNotif.message}</Text>
+                  </ScrollView>
+                  <TouchableOpacity style={styles.modalDismissBtn} onPress={() => setSelectedNotif(null)}>
+                    <Text style={styles.modalDismissText}>Dismiss</Text>
                   </TouchableOpacity>
                 </View>
-                <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-                  <Text style={styles.modalMessage}>{selectedNotif.message}</Text>
-                </ScrollView>
               </>
             )}
           </Pressable>
@@ -354,14 +365,21 @@ const styles = StyleSheet.create({
   notifMsg: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', lineHeight: 18 },
 
   // Modal
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  modalCard: { width: '100%', maxHeight: '70%', backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18, borderBottomWidth: 1, borderBottomColor: '#F0F2F5' },
-  modalIconCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#EDF4FF', alignItems: 'center', justifyContent: 'center' },
-  modalMerchant: { fontSize: 15, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
-  modalTime: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 2 },
-  modalBody: { padding: 18 },
-  modalMessage: { fontSize: 15, fontFamily: 'Poppins-Regular', color: '#1A1A2E', lineHeight: 24 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
+  modalCard: { width: '100%', maxHeight: '75%', backgroundColor: '#FFFFFF', borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 24, elevation: 12 },
+  modalAccent: { height: 4, backgroundColor: '#2F4366' },
+  modalInner: { padding: 20 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  modalIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#2F4366', alignItems: 'center', justifyContent: 'center' },
+  modalMerchant: { fontSize: 16, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
+  modalMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  modalTime: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
+  modalCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F0F2F5', alignItems: 'center', justifyContent: 'center' },
+  modalDivider: { height: 1, backgroundColor: '#F0F2F5', marginVertical: 16 },
+  modalBody: { maxHeight: 300 },
+  modalMessage: { fontSize: 15, fontFamily: 'Poppins-Regular', color: '#3A3A4A', lineHeight: 24 },
+  modalDismissBtn: { marginTop: 16, height: 44, borderRadius: 12, backgroundColor: '#F6F8FB', alignItems: 'center', justifyContent: 'center' },
+  modalDismissText: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
 
   // Content
   content: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 40 },
