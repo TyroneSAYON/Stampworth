@@ -193,10 +193,27 @@ export default function DashboardPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "merchant_announcements" }, reloadFn)
       .on("postgres_changes", { event: "*", schema: "public", table: "support_messages" }, reloadFn)
       .on("postgres_changes", { event: "*", schema: "public", table: "dev_broadcasts" }, reloadFn)
-      .subscribe((status) => { console.log("Realtime status:", status); });
+      .subscribe((status, err) => {
+        console.log("Realtime:", status, err || "");
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          // Retry after 5s
+          setTimeout(() => { channel.subscribe(); }, 5000);
+        }
+      });
+
+    // Fallback polling every 15s in case realtime doesn't connect
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/data");
+        const d = await res.json();
+        setStats(d.stats); setCustomers(d.customers || []); setMerchants(d.merchants || []); setTransactions(d.transactions || []); setRewards(d.rewards || []); setMerchantStatsMap(d.merchantStats || {}); setAnalytics(d.analytics || null); setSupportMessages(d.supportMessages || []); setDevBroadcasts(d.devBroadcasts || []);
+        setLastUpdate(new Date().toLocaleTimeString());
+      } catch {}
+    }, 15000);
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(pollInterval);
       if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
     };
   }, []);
