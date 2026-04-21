@@ -29,12 +29,8 @@ export default function QRCodeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Refresh display name + announcements on every focus
+      // Already loaded — just refresh announcements silently
       if (loadedRef.current) {
-        getOrCreateCustomerProfile().then(({ data: customer }) => {
-          if (customer?.full_name) setDisplayName(customer.full_name);
-          else if (customer?.username) setDisplayName(customer.username);
-        });
         if (customerId) {
           getCustomerAnnouncements(customerId).then(({ data }) => setAnnouncements(data || []));
         }

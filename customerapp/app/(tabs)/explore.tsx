@@ -135,9 +135,16 @@ export default function ExploreScreen() {
     checkNearbyStores(lat, lng).catch(() => {});
   };
 
+  const loadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      if (!loadedOnce.current) {
+        loadData();
+      } else {
+        // Silently refresh merchants only — no loader, no nearby re-check
+        getAllMerchants().then(({ data }) => { if (data) setMerchants(data); });
+      }
     }, [])
   );
 
@@ -160,6 +167,7 @@ export default function ExploreScreen() {
     setMerchants(allMerchants);
     setLoading(false);
     setLoaded(true);
+    loadedOnce.current = true;
 
     // Check for nearby stores using geofence radius — only alert once per store per session
     if (locationResult?.coords) {

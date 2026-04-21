@@ -140,8 +140,13 @@ export const signOut = async () => {
   return await supabase.auth.signOut();
 };
 
-// Get current user
+// Get current user — returns null if session expired
 export const getCurrentUser = async () => {
-  const { data } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getUser();
+  if (error?.message?.includes('Refresh Token') || error?.message?.includes('session_not_found')) {
+    // Session is dead — clear it
+    await supabase.auth.signOut().catch(() => {});
+    return null;
+  }
   return data.user;
 };

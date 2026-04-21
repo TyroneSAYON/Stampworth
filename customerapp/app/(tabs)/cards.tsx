@@ -10,31 +10,35 @@ export default function CardsScreen() {
   const [loading, setLoading] = useState(true);
   const [cards, setCards] = useState<any[]>([]);
   const customerIdRef = useRef<string | null>(null);
+  const loadedOnce = useRef(false);
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const initialLoadDone = useRef(false);
-
-  const loadCards = async () => {
+  const loadCards = async (showLoader = false) => {
+    if (showLoader) setLoading(true);
     const { data, error } = await getCustomerLoyaltyCards();
     if (error) console.warn('Cards load error:', error.message);
     setCards(data || []);
     setLoading(false);
-    initialLoadDone.current = true;
+    loadedOnce.current = true;
   };
 
-  // Reload cards every time the tab is focused — picks up config changes
+  // First load + reload on focus only if already loaded once (fast, no loader)
   useFocusEffect(
     useCallback(() => {
-      loadCards();
+      if (!loadedOnce.current) {
+        loadCards(true);
+      } else {
+        loadCards(false);
+      }
     }, [])
   );
 
-  // Realtime: refresh on transactions AND stamp_settings changes
+  // Realtime: single debounced reload — prevents multiple refreshes
   useEffect(() => {
     let channel: any = null;
-    let timer: ReturnType<typeof setTimeout> | null = null;
     const debouncedReload = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => loadCards(), 1500);
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      reloadTimer.current = setTimeout(() => loadCards(false), 2500);
     };
     const setup = async () => {
       const { data: customer } = await getOrCreateCustomerProfile();
@@ -50,7 +54,7 @@ export default function CardsScreen() {
     setup();
     return () => {
       if (channel) supabase.removeChannel(channel);
-      if (timer) clearTimeout(timer);
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
     };
   }, []);
 

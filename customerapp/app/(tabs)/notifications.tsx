@@ -81,6 +81,9 @@ export default function NotificationsScreen() {
       {unreadCount > 0 && (
         <View style={styles.unreadRow}>
           <Text style={styles.unreadLabel}>{unreadCount} new</Text>
+          <TouchableOpacity onPress={() => setReadIds(new Set(announcements.map((a) => a.id)))}>
+            <Text style={styles.readAllBtn}>Mark all as read</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -141,8 +144,9 @@ const styles = StyleSheet.create({
   backBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, fontSize: 20, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold', textAlign: 'center' },
 
-  unreadRow: { paddingHorizontal: 24, marginTop: 12, marginBottom: 8 },
+  unreadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginTop: 12, marginBottom: 8 },
   unreadLabel: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  readAllBtn: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
 
   emptyText: { fontSize: 16, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
   emptySubtext: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },

@@ -110,25 +110,14 @@ export const getUserLoyaltyCards = async (customerId: string) => {
   }
 
   const enriched = cards.map((card: any) => {
-    const fromStampsTable = stampCountMap[card.id] ?? 0;
-    const fromCard = card.stamp_count ?? 0;
+    // Valid stamps from the stamps table is the source of truth
+    const validStamps = stampCountMap[card.id] ?? 0;
     const stampsPerRedemption = settingsMap.get(card.merchant_id)?.stamps_per_redemption || 10;
+    const collectableSlots = stampsPerRedemption - 1;
+    // Cap at collectable slots (the last slot is "free")
+    const actualCount = Math.min(validStamps, collectableSlots);
+    const isFreeRedemption = actualCount >= collectableSlots;
 
-    // Trust the card's stamp_count when it's been reset (reward claimed).
-    // The stamps table may still have stale is_valid=true rows due to timing.
-    // If card says 0 but stamps table says more, a reset just happened — use card value.
-    const actualCount = fromCard < fromStampsTable ? fromCard : fromStampsTable;
-
-    const isFreeRedemption = actualCount >= stampsPerRedemption - 1;
-
-    // Auto-sync card row if counts diverged
-    if (actualCount !== fromCard) {
-      supabase.from('loyalty_cards').update({
-        stamp_count: actualCount,
-        is_free_redemption: isFreeRedemption,
-        status: isFreeRedemption ? 'FREE_REDEMPTION' : 'ACTIVE',
-      }).eq('id', card.id).then(() => {});
-    }
     return {
       ...card,
       stamp_count: actualCount,

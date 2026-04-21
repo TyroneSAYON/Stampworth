@@ -40,3 +40,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     detectSessionInUrl: false,
   },
 });
+
+// Auto sign-out on invalid refresh token
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'TOKEN_REFRESHED') return; // all good
+  if (event === 'SIGNED_OUT') {
+    // Clear any stale session data
+    safeStorage.removeItem('sb-' + SUPABASE_URL.split('//')[1]?.split('.')[0] + '-auth-token').catch(() => {});
+  }
+});
