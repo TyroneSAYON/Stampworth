@@ -59,7 +59,7 @@ export function DevBroadcastListener() {
   };
 
   const handleRead = () => {
-    Alert.alert(broadcast.title, broadcast.message, [{ text: 'OK', onPress: handleDismiss }]);
+    handleDismiss();
   };
 
   return (

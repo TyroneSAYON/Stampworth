@@ -34,11 +34,9 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, fontError]);
 
-  // Listen for push notifications
+  // Listen for push notifications — no popup, just silently receive
   useEffect(() => {
-    const cleanup = addNotificationListeners((title, body) => {
-      Alert.alert(title, body);
-    });
+    const cleanup = addNotificationListeners();
     return cleanup;
   }, []);
 
