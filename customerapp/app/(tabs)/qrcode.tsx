@@ -1,5 +1,6 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
 import { ActivityIndicator, Alert, Animated, Dimensions, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -23,9 +24,18 @@ export default function QRCodeScreen() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [selectedNotif, setSelectedNotif] = useState<Announcement | null>(null);
   const dropdownAnim = useRef(new Animated.Value(0)).current;
   const loadedRef = useRef(false);
+
+  // Persist read/deleted IDs
+  useEffect(() => {
+    AsyncStorage.getItem('stampworth_read_notifs').then((v) => { if (v) setReadIds(new Set(JSON.parse(v))); }).catch(() => {});
+    AsyncStorage.getItem('stampworth_deleted_notifs').then((v) => { if (v) setDeletedIds(new Set(JSON.parse(v))); }).catch(() => {});
+  }, []);
+  useEffect(() => { if (readIds.size > 0) AsyncStorage.setItem('stampworth_read_notifs', JSON.stringify([...readIds])).catch(() => {}); }, [readIds]);
+  useEffect(() => { if (deletedIds.size > 0) AsyncStorage.setItem('stampworth_deleted_notifs', JSON.stringify([...deletedIds])).catch(() => {}); }, [deletedIds]);
 
   useFocusEffect(
     useCallback(() => {
@@ -149,7 +159,14 @@ export default function QRCodeScreen() {
     setSelectedNotif(item);
   };
 
-  const unreadCount = announcements.filter((a) => !readIds.has(a.id)).length;
+  const visibleAnnouncements = announcements.filter((a) => !deletedIds.has(a.id));
+  const unreadCount = visibleAnnouncements.filter((a) => !readIds.has(a.id)).length;
+
+  const markAllRead = () => setReadIds(new Set(visibleAnnouncements.map((a) => a.id)));
+  const clearAllNotifs = () => {
+    setDeletedIds(new Set(announcements.map((a) => a.id)));
+    closeDropdown();
+  };
 
   const formatTime = (d: string) => {
     const diff = Date.now() - new Date(d).getTime();
@@ -190,15 +207,29 @@ export default function QRCodeScreen() {
               <Text style={styles.dropdownTitle}>Notifications</Text>
               {unreadCount > 0 && <Text style={styles.dropdownCount}>{unreadCount} new</Text>}
             </View>
+            {visibleAnnouncements.length > 0 && (
+              <View style={styles.dropdownActions}>
+                {unreadCount > 0 && (
+                  <TouchableOpacity style={styles.dropdownActionBtn} onPress={markAllRead}>
+                    <Ionicons name="checkmark-done" size={14} color="#2F4366" />
+                    <Text style={styles.dropdownActionText}>Read all</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={[styles.dropdownActionBtn, { backgroundColor: '#FEF2F2' }]} onPress={clearAllNotifs}>
+                  <Ionicons name="trash-outline" size={14} color="#E74C3C" />
+                  <Text style={[styles.dropdownActionText, { color: '#E74C3C' }]}>Clear all</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
-            {announcements.length === 0 ? (
+            {visibleAnnouncements.length === 0 ? (
               <View style={styles.dropdownEmpty}>
                 <Ionicons name="notifications-off-outline" size={24} color="#C4CAD4" />
-                <Text style={styles.dropdownEmptyText}>No notifications yet</Text>
+                <Text style={styles.dropdownEmptyText}>No notifications</Text>
               </View>
             ) : (
               <FlatList
-                data={announcements}
+                data={visibleAnnouncements}
                 keyExtractor={(item) => item.id}
                 style={styles.dropdownList}
                 showsVerticalScrollIndicator={false}
@@ -299,6 +330,9 @@ const styles = StyleSheet.create({
   dropdownHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F0F2F5' },
   dropdownTitle: { fontSize: 16, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
   dropdownCount: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#2F4366', backgroundColor: '#EDF4FF', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  dropdownActions: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F2F5' },
+  dropdownActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E8F4FD', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
+  dropdownActionText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
   dropdownEmpty: { alignItems: 'center', paddingVertical: 32, gap: 8 },
   dropdownEmptyText: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
   dropdownList: { maxHeight: 320 },

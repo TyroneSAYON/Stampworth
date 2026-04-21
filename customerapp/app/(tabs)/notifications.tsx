@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, View, Text, TouchableOpacity, FlatList } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -22,6 +23,14 @@ export default function NotificationsScreen() {
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const customerIdRef = useRef<string | null>(null);
   const loadedOnce = useRef(false);
+
+  // Persist read/deleted IDs
+  useEffect(() => {
+    AsyncStorage.getItem('stampworth_read_notifs').then((v) => { if (v) setReadIds(new Set(JSON.parse(v))); }).catch(() => {});
+    AsyncStorage.getItem('stampworth_deleted_notifs').then((v) => { if (v) setDeletedIds(new Set(JSON.parse(v))); }).catch(() => {});
+  }, []);
+  useEffect(() => { if (readIds.size > 0) AsyncStorage.setItem('stampworth_read_notifs', JSON.stringify([...readIds])).catch(() => {}); }, [readIds]);
+  useEffect(() => { if (deletedIds.size > 0) AsyncStorage.setItem('stampworth_deleted_notifs', JSON.stringify([...deletedIds])).catch(() => {}); }, [deletedIds]);
 
   const loadAnnouncements = async (showLoader = true) => {
     if (showLoader) setLoading(true);
@@ -154,12 +163,20 @@ export default function NotificationsScreen() {
                   </View>
                   {!isRead && <View style={styles.dot} />}
                 </View>
-                {/* Delete button — visible when expanded */}
+                {/* Actions — visible when expanded */}
                 {isExpanded && (
-                  <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteNotification(item.id)}>
-                    <Ionicons name="trash-outline" size={14} color="#E74C3C" />
-                    <Text style={styles.deleteBtnText}>Delete</Text>
-                  </TouchableOpacity>
+                  <View style={styles.actionBtns}>
+                    {!isRead && (
+                      <TouchableOpacity style={styles.readBtn} onPress={() => setReadIds((prev) => new Set(prev).add(item.id))}>
+                        <Ionicons name="checkmark-circle-outline" size={14} color="#2F4366" />
+                        <Text style={styles.readBtnText}>Mark as read</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteNotification(item.id)}>
+                      <Ionicons name="trash-outline" size={14} color="#E74C3C" />
+                      <Text style={styles.deleteBtnText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </TouchableOpacity>
             );
@@ -202,6 +219,9 @@ const styles = StyleSheet.create({
 
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#2F4366', marginTop: 4 },
 
-  deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F0F2F5' },
+  actionBtns: { flexDirection: 'row', gap: 10, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F0F2F5' },
+  readBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: '#E8F4FD', paddingVertical: 8, borderRadius: 8 },
+  readBtnText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  deleteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: '#FEF2F2', paddingVertical: 8, borderRadius: 8 },
   deleteBtnText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#E74C3C' },
 });
