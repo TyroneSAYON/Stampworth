@@ -73,6 +73,7 @@ export default function CardsScreen() {
       {/* Free redemption banner */}
       {!loading && (() => {
         const freeCards = cards.filter((c) => {
+          if (c.has_pending_reward) return true;
           const t = c.stamp_settings?.stamps_per_redemption || 10;
           return c.is_free_redemption || (c.stamp_count || 0) >= t - 1;
         });
@@ -135,7 +136,8 @@ export default function CardsScreen() {
             const collected = card.stamp_count || 0;
             const collectableSlots = total - 1;
             const pct = collectableSlots > 0 ? Math.min(100, (collected / collectableSlots) * 100) : 0;
-            const hasFreeReward = card.is_free_redemption || collected >= collectableSlots;
+            const hasPendingReward = card.has_pending_reward || false;
+            const hasFreeReward = !hasPendingReward && (card.is_free_redemption || collected >= collectableSlots);
 
             return (
               <TouchableOpacity
@@ -211,7 +213,13 @@ export default function CardsScreen() {
                   </View>
                 )}
 
-                {hasFreeReward && (
+                {hasPendingReward && (
+                  <View style={styles.pendingRewardBadge}>
+                    <Ionicons name="gift" size={14} color="#FFFFFF" />
+                    <Text style={styles.pendingRewardText}>🎉 You have a reward to claim!</Text>
+                  </View>
+                )}
+                {hasFreeReward && !hasPendingReward && (
                   <View style={styles.freeBadge}>
                     <Ionicons name="gift" size={14} color="#E67E22" />
                     <Text style={styles.freeText}>FREE REWARD READY</Text>
@@ -257,6 +265,8 @@ const styles = StyleSheet.create({
   rewardRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   rewardDesc: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: 'rgba(255,255,255,0.9)', flex: 1 },
 
+  pendingRewardBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'stretch', marginTop: 8, backgroundColor: '#27AE60', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  pendingRewardText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF', flex: 1 },
   freeBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'stretch', marginTop: 8, backgroundColor: '#FFFFFF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   freeText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#E67E22', letterSpacing: 0.5, flex: 1 },
 

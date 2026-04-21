@@ -91,14 +91,15 @@ export const getUserLoyaltyCards = async (customerId: string) => {
     return { data: cards || [], error: cardsError };
   }
 
-  // Fetch merchants, settings, and stamp counts in parallel
+  // Fetch merchants, settings, stamp counts, and pending rewards in parallel
   const merchantIds = [...new Set(cards.map((c: any) => c.merchant_id))];
   const cardIds = cards.map((c: any) => c.id);
 
-  const [{ data: merchants }, { data: settings }, { data: allStamps }] = await Promise.all([
+  const [{ data: merchants }, { data: settings }, { data: allStamps }, { data: pendingRewards }] = await Promise.all([
     supabase.from('merchants').select('id, business_name, logo_url, latitude, longitude').in('id', merchantIds),
     supabase.from('stamp_settings').select('*').in('merchant_id', merchantIds),
     supabase.from('stamps').select('loyalty_card_id').in('loyalty_card_id', cardIds).eq('is_valid', true),
+    supabase.from('redeemed_rewards').select('loyalty_card_id, is_used').in('loyalty_card_id', cardIds).eq('is_used', false),
   ]);
 
   const merchantMap = new Map((merchants || []).map((m: any) => [m.id, m]));
@@ -109,19 +110,45 @@ export const getUserLoyaltyCards = async (customerId: string) => {
     stampCountMap[s.loyalty_card_id] = (stampCountMap[s.loyalty_card_id] || 0) + 1;
   }
 
+  // Track which cards have unclaimed rewards
+  const hasPendingReward = new Set<string>();
+  for (const r of pendingRewards || []) {
+    hasPendingReward.add(r.loyalty_card_id);
+  }
+
   const enriched = cards.map((card: any) => {
-    // Valid stamps from the stamps table is the source of truth
     const validStamps = stampCountMap[card.id] ?? 0;
+    const cardStampCount = card.stamp_count ?? 0;
     const stampsPerRedemption = settingsMap.get(card.merchant_id)?.stamps_per_redemption || 10;
     const collectableSlots = stampsPerRedemption - 1;
-    // Cap at collectable slots (the last slot is "free")
-    const actualCount = Math.min(validStamps, collectableSlots);
-    const isFreeRedemption = actualCount >= collectableSlots;
+
+    // If the card has a pending reward AND the business app already reset stamp_count to 0,
+    // but stamps table still has stale valid stamps — trust the card's reset value.
+    // Also: if card.stamp_count is 0 and card.status is ACTIVE, a reset happened.
+    let actualCount: number;
+    if (hasPendingReward.has(card.id) && cardStampCount === 0) {
+      // Reward was stored, card was reset — stamps may be stale, show 0
+      actualCount = 0;
+    } else if (cardStampCount === 0 && validStamps > 0 && card.status === 'ACTIVE' && !card.is_free_redemption) {
+      // Card was recently reset but stamps haven't been invalidated yet
+      actualCount = 0;
+    } else {
+      // Normal case: use the lower of valid stamps vs collectable slots
+      actualCount = Math.min(validStamps, collectableSlots);
+    }
+
+    const isFreeRedemption = actualCount >= collectableSlots && !hasPendingReward.has(card.id);
+
+    // If stamps are stale (valid stamps exist but card was reset), clean them up
+    if (validStamps > 0 && cardStampCount === 0 && (hasPendingReward.has(card.id) || card.status === 'ACTIVE')) {
+      supabase.from('stamps').update({ is_valid: false }).eq('loyalty_card_id', card.id).eq('is_valid', true).then(() => {});
+    }
 
     return {
       ...card,
       stamp_count: actualCount,
       is_free_redemption: isFreeRedemption,
+      has_pending_reward: hasPendingReward.has(card.id),
       merchants: merchantMap.get(card.merchant_id) || null,
       stamp_settings: settingsMap.get(card.merchant_id) || null,
     };
