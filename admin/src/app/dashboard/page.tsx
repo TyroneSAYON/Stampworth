@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useTheme } from "@/lib/theme";
 import { supabase } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table as ShadTable, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Activity, Bell, ChevronRight, Moon, Sun, RefreshCw, LogOut, Search, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 type Stats = { totalCustomers: number; totalMerchants: number; totalLoyaltyCards: number; totalStampsIssued: number; totalRewardsRedeemed: number; totalAnnouncements: number; totalTransactions: number };
 type Customer = { id: string; email: string; full_name: string | null; username: string; phone_number: string | null; created_at: string };
@@ -1515,10 +1522,12 @@ export default function DashboardPage() {
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
-      <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{label}</p>
-      <p className="text-xl font-bold text-gray-800 dark:text-gray-100 mt-1 font-mono tabular-nums">{value.toLocaleString()}</p>
-    </div>
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{label}</p>
+        <p className="text-xl font-bold text-gray-800 dark:text-gray-100 mt-1 font-mono tabular-nums">{value.toLocaleString()}</p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1545,18 +1554,18 @@ function NotifPill({ color, icon, text, onClick }: { color: string; icon: string
 
 function Table({ heads, children }: { heads: string[]; children: React.ReactNode }) {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-800 overflow-x-auto shadow-sm">
-      <table className="w-full text-[12px] min-w-[500px]">
-        <thead><tr className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-800">{heads.map((h) => <th key={h} className="text-left px-4 py-2 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>)}</tr></thead>
-        <tbody className="[&>tr:nth-child(even)]:bg-gray-50/50 dark:[&>tr:nth-child(even)]:bg-gray-800/20">{children}</tbody>
-      </table>
-    </div>
+    <ShadTable className="min-w-[500px]">
+      <TableHeader>
+        <TableRow>{heads.map((h) => <TableHead key={h}>{h}</TableHead>)}</TableRow>
+      </TableHeader>
+      <TableBody>{children}</TableBody>
+    </ShadTable>
   );
 }
 
 function TypeBadge({ type }: { type: string }) {
-  const s: Record<string, string> = { STAMP_EARNED: "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400", STAMP_REMOVED: "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400", REWARD_STORED: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400", REWARD_REDEEMED: "bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400" };
-  return <span className={`px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${s[type] || "bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400"}`}>{type.replace(/_/g, " ")}</span>;
+  const variants: Record<string, "success" | "destructive" | "warning" | "purple" | "default"> = { STAMP_EARNED: "success", STAMP_REMOVED: "destructive", REWARD_STORED: "warning", REWARD_REDEEMED: "purple" };
+  return <Badge variant={variants[type] || "default"}>{type.replace(/_/g, " ")}</Badge>;
 }
 
 function Empty() { return <p className="text-center text-gray-400 dark:text-gray-500 text-[12px] py-10">No data yet</p>; }
@@ -1582,10 +1591,11 @@ function WowCard({ label, value, prev, suffix, isPercent, total }: { label: stri
   const displaySuffix = isPercent ? "%" : suffix || "";
   const change = prev !== undefined ? value - prev : null;
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
-      <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{label}</p>
-      <div className="flex items-baseline gap-2 mt-1">
-        <p className="text-xl font-bold text-gray-800 dark:text-gray-100 font-mono tabular-nums">{display}{displaySuffix}</p>
+    <Card>
+      <CardContent className="p-4">
+        <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{label}</p>
+        <div className="flex items-baseline gap-2 mt-1">
+          <p className="text-xl font-bold text-gray-800 dark:text-gray-100 font-mono tabular-nums">{display}{displaySuffix}</p>
         {change !== null && (
           <span className={`text-[10px] font-semibold ${change > 0 ? "text-green-500" : change < 0 ? "text-red-500" : "text-gray-400"}`}>
             {change > 0 ? "↑" : change < 0 ? "↓" : "—"}{change !== 0 ? ` ${Math.abs(change)}` : ""}
@@ -1593,7 +1603,8 @@ function WowCard({ label, value, prev, suffix, isPercent, total }: { label: stri
         )}
       </div>
       {prev !== undefined && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">vs {prev} last week</p>}
-    </div>
+    </CardContent>
+    </Card>
   );
 }
 
@@ -1601,7 +1612,8 @@ function Sparkline({ label, data, color }: { label: string; data: { date: string
   const max = Math.max(...data.map((d) => d.count), 1);
   const total = data.reduce((s, d) => s + d.count, 0);
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
+    <Card>
+      <CardContent className="p-4">
       <div className="flex items-center justify-between mb-3">
         <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-400">{label}</p>
         <p className="text-[11px] font-bold font-mono tabular-nums" style={{ color }}>{total} total</p>
@@ -1620,7 +1632,8 @@ function Sparkline({ label, data, color }: { label: string; data: { date: string
         <p className="text-[9px] text-gray-400 dark:text-gray-500">{data[0]?.date.slice(5)}</p>
         <p className="text-[9px] text-gray-400 dark:text-gray-500">{data[data.length - 1]?.date.slice(5)}</p>
       </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
