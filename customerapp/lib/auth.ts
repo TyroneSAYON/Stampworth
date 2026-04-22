@@ -18,8 +18,18 @@ try {
 
 type SupportedOAuthProvider = 'google' | 'facebook';
 
-// Sign up
+// Sign up — checks for existing account first
 export const signUp = async (email: string, password: string, fullName: string) => {
+  // Try signing in first to detect existing account
+  const { data: existingData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+  if (!signInError && existingData.user) {
+    // Account exists and password matches — just sign them in
+    await getOrCreateCustomerProfile();
+    return { data: existingData, error: null };
+  }
+
+  // If sign-in failed with "Invalid login credentials", the email might exist with different password
+  // or not exist at all. Try to sign up.
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -28,7 +38,12 @@ export const signUp = async (email: string, password: string, fullName: string) 
 
   if (error) return { data, error };
 
-  // Try immediate sign-in (works when email confirmation is disabled)
+  // Supabase returns a user with identities=[] if email already exists (email confirmation enabled)
+  if (data.user && data.user.identities && data.user.identities.length === 0) {
+    return { data: null, error: new Error('An account with this email already exists. Please sign in instead.') };
+  }
+
+  // Try immediate sign-in
   const signInResult = await supabase.auth.signInWithPassword({ email, password });
   if (!signInResult.error && signInResult.data.user) {
     await getOrCreateCustomerProfile();

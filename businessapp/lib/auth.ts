@@ -99,7 +99,16 @@ export const signUp = async (email: string, password: string, fullName: string) 
     return { data: { user: { email: normalizedEmail || 'demo@stampworth.local' } }, error: null, requiresEmailConfirmation: false } as any;
   }
 
-  // Preferred path: backend signup guarantees merchants row creation via service-role insert.
+  // Check if account already exists by trying to sign in
+  const { data: existingData, error: existingError } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+  if (!existingError && existingData.user) {
+    // Account exists, password matches — sign them in
+    await persistMerchantAuthReflection(normalizedEmail, fullName);
+    return { data: existingData, error: null, requiresEmailConfirmation: false };
+  }
+
+  // Check if email exists with a different password (Supabase returns "Invalid login credentials" for both cases)
+  // We proceed with signup — Supabase will return identities=[] if email is taken
   const backendSignup = await signUpViaBackend(normalizedEmail, password, fullName).catch((error: any) => ({
     ok: false,
     message: error?.message || 'Unable to reach backend signup endpoint',
@@ -142,6 +151,11 @@ export const signUp = async (email: string, password: string, fullName: string) 
 
   if (directSignUpError) {
     return { data: null, error: directSignUpError, requiresEmailConfirmation: false };
+  }
+
+  // Supabase returns identities=[] if email already exists
+  if (directSignUp.user && directSignUp.user.identities && directSignUp.user.identities.length === 0) {
+    return { data: null, error: new Error('An account with this email already exists. Please sign in instead.'), requiresEmailConfirmation: false };
   }
 
   // If user was created but email needs confirmation
