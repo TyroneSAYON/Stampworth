@@ -31,6 +31,20 @@ export default function QRCodeScreen() {
   const loadedRef = useRef(false);
   const storageLoaded = useRef(false);
 
+  // Load cached QR data for offline use
+  useEffect(() => {
+    AsyncStorage.getItem('stampworth_qr_cache').then((v) => {
+      if (v) {
+        const cached = JSON.parse(v);
+        setQrValue(cached.qrValue);
+        setCustomerId(cached.customerId);
+        setCustomerCode(cached.customerCode);
+        setDisplayName(cached.displayName || 'Customer');
+        setLoading(false);
+      }
+    }).catch(() => {});
+  }, []);
+
   // Load persisted state
   useEffect(() => {
     Promise.all([
@@ -85,11 +99,21 @@ export default function QRCodeScreen() {
         startGeofenceMonitoring().catch(() => {});
 
         if (!cancelled) {
+          const code = customer.id.slice(0, 8).toUpperCase();
+          const name = customer.full_name || authUser.user_metadata?.full_name as string || authUser.email?.split('@')[0] || 'Customer';
           setQrValue(qrData.qr_code_value);
           setCustomerId(customer.id);
-          setCustomerCode(customer.id.slice(0, 8).toUpperCase());
+          setCustomerCode(code);
+          setDisplayName(name);
           setLoading(false);
           loadedRef.current = true;
+          // Cache for offline use
+          AsyncStorage.setItem('stampworth_qr_cache', JSON.stringify({
+            qrValue: qrData.qr_code_value,
+            customerId: customer.id,
+            customerCode: code,
+            displayName: name,
+          })).catch(() => {});
         }
       };
       load();

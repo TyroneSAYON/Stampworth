@@ -169,6 +169,8 @@ export const signInWithOAuth = async (provider: SupportedOAuthProvider) => {
 
 // Sign out
 export const signOut = async () => {
+  // Clear offline QR cache
+  try { const AsyncStorage = require('@react-native-async-storage/async-storage').default; await AsyncStorage.removeItem('stampworth_qr_cache'); } catch {}
   return await supabase.auth.signOut();
 };
 
