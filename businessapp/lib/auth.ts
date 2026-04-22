@@ -235,6 +235,7 @@ export const signInWithOAuth = async (provider: SupportedOAuthProvider) => {
   }
 
   const redirectTo = Linking.createURL('/');
+  console.log('[OAuth] Redirect URL:', redirectTo);
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,

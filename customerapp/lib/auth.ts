@@ -117,6 +117,7 @@ export const signInWithGoogle = async () => {
 // Web-based OAuth flow
 const webOAuth = async (provider: SupportedOAuthProvider) => {
   const redirectTo = Linking.createURL('/');
+  console.log('[OAuth] Redirect URL:', redirectTo);
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
