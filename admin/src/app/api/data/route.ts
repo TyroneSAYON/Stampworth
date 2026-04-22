@@ -187,8 +187,11 @@ export async function DELETE(req: NextRequest) {
       const { data: customer } = await supabaseAdmin.from("customers").select("auth_id").eq("id", id).maybeSingle();
       const { error } = await supabaseAdmin.from("customers").delete().eq("id", id);
       if (error) throw error;
-      // Also delete auth user
-      if (customer?.auth_id) { await supabaseAdmin.auth.admin.deleteUser(customer.auth_id).catch(() => {}); }
+      // Delete auth user so they can re-register
+      if (customer?.auth_id) {
+        const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(customer.auth_id);
+        if (authErr) console.error("Failed to delete auth user:", authErr.message);
+      }
     } else if (type === "merchant") {
       // Delete related data first
       const { data: cards } = await supabaseAdmin.from("loyalty_cards").select("id").eq("merchant_id", id);
@@ -207,7 +210,10 @@ export async function DELETE(req: NextRequest) {
       const { data: merchant } = await supabaseAdmin.from("merchants").select("auth_id").eq("id", id).maybeSingle();
       const { error } = await supabaseAdmin.from("merchants").delete().eq("id", id);
       if (error) throw error;
-      if (merchant?.auth_id) { await supabaseAdmin.auth.admin.deleteUser(merchant.auth_id).catch(() => {}); }
+      if (merchant?.auth_id) {
+        const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(merchant.auth_id);
+        if (authErr) console.error("Failed to delete auth user:", authErr.message);
+      }
     } else if (type === "support_message") {
       const { error } = await supabaseAdmin.from("support_messages").delete().eq("id", id);
       if (error) throw error;

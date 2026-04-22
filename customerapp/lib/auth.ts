@@ -36,10 +36,27 @@ export const signUp = async (email: string, password: string, fullName: string) 
     options: { data: { full_name: fullName } },
   });
 
-  if (error) return { data, error };
+  if (error) {
+    const msg = (error.message || '').toLowerCase();
+    // "User already registered" — email exists, try signing in with provided password
+    if (msg.includes('already registered') || msg.includes('already been registered')) {
+      const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({ email, password });
+      if (!retryError && retryData.user) {
+        await getOrCreateCustomerProfile();
+        return { data: retryData, error: null };
+      }
+      return { data: null, error: new Error('An account with this email already exists. Please sign in with your existing password.') };
+    }
+    return { data, error };
+  }
 
-  // Supabase returns a user with identities=[] if email already exists (email confirmation enabled)
+  // Supabase returns identities=[] if email already exists (email confirmation enabled)
   if (data.user && data.user.identities && data.user.identities.length === 0) {
+    const { data: retryData, error: retryError } = await supabase.auth.signInWithPassword({ email, password });
+    if (!retryError && retryData.user) {
+      await getOrCreateCustomerProfile();
+      return { data: retryData, error: null };
+    }
     return { data: null, error: new Error('An account with this email already exists. Please sign in instead.') };
   }
 
