@@ -3,8 +3,11 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { signIn, signInWithOAuth } from '@/lib/auth';
 import { GoogleLogo } from '@/components/google-logo';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');

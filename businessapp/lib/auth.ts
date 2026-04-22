@@ -234,7 +234,7 @@ export const signInWithOAuth = async (provider: SupportedOAuthProvider) => {
     return { data: { user: { email: `${provider}-demo@stampworth.local` } }, error: null } as any;
   }
 
-  const redirectTo = Linking.createURL('/');
+  const redirectTo = Linking.createURL('');
   console.log('[OAuth] Redirect URL:', redirectTo);
 
   const { data, error } = await supabase.auth.signInWithOAuth({

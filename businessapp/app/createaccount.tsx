@@ -3,9 +3,12 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { signUp, signInWithOAuth } from '@/lib/auth';
 import { isMerchantSetupComplete } from '@/lib/database';
 import { GoogleLogo } from '@/components/google-logo';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function CreateAccountScreen() {
   const [businessName, setBusinessName] = useState('');
