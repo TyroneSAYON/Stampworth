@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 
 type Stats = { totalCustomers: number; totalMerchants: number; totalLoyaltyCards: number; totalStampsIssued: number; totalRewardsRedeemed: number; totalAnnouncements: number; totalTransactions: number };
 type Customer = { id: string; email: string; full_name: string | null; username: string; phone_number: string | null; created_at: string };
-type Merchant = { id: string; auth_id: string | null; owner_email: string; business_name: string; address: string | null; city: string | null; is_active: boolean; created_at: string; phone_number: string | null; latitude: number | null; longitude: number | null; logo_url: string | null };
+type Merchant = { id: string; auth_id: string | null; owner_email: string; business_name: string; address: string | null; city: string | null; is_active: boolean; created_at: string; phone_number: string | null; latitude: number | null; longitude: number | null; logo_url: string | null; subscription_plan: string | null; subscription_expires: string | null; subscription_payment: string | null };
 type MerchantStats = { cardHolders: number; totalStampsEarned: number; totalRewardsRedeemed: number; stampsPerRedemption: number; cardColor: string; stampIcon: string };
 type Transaction = { id: string; merchant_id: string; transaction_type: string; stamp_count_after: number | null; notes: string | null; created_at: string; merchants: any; customers: any };
 type Reward = { id: string; merchant_id: string; reward_code: string; stamps_used: number; is_used: boolean; used_at: string | null; created_at: string; merchants: any; customers: any };
@@ -33,9 +33,16 @@ type SupportMessage = { id: string; sender_type: "customer" | "merchant"; sender
 type DevBroadcast = { id: string; title: string; message: string; target: "all" | "customers" | "merchants"; is_active: boolean; created_at: string };
 type Tab = "overview" | "analytics" | "monitor" | "support" | "broadcast" | "map" | "customers" | "merchants" | "rewards";
 
-// All merchants are on Beta during testing
-const SUBSCRIPTION_PLAN = "Beta (Free)";
-const SUBSCRIPTION_STATUS = "active";
+const planLabel = (m: Merchant) => {
+  const p = m.subscription_plan || 'beta';
+  const labels: Record<string, string> = { beta: 'Beta (Free)', starter: 'Starter ₱149', growth: 'Growth ₱349', scale: 'Scale ₱799' };
+  return labels[p] || 'Beta (Free)';
+};
+const planColor = (m: Merchant) => {
+  const p = m.subscription_plan || 'beta';
+  const colors: Record<string, string> = { beta: 'bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400', starter: 'bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400', growth: 'bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400', scale: 'bg-orange-50 dark:bg-orange-950 text-orange-600 dark:text-orange-400' };
+  return colors[p] || colors.beta;
+};
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -1031,7 +1038,7 @@ export default function DashboardPage() {
                         </div>
                         <p className="text-[11px] text-gray-500 dark:text-gray-400">{m.owner_email}</p>
                         <div className="flex items-center gap-3 mt-2">
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 font-semibold">{SUBSCRIPTION_PLAN}</span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${planColor(m)}`}>{planLabel(m)}</span>
                           {ms && <span className="text-[10px] text-gray-400 dark:text-gray-500">{ms.cardHolders} holders · {ms.totalStampsEarned} stamps</span>}
                         </div>
                         <div className="flex gap-1 mt-3">
@@ -1060,7 +1067,7 @@ export default function DashboardPage() {
                             <td className="px-4 py-2.5 text-gray-300 dark:text-gray-600 text-[11px]">{i + 1}</td>
                             <td className="px-4 py-2.5 font-medium text-gray-800 dark:text-gray-100 cursor-pointer" onClick={() => setSelectedMerchant(m)}>{m.business_name}</td>
                             <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">{m.owner_email}</td>
-                            <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400">{SUBSCRIPTION_PLAN}</span></td>
+                            <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${planColor(m)}`}>{planLabel(m)}</span></td>
                             <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 text-center">{ms?.cardHolders ?? 0}</td>
                             <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400 text-center">{ms?.totalStampsEarned ?? 0}</td>
                             <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${m.is_active ? "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400" : "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400"}`}>{m.is_active ? "Active" : "Inactive"}</span></td>
@@ -1127,8 +1134,9 @@ export default function DashboardPage() {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="bg-purple-50 dark:bg-purple-950 rounded-xl p-3 text-center">
                         <p className="text-[10px] font-medium text-purple-500 dark:text-purple-400 uppercase">Plan</p>
-                        <p className="text-[14px] font-bold text-purple-700 dark:text-purple-300 mt-1">{SUBSCRIPTION_PLAN}</p>
-                        <p className="text-[9px] text-purple-400 dark:text-purple-500 mt-0.5 capitalize">{SUBSCRIPTION_STATUS}</p>
+                        <p className="text-[14px] font-bold text-purple-700 dark:text-purple-300 mt-1">{planLabel(selectedMerchant)}</p>
+                        <p className="text-[9px] text-purple-400 dark:text-purple-500 mt-0.5">{selectedMerchant.subscription_expires ? `Expires ${new Date(selectedMerchant.subscription_expires).toLocaleDateString()}` : 'Active'}</p>
+                        {selectedMerchant.subscription_payment && <p className="text-[8px] text-purple-300 dark:text-purple-600 mt-0.5 capitalize">{selectedMerchant.subscription_payment.replace('sandbox_', '')}</p>}
                       </div>
                       <div className="bg-blue-50 dark:bg-blue-950 rounded-xl p-3 text-center">
                         <p className="text-[10px] font-medium text-blue-500 dark:text-blue-400 uppercase">Card Holders</p>

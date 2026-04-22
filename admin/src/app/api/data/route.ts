@@ -29,7 +29,7 @@ export async function GET() {
     };
 
     const { data: customers } = await supabaseAdmin.from("customers").select("id, email, full_name, username, phone_number, created_at").order("created_at", { ascending: false }).limit(500);
-    const { data: merchants } = await supabaseAdmin.from("merchants").select("id, auth_id, owner_email, business_name, address, city, is_active, created_at, phone_number, latitude, longitude, logo_url").order("created_at", { ascending: false }).limit(500);
+    const { data: merchants } = await supabaseAdmin.from("merchants").select("id, auth_id, owner_email, business_name, address, city, is_active, created_at, phone_number, latitude, longitude, logo_url, subscription_plan, subscription_expires, subscription_payment").order("created_at", { ascending: false }).limit(500);
     const { data: transactions } = await supabaseAdmin.from("transactions").select("id, merchant_id, customer_id, transaction_type, stamp_count_after, notes, created_at").order("created_at", { ascending: false }).limit(500);
     const { data: rewards } = await supabaseAdmin.from("redeemed_rewards").select("id, merchant_id, customer_id, reward_code, stamps_used, is_used, used_at, created_at").order("created_at", { ascending: false }).limit(500);
     const { data: loyaltyCards } = await supabaseAdmin.from("loyalty_cards").select("id, customer_id, merchant_id, stamp_count, total_stamps_earned, is_free_redemption, created_at").limit(5000);

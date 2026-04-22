@@ -314,31 +314,41 @@ export default function OptionsScreen() {
               </View>
               <Text style={styles.betaCardDesc}>{activePlan.id === 'beta' ? 'All features unlocked during beta' : `₱${activePlan.price}/mo${subExpiry ? ` · Expires ${new Date(subExpiry).toLocaleDateString()}` : ''}`}</Text>
             </View>
-            <Text style={styles.betaFreeLabel}>FREE</Text>
+            <Text style={styles.betaFreeLabel}>{activePlan.id === 'beta' ? 'FREE' : `₱${activePlan.price}`}</Text>
           </View>
           <View style={styles.betaDivider} />
           <View style={styles.betaPerks}>
             <View style={styles.betaPerkItem}>
               <Ionicons name="people" size={15} color="#2F4366" />
-              <Text style={styles.betaPerkText}>Unlimited customers</Text>
+              <Text style={styles.betaPerkText}>{activePlan.cardHolderLimit === 0 ? 'Unlimited' : `Up to ${activePlan.cardHolderLimit}`} customers</Text>
             </View>
             <View style={styles.betaPerkItem}>
               <Ionicons name="qr-code" size={15} color="#2F4366" />
-              <Text style={styles.betaPerkText}>Unlimited QR scans</Text>
-            </View>
-            <View style={styles.betaPerkItem}>
-              <Ionicons name="color-palette" size={15} color="#2F4366" />
-              <Text style={styles.betaPerkText}>All card customizations</Text>
+              <Text style={styles.betaPerkText}>{activePlan.scanLimit === 0 ? 'Unlimited' : `${activePlan.scanLimit}/mo`} QR scans</Text>
             </View>
             <View style={styles.betaPerkItem}>
               <Ionicons name="megaphone" size={15} color="#2F4366" />
-              <Text style={styles.betaPerkText}>Unlimited announcements</Text>
+              <Text style={styles.betaPerkText}>{activePlan.announcementLimit === 0 ? 'Unlimited' : `${activePlan.announcementLimit}/mo`} announcements</Text>
             </View>
+            {activePlan.analytics && <View style={styles.betaPerkItem}><Ionicons name="analytics" size={15} color="#2F4366" /><Text style={styles.betaPerkText}>Advanced analytics</Text></View>}
           </View>
+          {/* Unsubscribe / Switch to Beta */}
+          {activePlan.id !== 'beta' && (
+            <TouchableOpacity
+              style={styles.unsubscribeBtn}
+              onPress={() => Alert.alert('Switch to Beta?', 'This will cancel your current plan and switch to Beta (Free) with all features unlocked.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Switch to Beta', onPress: async () => { await cancelSubscription(); setActivePlan(PLANS.beta); setSubExpiry(null); Alert.alert('Done', 'You are now on the Beta plan.'); } },
+              ])}
+            >
+              <Ionicons name="swap-horizontal" size={14} color="#8A94A6" />
+              <Text style={styles.unsubscribeText}>Switch to Beta (Free)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Plans After Beta */}
-        <Text style={styles.plansAfterLabel}>Plans after beta</Text>
+        {/* Plans */}
+        <Text style={styles.plansAfterLabel}>Subscription Plans</Text>
 
         {/* Starter */}
         <View style={styles.planCard}>
@@ -631,6 +641,8 @@ const styles = StyleSheet.create({
   betaPerks: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8 },
   betaPerkItem: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6, backgroundColor: '#F6F8FB', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, width: '48%' as any },
   betaPerkText: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#4A5568', flexShrink: 1 },
+  unsubscribeBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: 6, marginTop: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F6F8FB', borderWidth: 1, borderColor: '#E0E4EA' },
+  unsubscribeText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
 
   // Plans After Beta
   plansAfterLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#B0B8C4', textTransform: 'uppercase' as const, letterSpacing: 1, paddingHorizontal: 24, marginBottom: 12 },

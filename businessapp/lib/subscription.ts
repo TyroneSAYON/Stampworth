@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
 
 export type PlanId = 'beta' | 'starter' | 'growth' | 'scale';
 
@@ -81,11 +82,36 @@ export const subscribe = async (planId: PlanId, paymentMethod: string): Promise<
     paymentMethod,
   };
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(sub));
+
+  // Save to Supabase so admin can see it
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('merchants').update({
+        subscription_plan: planId,
+        subscription_expires: expires.toISOString(),
+        subscription_payment: paymentMethod,
+      }).eq('auth_id', user.id);
+    }
+  } catch {} // Don't fail if DB update fails
+
   return sub;
 };
 
 export const cancelSubscription = async (): Promise<void> => {
   await AsyncStorage.removeItem(STORAGE_KEY);
+
+  // Reset in Supabase
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('merchants').update({
+        subscription_plan: 'beta',
+        subscription_expires: null,
+        subscription_payment: null,
+      }).eq('auth_id', user.id);
+    }
+  } catch {}
 };
 
 // Check if a feature is allowed on current plan
