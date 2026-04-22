@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Alert, ActivityIndicator, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -195,6 +195,7 @@ export default function LoyaltySystemScreen() {
   }));
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
       {loading ? (
         <View style={styles.loadingState}>
@@ -202,7 +203,7 @@ export default function LoyaltySystemScreen() {
           <Text style={[styles.loadingText, { color: theme.text }]}>Loading settings...</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -358,6 +359,7 @@ export default function LoyaltySystemScreen() {
         </ScrollView>
       )}
     </ThemedView>
+    </KeyboardAvoidingView>
   );
 }
 

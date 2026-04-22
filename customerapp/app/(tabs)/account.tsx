@@ -131,8 +131,9 @@ export default function AccountScreen() {
   }
 
   return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
     <View style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         {/* Header */}
         <View style={styles.header}>
           <Image source={require('@/assets/images/stampworth-logo.png')} style={styles.logo} contentFit="contain" />
@@ -249,6 +250,7 @@ export default function AccountScreen() {
         </KeyboardAvoidingView>
       </Modal>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
