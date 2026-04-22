@@ -204,7 +204,9 @@ export const signIn = async (email: string, password: string, inputBusinessName?
         .maybeSingle();
 
       if (merchant?.business_name && merchant.business_name.toLowerCase() !== inputBusinessName.trim().toLowerCase()) {
-        return { data, error: new Error(`Business name doesn't match. The registered name for this email is "${merchant.business_name}".`) };
+        // Sign out — don't leave a valid session with wrong business name
+        await supabase.auth.signOut();
+        return { data: null, error: new Error(`Business name doesn't match the account registered with this email.`) };
       }
     }
   }
