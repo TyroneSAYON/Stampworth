@@ -351,7 +351,8 @@ export default function OptionsScreen() {
         <Text style={styles.plansAfterLabel}>Subscription Plans</Text>
 
         {/* Starter */}
-        <View style={styles.planCard}>
+        <View style={[styles.planCard, activePlan.id === 'starter' && { borderColor: '#2F4366', borderWidth: 2 }]}>
+          {activePlan.id === 'starter' && <View style={[styles.popularBanner, { backgroundColor: '#2F4366' }]}><Ionicons name="checkmark-circle" size={10} color="#FFFFFF" /><Text style={styles.popularBannerText}>YOUR PLAN</Text></View>}
           <View style={styles.planCardTop}>
             <View style={[styles.planIconCircle, { backgroundColor: '#E8F4FD' }]}>
               <Ionicons name="storefront-outline" size={20} color="#2F4366" />
@@ -378,15 +379,15 @@ export default function OptionsScreen() {
             style={[styles.planButton, { backgroundColor: '#2F4366' }]}
             onPress={() => activePlan.id === 'starter' ? Alert.alert('Active', 'You are already on the Starter plan.') : router.push({ pathname: '/payment', params: { planId: 'starter' } })}
           >
-            <Text style={styles.planButtonText}>Subscribe</Text>
+            <Text style={styles.planButtonText}>{activePlan.id === "starter" ? "✓ Current Plan" : "Subscribe"}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Growth */}
-        <View style={[styles.planCard, { borderColor: '#27AE60', borderWidth: 2 }]}>
-          <View style={styles.popularBanner}>
-            <Ionicons name="star" size={10} color="#FFFFFF" />
-            <Text style={styles.popularBannerText}>BEST VALUE</Text>
+        <View style={[styles.planCard, { borderColor: activePlan.id === 'growth' ? '#27AE60' : '#27AE60', borderWidth: 2 }]}>
+          <View style={[styles.popularBanner, activePlan.id === 'growth' && { backgroundColor: '#27AE60' }]}>
+            <Ionicons name={activePlan.id === 'growth' ? 'checkmark-circle' : 'star'} size={10} color="#FFFFFF" />
+            <Text style={styles.popularBannerText}>{activePlan.id === 'growth' ? 'YOUR PLAN' : 'BEST VALUE'}</Text>
           </View>
           <View style={styles.planCardTop}>
             <View style={[styles.planIconCircle, { backgroundColor: '#E8F8EE' }]}>
@@ -416,12 +417,13 @@ export default function OptionsScreen() {
             style={[styles.planButton, { backgroundColor: '#27AE60' }]}
             onPress={() => activePlan.id === 'growth' ? Alert.alert('Active', 'You are already on the Growth plan.') : router.push({ pathname: '/payment', params: { planId: 'growth' } })}
           >
-            <Text style={styles.planButtonText}>Subscribe</Text>
+            <Text style={styles.planButtonText}>{activePlan.id === "growth" ? "✓ Current Plan" : "Subscribe"}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Scale */}
-        <View style={styles.planCard}>
+        <View style={[styles.planCard, activePlan.id === 'scale' && { borderColor: '#E67E22', borderWidth: 2 }]}>
+          {activePlan.id === 'scale' && <View style={[styles.popularBanner, { backgroundColor: '#E67E22' }]}><Ionicons name="checkmark-circle" size={10} color="#FFFFFF" /><Text style={styles.popularBannerText}>YOUR PLAN</Text></View>}
           <View style={styles.planCardTop}>
             <View style={[styles.planIconCircle, { backgroundColor: '#FFF4E6' }]}>
               <Ionicons name="flash-outline" size={20} color="#E67E22" />
@@ -451,7 +453,7 @@ export default function OptionsScreen() {
             style={[styles.planButton, { backgroundColor: '#E67E22' }]}
             onPress={() => activePlan.id === 'scale' ? Alert.alert('Active', 'You are already on the Scale plan.') : router.push({ pathname: '/payment', params: { planId: 'scale' } })}
           >
-            <Text style={styles.planButtonText}>Subscribe</Text>
+            <Text style={styles.planButtonText}>{activePlan.id === "scale" ? "✓ Current Plan" : "Subscribe"}</Text>
           </TouchableOpacity>
         </View>
 

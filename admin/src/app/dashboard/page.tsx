@@ -31,7 +31,7 @@ type MonitorData = {
 };
 type SupportMessage = { id: string; sender_type: "customer" | "merchant"; sender_id: string | null; sender_email: string; sender_name: string | null; subject: string | null; message: string; is_read: boolean; is_replied: boolean; created_at: string };
 type DevBroadcast = { id: string; title: string; message: string; target: "all" | "customers" | "merchants"; is_active: boolean; created_at: string };
-type Tab = "overview" | "analytics" | "monitor" | "support" | "broadcast" | "map" | "customers" | "merchants" | "rewards";
+type Tab = "overview" | "analytics" | "monitor" | "support" | "broadcast" | "map" | "customers" | "merchants" | "rewards" | "subscriptions";
 
 const planLabel = (m: Merchant) => {
   const p = m.subscription_plan || 'beta';
@@ -309,6 +309,7 @@ export default function DashboardPage() {
     customers: newSince("customers", customers),
     merchants: newSince("merchants", merchants),
     rewards: newSince("rewards", rewards.filter((r) => !r.is_used)),
+    subscriptions: merchants.filter((m) => m.subscription_plan && m.subscription_plan !== 'beta').length,
   };
 
   const badgeColors: Record<Tab, string> = {
@@ -321,6 +322,7 @@ export default function DashboardPage() {
     customers: "bg-blue-500",
     merchants: merchants.some((m) => !m.is_active) ? "bg-red-500" : "bg-blue-500",
     rewards: "bg-purple-500",
+    subscriptions: "bg-indigo-500",
   };
 
   const navIcons: Record<Tab, string> = {
@@ -333,13 +335,14 @@ export default function DashboardPage() {
     customers: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z",
     merchants: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
     rewards: "M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7",
+    subscriptions: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
   };
-  const tabLabels: Record<Tab, string> = { overview: "Overview", analytics: "Analytics", monitor: "Monitoring", support: "Support Inbox", broadcast: "Broadcast", map: "Store Map", customers: "Customers", merchants: "Businesses", rewards: "Rewards" };
+  const tabLabels: Record<Tab, string> = { overview: "Overview", analytics: "Analytics", monitor: "Monitoring", support: "Support Inbox", broadcast: "Broadcast", map: "Store Map", customers: "Customers", merchants: "Businesses", rewards: "Rewards", subscriptions: "Subscriptions" };
   const navSections: { label: string; items: Tab[] }[] = [
     { label: "Main", items: ["overview", "analytics"] },
     { label: "Management", items: ["customers", "merchants", "rewards"] },
     { label: "Operations", items: ["support", "broadcast", "map"] },
-    { label: "System", items: ["monitor"] },
+    { label: "System", items: ["monitor", "subscriptions"] },
   ];
 
   return (
@@ -1297,6 +1300,88 @@ export default function DashboardPage() {
                   </Table>
                   {filteredRewards.length === 0 && <Empty />}
                 </div>
+              </>
+              );
+            })()}
+
+            {/* SUBSCRIPTIONS */}
+            {tab === "subscriptions" && (() => {
+              const subscribedMerchants = merchants.filter((m) => m.subscription_plan && m.subscription_plan !== 'beta');
+              const betaMerchants = merchants.filter((m) => !m.subscription_plan || m.subscription_plan === 'beta');
+              const planCounts: Record<string, number> = {};
+              for (const m of merchants) { const p = m.subscription_plan || 'beta'; planCounts[p] = (planCounts[p] || 0) + 1; }
+              return (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4">Subscriptions</p>
+
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
+                    <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Total Businesses</p>
+                    <p className="text-xl font-bold text-gray-800 dark:text-gray-100 mt-1 font-mono">{merchants.length}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
+                    <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wider">Beta (Free)</p>
+                    <p className="text-xl font-bold text-purple-600 dark:text-purple-400 mt-1 font-mono">{planCounts.beta || 0}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
+                    <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wider">Starter</p>
+                    <p className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1 font-mono">{planCounts.starter || 0}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
+                    <p className="text-[10px] font-semibold text-green-500 uppercase tracking-wider">Growth</p>
+                    <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-1 font-mono">{planCounts.growth || 0}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
+                    <p className="text-[10px] font-semibold text-orange-500 uppercase tracking-wider">Scale</p>
+                    <p className="text-xl font-bold text-orange-600 dark:text-orange-400 mt-1 font-mono">{planCounts.scale || 0}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800 shadow-sm">
+                    <p className="text-[10px] font-semibold text-indigo-500 uppercase tracking-wider">Paid Subscribers</p>
+                    <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400 mt-1 font-mono">{subscribedMerchants.length}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 rounded-lg p-4 border border-gray-200 dark:border-gray-800 shadow-sm col-span-2">
+                    <p className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">Monthly Revenue (Sandbox)</p>
+                    <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 font-mono">₱{subscribedMerchants.reduce((sum, m) => { const prices: Record<string, number> = { starter: 149, growth: 349, scale: 799 }; return sum + (prices[m.subscription_plan || ''] || 0); }, 0).toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {/* Paid subscribers table */}
+                {subscribedMerchants.length > 0 && (
+                  <>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Paid Subscribers</p>
+                    <Table heads={["Business", "Plan", "Payment", "Subscribed", "Expires", "Status"]}>
+                      {subscribedMerchants.map((m) => {
+                        const isExpired = m.subscription_expires && new Date(m.subscription_expires).getTime() < Date.now();
+                        return (
+                          <tr key={m.id} className="border-b border-gray-100 dark:border-gray-800">
+                            <td className="px-4 py-2 text-[12px] font-medium text-gray-800 dark:text-gray-200">{m.business_name}</td>
+                            <td className="px-4 py-2"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${planColor(m)}`}>{planLabel(m)}</span></td>
+                            <td className="px-4 py-2 text-[11px] text-gray-500 dark:text-gray-400 capitalize">{(m.subscription_payment || '').replace('sandbox_', '')}</td>
+                            <td className="px-4 py-2 text-[11px] text-gray-400 dark:text-gray-500">{m.subscription_expires ? fmt(new Date(new Date(m.subscription_expires).getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()) : '-'}</td>
+                            <td className="px-4 py-2 text-[11px] text-gray-400 dark:text-gray-500">{m.subscription_expires ? fmt(m.subscription_expires) : '-'}</td>
+                            <td className="px-4 py-2"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${isExpired ? 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400' : 'bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400'}`}>{isExpired ? 'Expired' : 'Active'}</span></td>
+                          </tr>
+                        );
+                      })}
+                    </Table>
+                  </>
+                )}
+
+                {/* All businesses plan overview */}
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 mt-6">All Businesses</p>
+                <Table heads={["Business", "Email", "Plan", "Status"]}>
+                  {merchants.map((m) => (
+                    <tr key={m.id} className="border-b border-gray-100 dark:border-gray-800">
+                      <td className="px-4 py-2 text-[12px] text-gray-700 dark:text-gray-300">{m.business_name}</td>
+                      <td className="px-4 py-2 text-[11px] text-gray-400 dark:text-gray-500">{m.owner_email}</td>
+                      <td className="px-4 py-2"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${planColor(m)}`}>{planLabel(m)}</span></td>
+                      <td className="px-4 py-2"><span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${m.is_active ? 'bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400' : 'bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400'}`}>{m.is_active ? 'Active' : 'Inactive'}</span></td>
+                    </tr>
+                  ))}
+                </Table>
               </>
               );
             })()}
