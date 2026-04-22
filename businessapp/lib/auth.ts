@@ -234,13 +234,14 @@ export const signInWithOAuth = async (provider: SupportedOAuthProvider) => {
     return { data: { user: { email: `${provider}-demo@stampworth.local` } }, error: null } as any;
   }
 
-  const redirectTo = Linking.createURL('auth/callback');
+  const redirectTo = Linking.createURL('/');
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
       redirectTo,
       skipBrowserRedirect: true,
+      queryParams: { prompt: 'select_account' },
     },
   });
 
@@ -248,14 +249,27 @@ export const signInWithOAuth = async (provider: SupportedOAuthProvider) => {
     return { data: null, error: error || new Error('Unable to start OAuth sign-in.') };
   }
 
-  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
+    showInRecents: true,
+    preferEphemeralSession: false,
+  });
 
   if (result.type !== 'success' || !result.url) {
     return { data: null, error: new Error('OAuth sign-in was cancelled.') };
   }
 
-  const callbackUrl = new URL(result.url);
-  const code = callbackUrl.searchParams.get('code');
+  let code: string | null = null;
+  try {
+    const url = new URL(result.url);
+    code = url.searchParams.get('code');
+    if (!code) {
+      const hash = result.url.split('#')[1] || '';
+      code = new URLSearchParams(hash).get('code');
+    }
+  } catch {
+    const match = result.url.match(/[?&#]code=([^&#]+)/);
+    if (match) code = match[1];
+  }
 
   if (code) {
     const exchanged = await supabase.auth.exchangeCodeForSession(code);

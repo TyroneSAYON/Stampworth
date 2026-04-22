@@ -116,25 +116,55 @@ export const signInWithGoogle = async () => {
 
 // Web-based OAuth flow
 const webOAuth = async (provider: SupportedOAuthProvider) => {
-  const redirectTo = Linking.createURL('auth/callback');
+  const redirectTo = Linking.createURL('/');
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo, skipBrowserRedirect: true },
+    options: {
+      redirectTo,
+      skipBrowserRedirect: true,
+      queryParams: { prompt: 'select_account' },
+    },
   });
 
   if (error || !data?.url) {
     return { data: null, error: error || new Error('Unable to start OAuth sign-in.') };
   }
 
-  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
+    showInRecents: true,
+    preferEphemeralSession: false,
+  });
 
   if (result.type !== 'success' || !result.url) {
     return { data: null, error: new Error('OAuth sign-in was cancelled.') };
   }
 
-  const callbackUrl = new URL(result.url);
-  const code = callbackUrl.searchParams.get('code');
+  // Try extracting code or tokens from the callback URL
+  let code: string | null = null;
+  let accessToken: string | null = null;
+  let refreshToken: string | null = null;
+
+  try {
+    const url = new URL(result.url);
+    code = url.searchParams.get('code');
+    if (!code) {
+      // Check hash fragment
+      const hash = result.url.split('#')[1] || '';
+      const hashParams = new URLSearchParams(hash);
+      code = hashParams.get('code');
+      accessToken = hashParams.get('access_token');
+      refreshToken = hashParams.get('refresh_token');
+    }
+  } catch {
+    // URL parsing failed — try regex fallback
+    const codeMatch = result.url.match(/[?&#]code=([^&#]+)/);
+    if (codeMatch) code = codeMatch[1];
+    const atMatch = result.url.match(/access_token=([^&#]+)/);
+    const rtMatch = result.url.match(/refresh_token=([^&#]+)/);
+    if (atMatch) accessToken = atMatch[1];
+    if (rtMatch) refreshToken = rtMatch[1];
+  }
 
   if (code) {
     const exchanged = await supabase.auth.exchangeCodeForSession(code);
@@ -142,11 +172,6 @@ const webOAuth = async (provider: SupportedOAuthProvider) => {
     if (exchanged.data.user) await getOrCreateCustomerProfile();
     return { data: exchanged.data, error: null };
   }
-
-  const hash = result.url.includes('#') ? result.url.split('#')[1] : '';
-  const hashParams = new URLSearchParams(hash);
-  const accessToken = hashParams.get('access_token');
-  const refreshToken = hashParams.get('refresh_token');
 
   if (accessToken && refreshToken) {
     const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
