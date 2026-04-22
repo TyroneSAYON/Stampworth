@@ -220,7 +220,7 @@ export const getCustomerAnnouncements = async (customerId: string) => {
       merchant_id: null,
       message: b.title ? `${b.title}: ${b.message}` : b.message,
       created_at: b.created_at,
-      merchants: { business_name: 'Stampworth' },
+      merchants: { business_name: 'Stampworth Dev Team' },
     });
   }
 

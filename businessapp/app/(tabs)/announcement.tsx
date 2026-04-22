@@ -177,7 +177,7 @@ export default function AnnouncementScreen() {
                         <Text style={styles.notifTime}>{formatTime(item.createdAt)}</Text>
                       </View>
                       <Text style={styles.notifBody} numberOfLines={2}>{item.body}</Text>
-                      <Text style={styles.notifType}>{item.type === 'dev_broadcast' ? 'From Stampworth' : 'Customer message'}</Text>
+                      <Text style={styles.notifType}>{item.type === 'dev_broadcast' ? 'From Stampworth Dev Team' : 'Customer message'}</Text>
                     </View>
                     {!isRead && <View style={styles.unreadDot} />}
                   </TouchableOpacity>
@@ -240,7 +240,7 @@ export default function AnnouncementScreen() {
                         <Ionicons name="time-outline" size={11} color="#8A94A6" />
                         <Text style={styles.msgTime}>{new Date(selectedNotif.createdAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</Text>
                         <View style={styles.msgTypeBadge}>
-                          <Text style={styles.msgTypeText}>{selectedNotif.type === 'dev_broadcast' ? 'Stampworth' : 'Customer'}</Text>
+                          <Text style={styles.msgTypeText}>{selectedNotif.type === 'dev_broadcast' ? 'Stampworth Dev Team' : 'Customer'}</Text>
                         </View>
                       </View>
                     </View>

@@ -1069,7 +1069,7 @@ export const getMerchantNotifications = async () => {
 
   // Add dev broadcasts
   for (const b of broadcastsResult.data || []) {
-    notifications.push({ id: b.id, type: 'dev_broadcast', title: b.title || 'Stampworth', body: b.message, isRead: false, createdAt: b.created_at });
+    notifications.push({ id: b.id, type: 'dev_broadcast', title: b.title || 'Stampworth Dev Team', body: b.message, isRead: false, createdAt: b.created_at });
   }
 
   // Sort by date
