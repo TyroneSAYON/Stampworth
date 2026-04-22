@@ -353,54 +353,56 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[var(--background)]">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* Mobile header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-[var(--sidebar)] border-b border-[var(--sidebar-border)] flex items-center px-4 z-30">
-        <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-white hover:bg-white/10">
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-zinc-950 border-b border-zinc-800 flex items-center px-4 z-30">
+        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        </Button>
+        </button>
         <div className="flex items-center gap-2.5 ml-3">
           <Image src="/logo.png" alt="Stampworth" width={24} height={24} />
-          <span className="text-[13px] font-semibold text-white">Stampworth</span>
+          <span className="text-sm font-semibold text-white">Stampworth</span>
         </div>
       </div>
 
-      {sidebarOpen && <div className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-30" onClick={() => setSidebarOpen(false)} />}
+      {sidebarOpen && <div className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-30" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 bottom-0 w-[240px] bg-[var(--sidebar)] flex flex-col z-40 transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}>
-        <div className="h-14 px-5 flex items-center gap-3 border-b border-[var(--sidebar-border)]">
-          <Image src="/logo.png" alt="Stampworth" width={28} height={28} />
-          <div>
-            <p className="text-[13px] font-semibold text-white leading-tight">Stampworth</p>
-            <p className="text-[9px] text-[var(--sidebar-foreground)] opacity-50 uppercase tracking-[0.15em]">Admin</p>
+      <aside className={cn("fixed left-0 top-0 bottom-0 w-[220px] bg-zinc-950 border-r border-zinc-800 flex flex-col z-40 transition-transform duration-200", sidebarOpen ? "translate-x-0" : "-translate-x-full", "lg:translate-x-0")}>
+        <div className="h-14 px-4 flex items-center gap-3 border-b border-zinc-800">
+          <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+            <Image src="/logo.png" alt="S" width={18} height={18} />
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto text-gray-500 hover:text-white hover:bg-white/10 h-7 w-7">
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-zinc-100 leading-none">Stampworth</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">Admin Dashboard</p>
+          </div>
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden h-7 w-7 rounded-md text-zinc-500 hover:text-white hover:bg-zinc-800 inline-flex items-center justify-center">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </Button>
+          </button>
         </div>
-        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-6">
+        <nav className="flex-1 px-2 py-3 overflow-y-auto">
           {navSections.map((section) => (
-            <div key={section.label}>
-              <p className="px-3 mb-2 text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--sidebar-foreground)] opacity-40">{section.label}</p>
-              <div className="space-y-0.5">
+            <div key={section.label} className="mb-4">
+              <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">{section.label}</p>
+              <div className="space-y-px">
               {section.items.map((key) => {
                 const count = badgeCounts[key];
                 const color = badgeColors[key];
                 const isActive = tab === key;
                 return (
                   <button key={key} onClick={() => switchTab(key)} className={cn(
-                    "w-full text-left px-3 py-2 rounded-md text-[13px] font-medium transition-all flex items-center gap-3",
+                    "w-full text-left px-3 py-[7px] rounded-md text-[13px] font-medium transition-colors flex items-center gap-2.5",
                     isActive
-                      ? "bg-[var(--sidebar-accent)] text-white shadow-sm shadow-indigo-500/20"
-                      : "text-[var(--sidebar-foreground)] hover:text-white hover:bg-white/[0.06]"
+                      ? "bg-zinc-800 text-zinc-100"
+                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
                   )}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn("shrink-0", isActive ? "opacity-100" : "opacity-50")}><path d={navIcons[key]}/></svg>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn("shrink-0", isActive ? "text-indigo-400" : "text-zinc-500")}><path d={navIcons[key]}/></svg>
                     <span className="flex-1">{tabLabels[key]}</span>
                     {count > 0 && (
                       <span className={cn(
-                        "min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-semibold flex items-center justify-center",
-                        isActive ? "bg-white/20 text-white" : `${color} text-white`
+                        "min-w-[18px] h-[18px] px-1 rounded-md text-[9px] font-semibold flex items-center justify-center",
+                        isActive ? "bg-zinc-700 text-zinc-300" : `${color} text-white`
                       )}>
                         {count > 99 ? "99+" : count}
                       </span>
@@ -412,16 +414,16 @@ export default function DashboardPage() {
             </div>
           ))}
         </nav>
-        <div className="px-3 py-3 border-t border-[var(--sidebar-border)] space-y-0.5">
-          <button onClick={toggle} className="w-full text-left px-3 py-2 rounded-md text-[12px] text-[var(--sidebar-foreground)] opacity-60 hover:opacity-100 hover:bg-white/[0.06] flex items-center gap-3 transition-all">
+        <div className="px-2 py-2 border-t border-zinc-800 space-y-px">
+          <button onClick={toggle} className="w-full text-left px-3 py-[7px] rounded-md text-[12px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 flex items-center gap-2.5 transition-colors">
             {theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
             {theme === "light" ? "Dark mode" : "Light mode"}
           </button>
-          <button onClick={() => load()} className="w-full text-left px-3 py-2 rounded-md text-[12px] text-[var(--sidebar-foreground)] opacity-60 hover:opacity-100 hover:bg-white/[0.06] flex items-center gap-3 transition-all">
+          <button onClick={() => load()} className="w-full text-left px-3 py-[7px] rounded-md text-[12px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 flex items-center gap-2.5 transition-colors">
             <RefreshCw size={14} />
             Refresh
           </button>
-          <button onClick={() => { localStorage.removeItem("stampworth_admin"); router.push("/"); }} className="w-full text-left px-3 py-2 rounded-md text-[12px] text-[var(--sidebar-foreground)] opacity-60 hover:opacity-100 hover:text-red-400 hover:bg-white/[0.06] flex items-center gap-3 transition-all">
+          <button onClick={() => { localStorage.removeItem("stampworth_admin"); router.push("/"); }} className="w-full text-left px-3 py-[7px] rounded-md text-[12px] text-zinc-500 hover:text-red-400 hover:bg-zinc-800/50 flex items-center gap-2.5 transition-colors">
             <LogOut size={14} />
             Sign out
           </button>
@@ -429,34 +431,34 @@ export default function DashboardPage() {
       </aside>
 
       {/* Main */}
-      <div className="lg:ml-[240px] pt-14 lg:pt-0">
+      <div className="lg:ml-[220px] pt-14 lg:pt-0 min-h-screen">
         {/* Top header bar */}
-        <header className="sticky top-0 z-20 h-14 bg-[var(--background)]/80 backdrop-blur-md border-b border-[var(--border)] flex items-center justify-between px-6">
+        <header className="sticky top-0 z-20 h-14 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between px-6">
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-[var(--muted-foreground)]">Admin</span>
-            <ChevronRight size={14} className="text-[var(--muted-foreground)] opacity-40" />
-            <span className="font-semibold text-[var(--foreground)]">{tabLabels[tab]}</span>
+            <span className="text-zinc-400 dark:text-zinc-500">Admin</span>
+            <ChevronRight size={14} className="text-zinc-300 dark:text-zinc-600" />
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">{tabLabels[tab]}</span>
           </div>
           <div className="flex items-center gap-4">
             {stats && (
-              <div className="hidden sm:flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
+              <div className="hidden sm:flex items-center gap-3 text-[11px] text-zinc-400 dark:text-zinc-500">
                 <span className="font-mono tabular-nums">{stats.totalCustomers} users</span>
-                <span className="opacity-30">|</span>
+                <span className="text-zinc-200 dark:text-zinc-700">·</span>
                 <span className="font-mono tabular-nums">{stats.totalMerchants} stores</span>
               </div>
             )}
-            {lastUpdate && <span className="hidden md:inline text-[10px] font-mono text-[var(--muted-foreground)] opacity-50">{lastUpdate}</span>}
+            {lastUpdate && <span className="hidden md:inline text-[10px] font-mono text-zinc-300 dark:text-zinc-600">{lastUpdate}</span>}
             <div className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all duration-500",
-              realtimeFlash ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "text-[var(--muted-foreground)]"
+              realtimeFlash ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400" : "text-zinc-400 dark:text-zinc-500"
             )}>
-              <span className={cn("w-2 h-2 rounded-full animate-pulse", realtimeFlash ? "bg-emerald-500" : "bg-emerald-500")} />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <span className="hidden sm:inline">{realtimeFlash ? "Updated" : "Live"}</span>
             </div>
           </div>
         </header>
 
-        <main className="p-6 lg:p-8">
+        <main className="p-4 sm:p-6 lg:p-8 max-w-[1400px]">
         {loading ? (
           <div className="flex items-center justify-center h-64"><p className="text-gray-400 text-sm">Loading...</p></div>
         ) : (
