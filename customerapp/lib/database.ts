@@ -158,13 +158,15 @@ export const getUserLoyaltyCards = async (customerId: string) => {
 };
 
 export const getCustomerAnnouncements = async (customerId: string) => {
-  // Get merchant IDs the customer has loyalty cards with
-  const { data: cards } = await supabase
-    .from('loyalty_cards')
-    .select('merchant_id')
-    .eq('customer_id', customerId);
+  // Get customer profile + merchant IDs in parallel
+  const [customerResult, cardsResult] = await Promise.all([
+    supabase.from('customers').select('created_at').eq('id', customerId).maybeSingle(),
+    supabase.from('loyalty_cards').select('merchant_id').eq('customer_id', customerId),
+  ]);
 
-  const merchantIds = [...new Set((cards || []).map((c: any) => c.merchant_id).filter(Boolean))];
+  // Only show notifications created after the customer account was created
+  const accountCreated = customerResult.data?.created_at || new Date().toISOString();
+  const merchantIds = [...new Set((cardsResult.data || []).map((c: any) => c.merchant_id).filter(Boolean))];
 
   // Fetch merchant announcements + dev broadcasts in parallel
   const [annResult, broadcastResult] = await Promise.all([
@@ -174,6 +176,7 @@ export const getCustomerAnnouncements = async (customerId: string) => {
           .select('id, merchant_id, message, created_at')
           .eq('is_active', true)
           .in('merchant_id', merchantIds)
+          .gte('created_at', accountCreated)
           .order('created_at', { ascending: false })
           .limit(20)
       : Promise.resolve({ data: [], error: null }),
@@ -182,6 +185,7 @@ export const getCustomerAnnouncements = async (customerId: string) => {
       .select('id, title, message, target, created_at')
       .eq('is_active', true)
       .or('target.eq.all,target.eq.customers')
+      .gte('created_at', accountCreated)
       .order('created_at', { ascending: false })
       .limit(10),
   ]);

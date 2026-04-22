@@ -1038,12 +1038,16 @@ export const getMerchantNotifications = async () => {
   const { data: merchant, error } = await ensureCurrentMerchantProfile();
   if (error || !merchant) return { data: [], error };
 
+  // Only show notifications created after the merchant account was created
+  const accountCreated = merchant.created_at || new Date().toISOString();
+
   // Fetch customer messages + dev broadcasts in parallel
   const [messagesResult, broadcastsResult] = await Promise.all([
     supabase
       .from('support_messages')
       .select('id, sender_type, sender_name, sender_email, subject, message, is_read, created_at')
       .eq('sender_type', 'customer')
+      .gte('created_at', accountCreated)
       .order('created_at', { ascending: false })
       .limit(50),
     supabase
@@ -1051,6 +1055,7 @@ export const getMerchantNotifications = async () => {
       .select('id, title, message, target, is_active, created_at')
       .eq('is_active', true)
       .or('target.eq.all,target.eq.merchants')
+      .gte('created_at', accountCreated)
       .order('created_at', { ascending: false })
       .limit(20),
   ]);
