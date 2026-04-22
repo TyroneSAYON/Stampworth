@@ -183,8 +183,12 @@ export async function DELETE(req: NextRequest) {
       await supabaseAdmin.from("customer_qr_codes").delete().eq("customer_id", id);
       await supabaseAdmin.from("user_locations").delete().eq("customer_id", id);
       await supabaseAdmin.from("store_visits").delete().eq("customer_id", id);
+      // Get auth_id before deleting
+      const { data: customer } = await supabaseAdmin.from("customers").select("auth_id").eq("id", id).maybeSingle();
       const { error } = await supabaseAdmin.from("customers").delete().eq("id", id);
       if (error) throw error;
+      // Also delete auth user
+      if (customer?.auth_id) { await supabaseAdmin.auth.admin.deleteUser(customer.auth_id).catch(() => {}); }
     } else if (type === "merchant") {
       // Delete related data first
       const { data: cards } = await supabaseAdmin.from("loyalty_cards").select("id").eq("merchant_id", id);
@@ -200,13 +204,31 @@ export async function DELETE(req: NextRequest) {
       await supabaseAdmin.from("merchant_announcements").delete().eq("merchant_id", id);
       await supabaseAdmin.from("merchant_qr_codes").delete().eq("merchant_id", id);
       await supabaseAdmin.from("store_visits").delete().eq("merchant_id", id);
+      const { data: merchant } = await supabaseAdmin.from("merchants").select("auth_id").eq("id", id).maybeSingle();
       const { error } = await supabaseAdmin.from("merchants").delete().eq("id", id);
       if (error) throw error;
+      if (merchant?.auth_id) { await supabaseAdmin.auth.admin.deleteUser(merchant.auth_id).catch(() => {}); }
     } else if (type === "support_message") {
       const { error } = await supabaseAdmin.from("support_messages").delete().eq("id", id);
       if (error) throw error;
     } else if (type === "dev_broadcast") {
       const { error } = await supabaseAdmin.from("dev_broadcasts").delete().eq("id", id);
+      if (error) throw error;
+    } else if (type === "reward") {
+      const { error } = await supabaseAdmin.from("redeemed_rewards").delete().eq("id", id);
+      if (error) throw error;
+    } else if (type === "transaction") {
+      const { error } = await supabaseAdmin.from("transactions").delete().eq("id", id);
+      if (error) throw error;
+    } else if (type === "announcement") {
+      const { error } = await supabaseAdmin.from("merchant_announcements").delete().eq("id", id);
+      if (error) throw error;
+    } else if (type === "loyalty_card") {
+      // Delete stamps + rewards + transactions for this card first
+      await supabaseAdmin.from("stamps").delete().eq("loyalty_card_id", id);
+      await supabaseAdmin.from("redeemed_rewards").delete().eq("loyalty_card_id", id);
+      await supabaseAdmin.from("transactions").delete().eq("loyalty_card_id", id);
+      const { error } = await supabaseAdmin.from("loyalty_cards").delete().eq("id", id);
       if (error) throw error;
     } else {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });
