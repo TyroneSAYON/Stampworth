@@ -20,7 +20,7 @@ export default function SignInScreen() {
       return;
     }
     setLoading(true);
-    const { error } = await signIn(email.trim(), password);
+    const { error } = await signIn(email.trim(), password, businessName.trim());
     if (error) { setLoading(false); Alert.alert('Sign in failed', error.message); return; }
     const { complete } = await isMerchantSetupComplete();
     setLoading(false);

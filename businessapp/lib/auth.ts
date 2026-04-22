@@ -163,11 +163,11 @@ export const signUp = async (email: string, password: string, fullName: string) 
 };
 
 // Sign in
-export const signIn = async (email: string, password: string) => {
+export const signIn = async (email: string, password: string, inputBusinessName?: string) => {
   const normalizedEmail = email.trim().toLowerCase();
 
   if (SKIP_AUTH_MODE) {
-    await saveMerchantAccountInput({ email: normalizedEmail || 'demo@stampworth.local', businessName: 'Demo Business' });
+    await saveMerchantAccountInput({ email: normalizedEmail || 'demo@stampworth.local', businessName: inputBusinessName || 'Demo Business' });
     return { data: { user: { email: normalizedEmail || 'demo@stampworth.local' } }, error: null } as any;
   }
 
@@ -189,10 +189,24 @@ export const signIn = async (email: string, password: string) => {
 
   if (data.user) {
     const businessName =
+      inputBusinessName ||
       (data.user.user_metadata?.business_name as string | undefined) ||
       (data.user.user_metadata?.full_name as string | undefined) ||
       (data.user.user_metadata?.name as string | undefined);
     await persistMerchantAuthReflection(normalizedEmail, businessName);
+
+    // Validate business name against the registered merchant profile
+    if (inputBusinessName?.trim()) {
+      const { data: merchant } = await supabase
+        .from('merchants')
+        .select('business_name')
+        .eq('owner_email', normalizedEmail)
+        .maybeSingle();
+
+      if (merchant?.business_name && merchant.business_name.toLowerCase() !== inputBusinessName.trim().toLowerCase()) {
+        return { data, error: new Error(`Business name doesn't match. The registered name for this email is "${merchant.business_name}".`) };
+      }
+    }
   }
 
   return { data, error: null };
