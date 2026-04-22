@@ -299,38 +299,42 @@ export default function OptionsScreen() {
         <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Subscription</Text>
 
         {/* Current Plan */}
-        <View style={styles.betaCard}>
+        {(() => {
+          const planColors: Record<string, string> = { beta: '#2F4366', starter: '#2F4366', growth: '#27AE60', scale: '#E67E22' };
+          const pc = planColors[activePlan.id] || '#2F4366';
+          return (
+        <View style={[styles.betaCard, { borderColor: pc, borderWidth: 2 }]}>
           <View style={styles.betaCardHeader}>
-            <View style={styles.betaIconCircle}>
+            <View style={[styles.betaIconCircle, { backgroundColor: pc }]}>
               <Ionicons name={activePlan.id === 'beta' ? 'flask' : activePlan.id === 'starter' ? 'storefront' : activePlan.id === 'growth' ? 'trending-up' : 'flash'} size={20} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={styles.betaCardTitle}>{activePlan.name}</Text>
-                <View style={styles.activeBadge}>
-                  <View style={styles.activeDot} />
-                  <Text style={styles.activeBadgeText}>ACTIVE</Text>
+                <View style={[styles.activeBadge, { backgroundColor: pc + '15' }]}>
+                  <View style={[styles.activeDot, { backgroundColor: pc }]} />
+                  <Text style={[styles.activeBadgeText, { color: pc }]}>ACTIVE</Text>
                 </View>
               </View>
               <Text style={styles.betaCardDesc}>{activePlan.id === 'beta' ? 'All features unlocked during beta' : `₱${activePlan.price}/mo${subExpiry ? ` · Expires ${new Date(subExpiry).toLocaleDateString()}` : ''}`}</Text>
             </View>
-            <Text style={styles.betaFreeLabel}>{activePlan.id === 'beta' ? 'FREE' : `₱${activePlan.price}`}</Text>
+            <Text style={[styles.betaFreeLabel, { color: pc }]}>{activePlan.id === 'beta' ? 'FREE' : `₱${activePlan.price}`}</Text>
           </View>
           <View style={styles.betaDivider} />
           <View style={styles.betaPerks}>
             <View style={styles.betaPerkItem}>
-              <Ionicons name="people" size={15} color="#2F4366" />
+              <Ionicons name="people" size={15} color={pc} />
               <Text style={styles.betaPerkText}>{activePlan.cardHolderLimit === 0 ? 'Unlimited' : `Up to ${activePlan.cardHolderLimit}`} customers</Text>
             </View>
             <View style={styles.betaPerkItem}>
-              <Ionicons name="qr-code" size={15} color="#2F4366" />
+              <Ionicons name="qr-code" size={15} color={pc} />
               <Text style={styles.betaPerkText}>{activePlan.scanLimit === 0 ? 'Unlimited' : `${activePlan.scanLimit}/mo`} QR scans</Text>
             </View>
             <View style={styles.betaPerkItem}>
-              <Ionicons name="megaphone" size={15} color="#2F4366" />
+              <Ionicons name="megaphone" size={15} color={pc} />
               <Text style={styles.betaPerkText}>{activePlan.announcementLimit === 0 ? 'Unlimited' : `${activePlan.announcementLimit}/mo`} announcements</Text>
             </View>
-            {activePlan.analytics && <View style={styles.betaPerkItem}><Ionicons name="analytics" size={15} color="#2F4366" /><Text style={styles.betaPerkText}>Advanced analytics</Text></View>}
+            {activePlan.analytics && <View style={styles.betaPerkItem}><Ionicons name="analytics" size={15} color={pc} /><Text style={styles.betaPerkText}>Advanced analytics</Text></View>}
           </View>
           {/* Unsubscribe / Switch to Beta */}
           {activePlan.id !== 'beta' && (
@@ -346,6 +350,8 @@ export default function OptionsScreen() {
             </TouchableOpacity>
           )}
         </View>
+          );
+        })()}
 
         {/* Plans */}
         <Text style={styles.plansAfterLabel}>Subscription Plans</Text>
@@ -376,10 +382,10 @@ export default function OptionsScreen() {
             <PlanFeature icon="mail-outline" text="Email support" />
           </View>
           <TouchableOpacity
-            style={[styles.planButton, { backgroundColor: '#2F4366' }]}
+            style={[styles.planButton, { backgroundColor: activePlan.id === 'starter' ? '#E0E4EA' : '#2F4366' }]}
             onPress={() => activePlan.id === 'starter' ? Alert.alert('Active', 'You are already on the Starter plan.') : router.push({ pathname: '/payment', params: { planId: 'starter' } })}
           >
-            <Text style={styles.planButtonText}>{activePlan.id === "starter" ? "✓ Current Plan" : "Subscribe"}</Text>
+            <Text style={[styles.planButtonText, activePlan.id === 'starter' && { color: '#2F4366' }]}>{activePlan.id === "starter" ? "✓ Current Plan" : "Subscribe"}</Text>
           </TouchableOpacity>
         </View>
 
@@ -414,10 +420,10 @@ export default function OptionsScreen() {
             <PlanFeature icon="chatbubbles-outline" text="Priority support" color="#27AE60" />
           </View>
           <TouchableOpacity
-            style={[styles.planButton, { backgroundColor: '#27AE60' }]}
+            style={[styles.planButton, { backgroundColor: activePlan.id === 'growth' ? '#D4EDDA' : '#27AE60' }]}
             onPress={() => activePlan.id === 'growth' ? Alert.alert('Active', 'You are already on the Growth plan.') : router.push({ pathname: '/payment', params: { planId: 'growth' } })}
           >
-            <Text style={styles.planButtonText}>{activePlan.id === "growth" ? "✓ Current Plan" : "Subscribe"}</Text>
+            <Text style={[styles.planButtonText, activePlan.id === 'growth' && { color: '#27AE60' }]}>{activePlan.id === "growth" ? "✓ Current Plan" : "Subscribe"}</Text>
           </TouchableOpacity>
         </View>
 
@@ -450,10 +456,10 @@ export default function OptionsScreen() {
             <PlanFeature icon="headset-outline" text="Dedicated account manager" color="#E67E22" />
           </View>
           <TouchableOpacity
-            style={[styles.planButton, { backgroundColor: '#E67E22' }]}
+            style={[styles.planButton, { backgroundColor: activePlan.id === 'scale' ? '#FDEBD0' : '#E67E22' }]}
             onPress={() => activePlan.id === 'scale' ? Alert.alert('Active', 'You are already on the Scale plan.') : router.push({ pathname: '/payment', params: { planId: 'scale' } })}
           >
-            <Text style={styles.planButtonText}>{activePlan.id === "scale" ? "✓ Current Plan" : "Subscribe"}</Text>
+            <Text style={[styles.planButtonText, activePlan.id === 'scale' && { color: '#E67E22' }]}>{activePlan.id === "scale" ? "✓ Current Plan" : "Subscribe"}</Text>
           </TouchableOpacity>
         </View>
 
