@@ -8,8 +8,11 @@ import { Colors } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
 import { getMerchantDashboardSnapshot, resetLoyaltyProgram, sendSupportMessage } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
+import { getActivePlan, getSubscription, cancelSubscription, PLANS, type PlanId, type Plan } from '@/lib/subscription';
 
 export default function OptionsScreen() {
+  const [activePlan, setActivePlan] = useState<Plan>(PLANS.beta);
+  const [subExpiry, setSubExpiry] = useState<string | null>(null);
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? 'light'];
 
@@ -28,7 +31,10 @@ export default function OptionsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (loadedOnce) return; // Don't re-fetch on every focus
+      // Refresh subscription on every focus
+      getActivePlan().then(setActivePlan);
+      getSubscription().then((sub) => setSubExpiry(sub?.expiresAt || null));
+      if (loadedOnce) return; // Don't re-fetch dashboard on every focus
       let cancelled = false;
 
       const loadDashboard = async () => {
@@ -59,6 +65,9 @@ export default function OptionsScreen() {
         setRewardsRedeemed(data.stats.rewardsRedeemed);
         setLoading(false);
         setLoadedOnce(true);
+        // Load subscription
+        getActivePlan().then(setActivePlan);
+        getSubscription().then((sub) => setSubExpiry(sub?.expiresAt || null));
       };
 
       loadDashboard();
@@ -289,21 +298,21 @@ export default function OptionsScreen() {
         {/* Subscription Plans */}
         <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Subscription</Text>
 
-        {/* Current Beta Plan */}
+        {/* Current Plan */}
         <View style={styles.betaCard}>
           <View style={styles.betaCardHeader}>
             <View style={styles.betaIconCircle}>
-              <Ionicons name="flask" size={20} color="#FFFFFF" />
+              <Ionicons name={activePlan.id === 'beta' ? 'flask' : activePlan.id === 'starter' ? 'storefront' : activePlan.id === 'growth' ? 'trending-up' : 'flash'} size={20} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={styles.betaCardTitle}>Beta Tester</Text>
+                <Text style={styles.betaCardTitle}>{activePlan.name}</Text>
                 <View style={styles.activeBadge}>
                   <View style={styles.activeDot} />
                   <Text style={styles.activeBadgeText}>ACTIVE</Text>
                 </View>
               </View>
-              <Text style={styles.betaCardDesc}>All features unlocked during beta</Text>
+              <Text style={styles.betaCardDesc}>{activePlan.id === 'beta' ? 'All features unlocked during beta' : `₱${activePlan.price}/mo${subExpiry ? ` · Expires ${new Date(subExpiry).toLocaleDateString()}` : ''}`}</Text>
             </View>
             <Text style={styles.betaFreeLabel}>FREE</Text>
           </View>
@@ -357,9 +366,9 @@ export default function OptionsScreen() {
           </View>
           <TouchableOpacity
             style={[styles.planButton, { backgroundColor: '#2F4366' }]}
-            onPress={() => Alert.alert('Coming Soon', 'Starter plan will be available once the beta period ends. You\'ll keep all your data!')}
+            onPress={() => activePlan.id === 'starter' ? Alert.alert('Active', 'You are already on the Starter plan.') : router.push({ pathname: '/payment', params: { planId: 'starter' } })}
           >
-            <Text style={styles.planButtonText}>Coming Soon</Text>
+            <Text style={styles.planButtonText}>Subscribe</Text>
           </TouchableOpacity>
         </View>
 
@@ -395,9 +404,9 @@ export default function OptionsScreen() {
           </View>
           <TouchableOpacity
             style={[styles.planButton, { backgroundColor: '#27AE60' }]}
-            onPress={() => Alert.alert('Coming Soon', 'Growth plan will be available once the beta period ends. You\'ll keep all your data!')}
+            onPress={() => activePlan.id === 'growth' ? Alert.alert('Active', 'You are already on the Growth plan.') : router.push({ pathname: '/payment', params: { planId: 'growth' } })}
           >
-            <Text style={styles.planButtonText}>Coming Soon</Text>
+            <Text style={styles.planButtonText}>Subscribe</Text>
           </TouchableOpacity>
         </View>
 
@@ -430,9 +439,9 @@ export default function OptionsScreen() {
           </View>
           <TouchableOpacity
             style={[styles.planButton, { backgroundColor: '#E67E22' }]}
-            onPress={() => Alert.alert('Coming Soon', 'Scale plan will be available once the beta period ends. You\'ll keep all your data!')}
+            onPress={() => activePlan.id === 'scale' ? Alert.alert('Active', 'You are already on the Scale plan.') : router.push({ pathname: '/payment', params: { planId: 'scale' } })}
           >
-            <Text style={styles.planButtonText}>Coming Soon</Text>
+            <Text style={styles.planButtonText}>Subscribe</Text>
           </TouchableOpacity>
         </View>
 
