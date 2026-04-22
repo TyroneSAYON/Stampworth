@@ -316,7 +316,7 @@ export default function DashboardPage() {
     customers: newSince("customers", customers),
     merchants: newSince("merchants", merchants),
     rewards: newSince("rewards", rewards.filter((r) => !r.is_used)),
-    subscriptions: merchants.filter((m) => m.subscription_plan && m.subscription_plan !== 'beta').length,
+    subscriptions: newSince("subscriptions", merchants.filter((m) => m.subscription_plan && m.subscription_plan !== 'beta')),
   };
 
   const badgeColors: Record<Tab, string> = {
@@ -355,54 +355,55 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       {/* Mobile header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-zinc-950 border-b border-zinc-800 flex items-center px-4 z-30">
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800">
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center px-4 z-30">
+        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:text-white dark:hover:bg-zinc-800">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
         <div className="flex items-center gap-2.5 ml-3">
           <Image src="/logo.png" alt="Stampworth" width={24} height={24} />
-          <span className="text-sm font-semibold text-white">Stampworth</span>
+          <span className="text-sm font-semibold text-[#2F4366]">Stampworth</span>
         </div>
       </div>
 
-      {sidebarOpen && <div className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-30" onClick={() => setSidebarOpen(false)} />}
+      {sidebarOpen && <div className="lg:hidden fixed inset-0 bg-black/40 z-30" onClick={() => setSidebarOpen(false)} />}
 
-      {/* Sidebar */}
-      <aside className={cn("fixed left-0 top-0 bottom-0 w-[220px] bg-zinc-950 border-r border-zinc-800 flex flex-col z-40 transition-transform duration-200", sidebarOpen ? "translate-x-0" : "-translate-x-full", "lg:translate-x-0")}>
-        <div className="h-14 px-4 flex items-center gap-3 border-b border-zinc-800">
-          <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center">
-            <Image src="/logo.png" alt="S" width={18} height={18} />
-          </div>
+      {/* Sidebar — white with Stampworth brand */}
+      <aside className={cn("fixed left-0 top-0 bottom-0 w-[240px] bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 flex flex-col z-40 transition-transform duration-200", sidebarOpen ? "translate-x-0" : "-translate-x-full", "lg:translate-x-0")}>
+        {/* Logo */}
+        <div className="h-14 px-5 flex items-center gap-3 border-b border-zinc-100 dark:border-zinc-800">
+          <Image src="/logo.png" alt="Stampworth" width={30} height={30} />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-zinc-100 leading-none">Stampworth</p>
-            <p className="text-[10px] text-zinc-500 mt-0.5">Admin Dashboard</p>
+            <p className="text-[14px] font-bold text-[#2F4366] dark:text-white leading-none">Stampworth</p>
+            <p className="text-[10px] text-zinc-400 mt-0.5">Admin Dashboard</p>
           </div>
-          <button onClick={() => setSidebarOpen(false)} className="lg:hidden h-7 w-7 rounded-md text-zinc-500 hover:text-white hover:bg-zinc-800 inline-flex items-center justify-center">
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden h-7 w-7 rounded-lg text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 inline-flex items-center justify-center">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-        <nav className="flex-1 px-2 py-3 overflow-y-auto">
+
+        {/* Nav */}
+        <nav className="flex-1 px-3 py-4 overflow-y-auto">
           {navSections.map((section) => (
-            <div key={section.label} className="mb-4">
-              <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">{section.label}</p>
-              <div className="space-y-px">
+            <div key={section.label} className="mb-5">
+              <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{section.label}</p>
+              <div className="space-y-0.5">
               {section.items.map((key) => {
                 const count = badgeCounts[key];
                 const color = badgeColors[key];
                 const isActive = tab === key;
                 return (
                   <button key={key} onClick={() => switchTab(key)} className={cn(
-                    "w-full text-left px-3 py-[7px] rounded-md text-[13px] font-medium transition-colors flex items-center gap-2.5",
+                    "w-full text-left px-3 py-2 rounded-lg text-[13px] font-medium transition-all flex items-center gap-3",
                     isActive
-                      ? "bg-zinc-800 text-zinc-100"
-                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
+                      ? "bg-[#2F4366] text-white shadow-sm"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
                   )}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn("shrink-0", isActive ? "text-indigo-400" : "text-zinc-500")}><path d={navIcons[key]}/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d={navIcons[key]}/></svg>
                     <span className="flex-1">{tabLabels[key]}</span>
                     {count > 0 && (
                       <span className={cn(
-                        "min-w-[18px] h-[18px] px-1 rounded-md text-[9px] font-semibold flex items-center justify-center",
-                        isActive ? "bg-zinc-700 text-zinc-300" : `${color} text-white`
+                        "min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold flex items-center justify-center",
+                        isActive ? "bg-white/20 text-white" : `${color} text-white`
                       )}>
                         {count > 99 ? "99+" : count}
                       </span>
@@ -414,16 +415,18 @@ export default function DashboardPage() {
             </div>
           ))}
         </nav>
-        <div className="px-2 py-2 border-t border-zinc-800 space-y-px">
-          <button onClick={toggle} className="w-full text-left px-3 py-[7px] rounded-md text-[12px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 flex items-center gap-2.5 transition-colors">
+
+        {/* Footer */}
+        <div className="px-3 py-3 border-t border-zinc-100 dark:border-zinc-800 space-y-0.5">
+          <button onClick={toggle} className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-3 transition-colors">
             {theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
             {theme === "light" ? "Dark mode" : "Light mode"}
           </button>
-          <button onClick={() => load()} className="w-full text-left px-3 py-[7px] rounded-md text-[12px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 flex items-center gap-2.5 transition-colors">
+          <button onClick={() => load()} className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-3 transition-colors">
             <RefreshCw size={14} />
-            Refresh
+            Refresh data
           </button>
-          <button onClick={() => { localStorage.removeItem("stampworth_admin"); router.push("/"); }} className="w-full text-left px-3 py-[7px] rounded-md text-[12px] text-zinc-500 hover:text-red-400 hover:bg-zinc-800/50 flex items-center gap-2.5 transition-colors">
+          <button onClick={() => { localStorage.removeItem("stampworth_admin"); router.push("/"); }} className="w-full text-left px-3 py-2 rounded-lg text-[12px] text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-3 transition-colors">
             <LogOut size={14} />
             Sign out
           </button>
@@ -431,9 +434,9 @@ export default function DashboardPage() {
       </aside>
 
       {/* Main */}
-      <div className="lg:ml-[220px] pt-14 lg:pt-0 min-h-screen">
+      <div className="lg:ml-[240px] pt-14 lg:pt-0 min-h-screen">
         {/* Top header bar */}
-        <header className="sticky top-0 z-20 h-14 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between px-6">
+        <header className="sticky top-0 z-20 h-14 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between px-6">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-zinc-400 dark:text-zinc-500">Admin</span>
             <ChevronRight size={14} className="text-zinc-300 dark:text-zinc-600" />
