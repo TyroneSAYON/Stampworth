@@ -353,79 +353,110 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-950">
-      {/* Mobile header — always dark */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-12 bg-slate-900 border-b border-slate-700 flex items-center px-4 z-30">
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-800">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        </button>
-        <div className="flex items-center gap-2 ml-3">
-          <Image src="/logo.png" alt="Stampworth" width={22} height={22} />
-          <p className="text-[12px] font-semibold text-slate-200">Stampworth</p>
+    <div className="min-h-screen bg-[var(--background)]">
+      {/* Mobile header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-[var(--sidebar)] border-b border-[var(--sidebar-border)] flex items-center px-4 z-30">
+        <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-400 hover:text-white hover:bg-white/10">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </Button>
+        <div className="flex items-center gap-2.5 ml-3">
+          <Image src="/logo.png" alt="Stampworth" width={24} height={24} />
+          <span className="text-[13px] font-semibold text-white">Stampworth</span>
         </div>
       </div>
 
-      {sidebarOpen && <div className="lg:hidden fixed inset-0 bg-black/40 z-30" onClick={() => setSidebarOpen(false)} />}
+      {sidebarOpen && <div className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-30" onClick={() => setSidebarOpen(false)} />}
 
-      {/* Sidebar — always dark */}
-      <aside className={`fixed left-0 top-0 bottom-0 w-56 bg-slate-900 flex flex-col z-40 transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}>
-        <div className="px-4 py-4 flex items-center gap-2.5 border-b border-slate-700/50">
-          <Image src="/logo.png" alt="Stampworth" width={26} height={26} />
-          <div><p className="text-[13px] font-bold text-white leading-tight">Stampworth</p><p className="text-[9px] text-slate-500 uppercase tracking-wider">Admin Panel</p></div>
-          <button onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto w-7 h-7 flex items-center justify-center rounded hover:bg-slate-800"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      {/* Sidebar */}
+      <aside className={`fixed left-0 top-0 bottom-0 w-[240px] bg-[var(--sidebar)] flex flex-col z-40 transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0`}>
+        <div className="h-14 px-5 flex items-center gap-3 border-b border-[var(--sidebar-border)]">
+          <Image src="/logo.png" alt="Stampworth" width={28} height={28} />
+          <div>
+            <p className="text-[13px] font-semibold text-white leading-tight">Stampworth</p>
+            <p className="text-[9px] text-[var(--sidebar-foreground)] opacity-50 uppercase tracking-[0.15em]">Admin</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(false)} className="lg:hidden ml-auto text-gray-500 hover:text-white hover:bg-white/10 h-7 w-7">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </Button>
         </div>
-        <nav className="flex-1 px-2 py-3 overflow-y-auto">
+        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-6">
           {navSections.map((section) => (
-            <div key={section.label} className="mb-3">
-              <p className="px-3 mb-1 text-[9px] font-semibold uppercase tracking-widest text-slate-600">{section.label}</p>
+            <div key={section.label}>
+              <p className="px-3 mb-2 text-[10px] font-medium uppercase tracking-[0.1em] text-[var(--sidebar-foreground)] opacity-40">{section.label}</p>
+              <div className="space-y-0.5">
               {section.items.map((key) => {
                 const count = badgeCounts[key];
                 const color = badgeColors[key];
+                const isActive = tab === key;
                 return (
-                  <button key={key} onClick={() => switchTab(key)} className={`w-full text-left px-3 py-2 rounded text-[12px] font-medium mb-px transition-colors flex items-center gap-2.5 ${tab === key ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"}`}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-75"><path d={navIcons[key]}/></svg>
+                  <button key={key} onClick={() => switchTab(key)} className={cn(
+                    "w-full text-left px-3 py-2 rounded-md text-[13px] font-medium transition-all flex items-center gap-3",
+                    isActive
+                      ? "bg-[var(--sidebar-accent)] text-white shadow-sm shadow-indigo-500/20"
+                      : "text-[var(--sidebar-foreground)] hover:text-white hover:bg-white/[0.06]"
+                  )}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={cn("shrink-0", isActive ? "opacity-100" : "opacity-50")}><path d={navIcons[key]}/></svg>
                     <span className="flex-1">{tabLabels[key]}</span>
                     {count > 0 && (
-                      <span className={`min-w-[18px] h-[18px] px-1 rounded text-[9px] font-bold text-white flex items-center justify-center ${tab === key ? "bg-white/20" : color}`}>
+                      <span className={cn(
+                        "min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-semibold flex items-center justify-center",
+                        isActive ? "bg-white/20 text-white" : `${color} text-white`
+                      )}>
                         {count > 99 ? "99+" : count}
                       </span>
                     )}
                   </button>
                 );
               })}
+              </div>
             </div>
           ))}
         </nav>
-        <div className="px-2 py-3 border-t border-slate-700/50 space-y-px">
-          <button onClick={toggle} className="w-full text-left px-3 py-1.5 rounded text-[11px] text-slate-500 hover:text-slate-300 hover:bg-slate-800/60 flex items-center gap-2">
-            {theme === "light" ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/></svg>}
-            {theme === "light" ? "Dark Mode" : "Light Mode"}
+        <div className="px-3 py-3 border-t border-[var(--sidebar-border)] space-y-0.5">
+          <button onClick={toggle} className="w-full text-left px-3 py-2 rounded-md text-[12px] text-[var(--sidebar-foreground)] opacity-60 hover:opacity-100 hover:bg-white/[0.06] flex items-center gap-3 transition-all">
+            {theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
+            {theme === "light" ? "Dark mode" : "Light mode"}
           </button>
-          <button onClick={() => load()} className="w-full text-left px-3 py-1.5 rounded text-[11px] text-slate-500 hover:text-slate-300 hover:bg-slate-800/60">Refresh</button>
-          <button onClick={() => { localStorage.removeItem("stampworth_admin"); router.push("/"); }} className="w-full text-left px-3 py-1.5 rounded text-[11px] text-slate-500 hover:text-red-400 hover:bg-slate-800/60">Sign Out</button>
+          <button onClick={() => load()} className="w-full text-left px-3 py-2 rounded-md text-[12px] text-[var(--sidebar-foreground)] opacity-60 hover:opacity-100 hover:bg-white/[0.06] flex items-center gap-3 transition-all">
+            <RefreshCw size={14} />
+            Refresh
+          </button>
+          <button onClick={() => { localStorage.removeItem("stampworth_admin"); router.push("/"); }} className="w-full text-left px-3 py-2 rounded-md text-[12px] text-[var(--sidebar-foreground)] opacity-60 hover:opacity-100 hover:text-red-400 hover:bg-white/[0.06] flex items-center gap-3 transition-all">
+            <LogOut size={14} />
+            Sign out
+          </button>
         </div>
       </aside>
 
       {/* Main */}
-      <div className="lg:ml-56 pt-12 lg:pt-0">
+      <div className="lg:ml-[240px] pt-14 lg:pt-0">
         {/* Top header bar */}
-        <header className="sticky top-0 z-20 h-11 bg-white/90 dark:bg-gray-900/90 backdrop-blur border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-5">
-          <div className="flex items-center gap-1.5 text-[11px]">
-            <span className="text-gray-400 dark:text-gray-500">Admin</span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-300 dark:text-gray-600"><path d="M9 18l6-6-6-6"/></svg>
-            <span className="text-gray-700 dark:text-gray-200 font-semibold">{tabLabels[tab]}</span>
+        <header className="sticky top-0 z-20 h-14 bg-[var(--background)]/80 backdrop-blur-md border-b border-[var(--border)] flex items-center justify-between px-6">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-[var(--muted-foreground)]">Admin</span>
+            <ChevronRight size={14} className="text-[var(--muted-foreground)] opacity-40" />
+            <span className="font-semibold text-[var(--foreground)]">{tabLabels[tab]}</span>
           </div>
-          <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500">
-            {stats && <><span className="hidden sm:inline font-mono">{stats.totalCustomers} users</span><span className="hidden sm:inline">·</span><span className="hidden sm:inline font-mono">{stats.totalMerchants} stores</span></>}
-            {lastUpdate && <span className="hidden md:inline font-mono text-gray-300 dark:text-gray-600">{lastUpdate}</span>}
-            <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full transition-colors duration-500 ${realtimeFlash ? "bg-green-100 dark:bg-green-900/30" : ""}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${realtimeFlash ? "bg-green-400 scale-125" : "bg-green-500"} animate-pulse transition-transform`} />
+          <div className="flex items-center gap-4">
+            {stats && (
+              <div className="hidden sm:flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
+                <span className="font-mono tabular-nums">{stats.totalCustomers} users</span>
+                <span className="opacity-30">|</span>
+                <span className="font-mono tabular-nums">{stats.totalMerchants} stores</span>
+              </div>
+            )}
+            {lastUpdate && <span className="hidden md:inline text-[10px] font-mono text-[var(--muted-foreground)] opacity-50">{lastUpdate}</span>}
+            <div className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all duration-500",
+              realtimeFlash ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "text-[var(--muted-foreground)]"
+            )}>
+              <span className={cn("w-2 h-2 rounded-full animate-pulse", realtimeFlash ? "bg-emerald-500" : "bg-emerald-500")} />
               <span className="hidden sm:inline">{realtimeFlash ? "Updated" : "Live"}</span>
-            </span>
+            </div>
           </div>
         </header>
 
-        <main className="p-4 sm:p-6">
+        <main className="p-6 lg:p-8">
         {loading ? (
           <div className="flex items-center justify-center h-64"><p className="text-gray-400 text-sm">Loading...</p></div>
         ) : (
