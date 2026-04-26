@@ -1340,9 +1340,31 @@ export const saveMerchantLocation = async (latitude: number, longitude: number) 
   return { data, error };
 };
 
-// Get all customers who have recent location data (active Stampworth users)
-export const getNearbyCustomersWithLocation = async (_merchantId: string) => {
-  // Get recent locations (last 2 hours) to show active users
+// Haversine distance in meters
+const distMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const MAX_VISIBLE_RADIUS = 2000; // 2km — only show customers within this range
+
+// Get customers with recent location data who are near this merchant's store
+export const getNearbyCustomersWithLocation = async (merchantId: string) => {
+  // Get merchant's store location
+  const { data: merchant } = await supabase
+    .from('merchants')
+    .select('latitude, longitude')
+    .eq('id', merchantId)
+    .maybeSingle();
+
+  const storeLat = merchant?.latitude;
+  const storeLng = merchant?.longitude;
+
+  // Get recent locations (last 2 hours)
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
   const { data: locations } = await supabase
@@ -1357,13 +1379,19 @@ export const getNearbyCustomersWithLocation = async (_merchantId: string) => {
   const locationMap = new Map<string, { latitude: number; longitude: number; updatedAt: string }>();
   for (const loc of locations) {
     if (!locationMap.has(loc.customer_id)) {
+      // Privacy: only include customers within max radius of the store
+      if (storeLat && storeLng) {
+        const dist = distMeters(storeLat, storeLng, loc.latitude, loc.longitude);
+        if (dist > MAX_VISIBLE_RADIUS) continue; // outside geofence — don't show
+      }
       locationMap.set(loc.customer_id, { latitude: loc.latitude, longitude: loc.longitude, updatedAt: loc.created_at });
     }
   }
 
+  if (locationMap.size === 0) return { data: [], error: null };
+
   const customerIds = [...locationMap.keys()];
 
-  // Get customer details
   const { data: customers } = await supabase
     .from('customers')
     .select('id, full_name, username, email')
