@@ -131,7 +131,7 @@ export default function AccountScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <View style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         {/* Header */}
@@ -204,7 +204,7 @@ export default function AccountScreen() {
 
       {/* Contact Support Modal */}
       <Modal visible={contactOpen} transparent animationType="slide" onRequestClose={() => setContactOpen(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <Pressable style={styles.contactOverlay} onPress={() => setContactOpen(false)}>
             <Pressable style={styles.contactCard} onPress={() => {}}>
               <View style={styles.contactHeader}>

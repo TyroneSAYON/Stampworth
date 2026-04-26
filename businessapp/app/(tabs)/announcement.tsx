@@ -105,7 +105,7 @@ export default function AnnouncementScreen() {
   const unreadCount = notifications.filter((n) => !isNotifRead(n)).length;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <ThemedView style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
       {/* Header */}
       <View style={styles.header}>

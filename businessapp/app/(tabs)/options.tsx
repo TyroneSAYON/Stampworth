@@ -489,7 +489,7 @@ export default function OptionsScreen() {
 
       {/* Contact Support Modal */}
       <Modal visible={contactOpen} transparent animationType="slide" onRequestClose={() => setContactOpen(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
           <Pressable style={styles.contactOverlay} onPress={() => setContactOpen(false)}>
             <Pressable style={styles.contactCard} onPress={() => {}}>
               <View style={styles.contactHeader}>

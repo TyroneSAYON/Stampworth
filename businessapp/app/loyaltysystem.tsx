@@ -195,7 +195,7 @@ export default function LoyaltySystemScreen() {
   }));
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
       {loading ? (
         <View style={styles.loadingState}>

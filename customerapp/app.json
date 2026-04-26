@@ -25,6 +25,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "pan",
       "package": "com.anonymous.stampworth",
       "permissions": [
         "ACCESS_FINE_LOCATION",
