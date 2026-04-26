@@ -4,17 +4,17 @@ export default function Home() {
   return (
     <>
       {/* Nav */}
-      <nav className="fixed inset-x-0 top-0 z-50 bg-white/90 backdrop-blur-md border-b border-zinc-100">
+      <nav className="fixed inset-x-0 top-0 z-50 bg-[#2F4366]/90 backdrop-blur-md border-b border-white/10">
         <div className="max-w-6xl mx-auto flex items-center justify-between h-16 px-6">
           <div className="flex items-center gap-2.5">
             <Image src="/images/logo.png" alt="Stampworth" width={32} height={32} />
-            <span className="text-lg font-bold text-[#2F4366]">Stampworth</span>
+            <span className="text-lg font-bold text-white">Stampworth</span>
           </div>
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-[#8A94A6]">
-            <a href="#features" className="hover:text-[#2F4366] transition">Features</a>
-            <a href="#customers" className="hover:text-[#2F4366] transition">For Customers</a>
-            <a href="#business" className="hover:text-[#2F4366] transition">For Business</a>
-            <a href="#pricing" className="hover:text-[#2F4366] transition">Pricing</a>
+          <div className="hidden md:flex items-center gap-8 text-sm font-medium text-white/60">
+            <a href="#features" className="hover:text-white transition">Features</a>
+            <a href="#customers" className="hover:text-white transition">For Customers</a>
+            <a href="#business" className="hover:text-white transition">For Business</a>
+            <a href="#pricing" className="hover:text-white transition">Pricing</a>
           </div>
           <a href="#download" className="bg-[#2F4366] text-white text-sm font-semibold px-5 py-2.5 rounded-xl hover:bg-[#243552] transition">
             Get Started
@@ -24,23 +24,23 @@ export default function Home() {
 
       <main>
         {/* Hero */}
-        <section className="pt-32 pb-20 px-6 bg-gradient-to-b from-blue-50/60 to-white">
+        <section className="pt-32 pb-20 px-6 ">
           <div className="max-w-6xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 bg-white border border-zinc-200 rounded-full px-4 py-1.5 text-sm font-medium text-[#8A94A6] mb-8 shadow-sm">
+            <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 text-sm font-medium text-white/70 mb-8">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
               Beta Testing — Android Only
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-[#1A1A2E] leading-tight max-w-3xl mx-auto">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight max-w-3xl mx-auto">
               Your Virtual <span className="text-[#2F4366]">Loyalty Card</span>
             </h1>
-            <p className="text-lg sm:text-xl text-[#8A94A6] mt-6 max-w-2xl mx-auto leading-relaxed">
+            <p className="text-lg sm:text-xl text-white/60 mt-6 max-w-2xl mx-auto leading-relaxed">
               Replace paper stamp cards with a simple QR code on your phone. Customers earn rewards digitally, businesses grow repeat visits. Made for Filipino SMEs.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-10">
-              <a href="#download" className="bg-[#2F4366] text-white text-base font-semibold px-8 py-3.5 rounded-2xl hover:bg-[#243552] transition shadow-lg shadow-[#2F4366]/20">
+              <a href="#download" className="bg-white text-[#2F4366] text-base font-semibold px-8 py-3.5 rounded-2xl hover:bg-zinc-100 transition shadow-lg">
                 Download APK
               </a>
-              <a href="#business" className="bg-white text-[#2F4366] text-base font-semibold px-8 py-3.5 rounded-2xl border border-zinc-200 hover:bg-zinc-50 transition">
+              <a href="#business" className="text-white/80 text-base font-semibold px-8 py-3.5 rounded-2xl border border-white/20 hover:bg-white/10 transition">
                 For Business Owners
               </a>
             </div>
@@ -48,12 +48,12 @@ export default function Home() {
         </section>
 
         {/* How it works */}
-        <section id="features" className="py-24 px-6 bg-white">
+        <section id="features" className="py-24 px-6">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
-              <p className="text-sm font-semibold text-[#2F4366] uppercase tracking-wider mb-3">How it works</p>
-              <h2 className="text-3xl sm:text-4xl font-bold text-[#1A1A2E]">Simple. Fast. Rewarding.</h2>
-              <p className="text-[#8A94A6] mt-4 max-w-xl mx-auto">Three steps to replace paper loyalty cards forever</p>
+              <p className="text-sm font-semibold text-white/40 uppercase tracking-wider mb-3">How it works</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">Simple. Fast. Rewarding.</h2>
+              <p className="text-white/60 mt-4 max-w-xl mx-auto">Three steps to replace paper loyalty cards forever</p>
             </div>
             <div className="grid md:grid-cols-3 gap-8">
               {[
@@ -61,10 +61,10 @@ export default function Home() {
                 { step: "2", title: "Earn Stamps", desc: "Each visit earns a digital stamp. Track progress in real-time from your phone." },
                 { step: "3", title: "Claim Rewards", desc: "When the card is full, the customer gets a free reward. Automatically." },
               ].map((item) => (
-                <div key={item.step} className="bg-zinc-50 rounded-2xl p-8 text-center border border-zinc-100">
-                  <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-[#2F4366] text-white text-sm font-bold mb-4">{item.step}</div>
-                  <h3 className="text-lg font-bold text-[#1A1A2E] mb-2">{item.title}</h3>
-                  <p className="text-[#8A94A6] text-sm leading-relaxed">{item.desc}</p>
+                <div key={item.step} className="bg-white/10 rounded-2xl p-8 text-center border border-white/10">
+                  <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-white text-[#2F4366] text-sm font-bold mb-4">{item.step}</div>
+                  <h3 className="text-lg font-bold text-white mb-2">{item.title}</h3>
+                  <p className="text-white/60 text-sm leading-relaxed">{item.desc}</p>
                 </div>
               ))}
             </div>
@@ -72,12 +72,12 @@ export default function Home() {
         </section>
 
         {/* For Customers */}
-        <section id="customers" className="py-24 px-6 bg-gradient-to-b from-zinc-50 to-white">
+        <section id="customers" className="py-24 px-6 ">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
-              <p className="text-sm font-semibold text-emerald-600 uppercase tracking-wider mb-3">For Customers</p>
-              <h2 className="text-3xl sm:text-4xl font-bold text-[#1A1A2E]">All your loyalty cards in one app</h2>
-              <p className="text-[#8A94A6] mt-4 max-w-xl mx-auto">No more lost paper cards. Earn stamps and track rewards from your phone.</p>
+              <p className="text-sm font-semibold text-emerald-400 uppercase tracking-wider mb-3">For Customers</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">All your loyalty cards in one app</h2>
+              <p className="text-white/60 mt-4 max-w-xl mx-auto">No more lost paper cards. Earn stamps and track rewards from your phone.</p>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[
@@ -88,13 +88,13 @@ export default function Home() {
                 { img: "/images/notification.png", title: "Stay Updated", desc: "Receive announcements from your favourite stores" },
                 { img: "/images/view.png", title: "Track Rewards", desc: "See your stamp progress and claim free rewards" },
               ].map((item) => (
-                <div key={item.title} className="bg-white rounded-2xl border border-zinc-200 overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="bg-zinc-100">
+                <div key={item.title} className="bg-white/10 rounded-2xl border border-white/10 overflow-hidden hover:bg-white/15 transition-colors">
+                  <div className="">
                     <Image src={item.img} alt={item.title} width={300} height={600} className="w-full" />
                   </div>
                   <div className="p-5">
-                    <h3 className="font-bold text-[#1A1A2E]">{item.title}</h3>
-                    <p className="text-sm text-[#8A94A6] mt-1">{item.desc}</p>
+                    <h3 className="font-bold text-white">{item.title}</h3>
+                    <p className="text-sm text-white/50 mt-1">{item.desc}</p>
                   </div>
                 </div>
               ))}
@@ -103,12 +103,12 @@ export default function Home() {
         </section>
 
         {/* For Business */}
-        <section id="business" className="py-24 px-6 bg-white">
+        <section id="business" className="py-24 px-6">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
-              <p className="text-sm font-semibold text-[#2F4366] uppercase tracking-wider mb-3">For Business Owners</p>
-              <h2 className="text-3xl sm:text-4xl font-bold text-[#1A1A2E]">Launch your loyalty program in 5 minutes</h2>
-              <p className="text-[#8A94A6] mt-4 max-w-xl mx-auto">No hardware needed. Just your phone and the Stampworth Business app.</p>
+              <p className="text-sm font-semibold text-white/40 uppercase tracking-wider mb-3">For Business Owners</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">Launch your loyalty program in 5 minutes</h2>
+              <p className="text-white/60 mt-4 max-w-xl mx-auto">No hardware needed. Just your phone and the Stampworth Business app.</p>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[
@@ -116,13 +116,13 @@ export default function Home() {
                 { img: "/images/track_customer.png", title: "Track Customers", desc: "See nearby customers on a live map with geofencing" },
                 { img: "/images/broadcast.png", title: "Broadcast Messages", desc: "Send announcements to all your loyalty card holders" },
               ].map((item) => (
-                <div key={item.title} className="bg-white rounded-2xl border border-zinc-200 overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="bg-zinc-100">
+                <div key={item.title} className="bg-white/10 rounded-2xl border border-white/10 overflow-hidden hover:bg-white/15 transition-colors">
+                  <div className="">
                     <Image src={item.img} alt={item.title} width={300} height={600} className="w-full" />
                   </div>
                   <div className="p-5">
-                    <h3 className="font-bold text-[#1A1A2E]">{item.title}</h3>
-                    <p className="text-sm text-[#8A94A6] mt-1">{item.desc}</p>
+                    <h3 className="font-bold text-white">{item.title}</h3>
+                    <p className="text-sm text-white/50 mt-1">{item.desc}</p>
                   </div>
                 </div>
               ))}
@@ -148,12 +148,12 @@ export default function Home() {
         </section>
 
         {/* Pricing */}
-        <section id="pricing" className="py-24 px-6 bg-zinc-50">
+        <section id="pricing" className="py-24 px-6 bg-white/5">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
-              <p className="text-sm font-semibold text-[#2F4366] uppercase tracking-wider mb-3">Pricing</p>
-              <h2 className="text-3xl sm:text-4xl font-bold text-[#1A1A2E]">Plans made for Filipino SMEs</h2>
-              <p className="text-[#8A94A6] mt-4">Free during beta. Affordable plans after.</p>
+              <p className="text-sm font-semibold text-white/40 uppercase tracking-wider mb-3">Pricing</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">Plans made for Filipino SMEs</h2>
+              <p className="text-white/60 mt-4">Free during beta. Affordable plans after.</p>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
@@ -162,16 +162,16 @@ export default function Home() {
                 { name: "Growth", price: "₱349", period: "/month", color: "#27AE60", current: false, features: ["1,000 card holders", "Unlimited scans", "Custom card design", "Priority support"] },
                 { name: "Scale", price: "₱799", period: "/month", color: "#E67E22", current: false, features: ["Unlimited everything", "Multi-branch", "API access", "Dedicated manager"] },
               ].map((plan) => (
-                <div key={plan.name} className={`bg-white rounded-2xl p-6 border-2 ${plan.current ? "border-[#8B5CF6] shadow-lg shadow-purple-100" : "border-zinc-200"} relative`}>
+                <div key={plan.name} className={`bg-white/10 rounded-2xl p-6 border-2 ${plan.current ? "border-[#8B5CF6] shadow-lg shadow-purple-500/20" : "border-zinc-200"} relative`}>
                   {plan.current && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#8B5CF6] text-white text-xs font-bold px-4 py-1 rounded-full">CURRENT</div>}
                   <h3 className="text-lg font-bold" style={{ color: plan.color }}>{plan.name}</h3>
                   <div className="flex items-baseline gap-1 mt-2">
-                    <span className="text-3xl font-extrabold text-[#1A1A2E]">{plan.price}</span>
-                    <span className="text-sm text-[#8A94A6]">{plan.period}</span>
+                    <span className="text-3xl font-extrabold text-white">{plan.price}</span>
+                    <span className="text-sm text-white/50">{plan.period}</span>
                   </div>
                   <ul className="mt-6 space-y-3">
                     {plan.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-[#4A5A7A]">
+                      <li key={f} className="flex items-start gap-2 text-sm text-white/60">
                         <svg className="w-4 h-4 mt-0.5 shrink-0" style={{ color: plan.color }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                         {f}
                       </li>
@@ -196,12 +196,12 @@ export default function Home() {
                 { label: "Stampworth Business", sub: "For store owners", logo: "/images/logo-business.png" },
               ].map((app) => (
                 <div key={app.label} className="bg-white rounded-2xl p-6 w-52">
-                  <div className="w-36 h-36 mx-auto mb-3 rounded-lg bg-zinc-50 border border-zinc-100 flex items-center justify-center">
+                  <div className="w-36 h-36 mx-auto mb-3 rounded-lg  border border-zinc-100 flex items-center justify-center">
                     <svg viewBox="0 0 200 200" width="120" height="120"><rect width="200" height="200" fill="white"/><g fill="#2F4366"><rect x="20" y="20" width="60" height="60"/><rect x="30" y="30" width="40" height="40" fill="white"/><rect x="40" y="40" width="20" height="20"/><rect x="120" y="20" width="60" height="60"/><rect x="130" y="30" width="40" height="40" fill="white"/><rect x="140" y="40" width="20" height="20"/><rect x="20" y="120" width="60" height="60"/><rect x="30" y="130" width="40" height="40" fill="white"/><rect x="40" y="140" width="20" height="20"/><rect x="90" y="20" width="10" height="10"/><rect x="90" y="50" width="10" height="10"/><rect x="20" y="90" width="10" height="10"/><rect x="50" y="90" width="10" height="10"/><rect x="90" y="90" width="10" height="10"/><rect x="120" y="100" width="10" height="10"/><rect x="150" y="100" width="10" height="10"/><rect x="90" y="120" width="10" height="10"/><rect x="120" y="130" width="20" height="20"/><rect x="160" y="130" width="10" height="10"/><rect x="120" y="160" width="10" height="10"/><rect x="150" y="170" width="20" height="10"/></g></svg>
                   </div>
                   <Image src={app.logo} alt={app.label} width={24} height={24} className="mx-auto mb-1" />
-                  <p className="text-sm font-bold text-[#1A1A2E]">{app.label}</p>
-                  <p className="text-[11px] text-[#8A94A6]">{app.sub}</p>
+                  <p className="text-sm font-bold text-white">{app.label}</p>
+                  <p className="text-[11px] text-white/60">{app.sub}</p>
                 </div>
               ))}
             </div>
@@ -210,18 +210,18 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-zinc-100 py-12 px-6 bg-zinc-50">
+      <footer className="border-t border-white/10 py-12 px-6 ">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2">
             <Image src="/images/logo.png" alt="Stampworth" width={24} height={24} />
-            <span className="text-sm font-semibold text-[#2F4366]">Stampworth</span>
+            <span className="text-sm font-semibold text-white/60">Stampworth</span>
           </div>
-          <div className="flex items-center gap-6 text-sm text-[#8A94A6]">
+          <div className="flex items-center gap-6 text-sm text-white/50">
             <a href="#" className="hover:text-[#2F4366] transition">Privacy Policy</a>
             <a href="#" className="hover:text-[#2F4366] transition">Terms of Service</a>
             <a href="#" className="hover:text-[#2F4366] transition">Contact</a>
           </div>
-          <p className="text-xs text-[#C4CAD4]">© 2026 Stampworth. Made in the Philippines.</p>
+          <p className="text-xs text-white/30">© 2026 Stampworth. Made in the Philippines.</p>
         </div>
       </footer>
     </>
