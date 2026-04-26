@@ -36,15 +36,15 @@ export default function ForgotPasswordScreen() {
 
     Alert.alert(
       'Code Sent',
-      'A 6-digit verification code has been sent to your email. Check your inbox (and spam folder).',
+      'A 8-digit verification code has been sent to your email. Check your inbox (and spam folder).',
       [{ text: 'Enter Code', onPress: () => setStep('code') }],
     );
   };
 
   const handleVerifyOtp = async () => {
     const code = otp.trim();
-    if (code.length < 6) {
-      Alert.alert('Invalid Code', 'Please enter the 6-digit code from your email.');
+    if (code.length < 8) {
+      Alert.alert('Invalid Code', 'Please enter the 8-digit code from your email.');
       return;
     }
 
@@ -164,7 +164,7 @@ export default function ForgotPasswordScreen() {
         {step === 'code' && (
           <>
             <Text style={styles.description}>
-              Enter the 6-digit code sent to <Text style={styles.emailHighlight}>{email.trim().toLowerCase()}</Text>
+              Enter the 8-digit code sent to <Text style={styles.emailHighlight}>{email.trim().toLowerCase()}</Text>
             </Text>
 
             <Text style={styles.fieldLabel}>VERIFICATION CODE</Text>
@@ -174,10 +174,10 @@ export default function ForgotPasswordScreen() {
                 value={otp}
                 onChangeText={setOtp}
                 style={[styles.input, { letterSpacing: 4, fontSize: 20 }]}
-                placeholder="000000"
+                placeholder="00000000"
                 placeholderTextColor="#C4CAD4"
                 keyboardType="number-pad"
-                maxLength={6}
+                maxLength={8}
                 autoFocus
               />
             </View>
