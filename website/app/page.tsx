@@ -127,11 +127,20 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <div className="mt-12 bg-[#2F4366] rounded-2xl p-8 sm:p-12 text-center text-white">
-              <h3 className="text-2xl font-bold mb-6">Why businesses love Stampworth</h3>
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {["No hardware needed", "Set up in 5 minutes", "Real-time analytics", "Store map listing"].map((t) => (
-                  <div key={t} className="bg-white/10 rounded-xl py-3 px-4 text-sm font-medium text-white/80">{t}</div>
+            <div className="mt-12 bg-[#2F4366] rounded-2xl p-8 sm:p-12 text-white">
+              <h3 className="text-xl sm:text-2xl font-bold text-center mb-8">Why businesses love Stampworth</h3>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+                {[
+                  { icon: "📱", title: "No hardware", desc: "Use your existing phone. No tablets or scanners needed." },
+                  { icon: "⚡", title: "5-min setup", desc: "Create your loyalty card and start stamping right away." },
+                  { icon: "📊", title: "Analytics", desc: "Track stamps, rewards, and customer activity in real time." },
+                  { icon: "🗺️", title: "Store map", desc: "Your business appears on the Stampworth map for customers to find." },
+                ].map((item) => (
+                  <div key={item.title} className="bg-white/10 rounded-xl p-5 text-center">
+                    <span className="text-2xl block mb-2">{item.icon}</span>
+                    <p className="text-sm font-semibold text-white mb-1">{item.title}</p>
+                    <p className="text-xs text-white/60 leading-relaxed">{item.desc}</p>
+                  </div>
                 ))}
               </div>
             </div>
