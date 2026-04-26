@@ -37,9 +37,6 @@ export default function Home() {
               <a href="#how" className="text-sm font-semibold text-[#2F4366] px-5 py-2.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 transition">Learn more</a>
             </div>
           </div>
-          <div className="max-w-[220px] mx-auto mt-12">
-            <Image src="/images/main.png" alt="Stampworth app" width={300} height={650} className="w-full rounded-2xl border border-zinc-200 shadow-lg" />
-          </div>
         </section>
 
         {/* How it works */}
