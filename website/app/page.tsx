@@ -20,11 +20,11 @@ export default function Home() {
             <Image src="/images/logo.png" alt="Logo" width={26} height={26} />
             <span className="font-bold text-[15px]" style={{ color: S }}>Stampworth</span>
           </a>
-          <nav className="hidden sm:flex gap-7 text-[13px] text-zinc-400 font-medium">
-            <a href="#how" className="hover:text-zinc-800 transition">How it works</a>
-            <a href="#customers" className="hover:text-zinc-800 transition">Customers</a>
-            <a href="#business" className="hover:text-zinc-800 transition">Business</a>
-            <a href="#pricing" className="hover:text-zinc-800 transition">Pricing</a>
+          <nav className="hidden sm:flex gap-7 text-[13px] text-[#8A94A6] font-medium">
+            <a href="#how" className="hover:text-[#2F4366] transition">How it works</a>
+            <a href="#customers" className="hover:text-[#2F4366] transition">Customers</a>
+            <a href="#business" className="hover:text-[#2F4366] transition">Business</a>
+            <a href="#pricing" className="hover:text-[#2F4366] transition">Pricing</a>
           </nav>
           <a href="#download" className="text-[13px] font-semibold text-white px-4 py-2 rounded-lg transition" style={{ background: S }}>
             Download
@@ -40,17 +40,17 @@ export default function Home() {
               <span className="inline-block text-[11px] font-bold uppercase tracking-widest text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 mb-5">
                 Android Beta
               </span>
-              <h1 className="text-[clamp(2rem,5vw,3.2rem)] font-extrabold leading-[1.1] text-zinc-900 tracking-tight">
+              <h1 className="text-[clamp(2rem,5vw,3.2rem)] font-extrabold leading-[1.1] text-[#1A1A2E] tracking-tight">
                 Your virtual<br className="hidden sm:block" /> loyalty card.
               </h1>
-              <p className="mt-4 text-[15px] leading-relaxed text-zinc-400 max-w-md mx-auto lg:mx-0">
+              <p className="mt-4 text-[15px] leading-relaxed text-[#8A94A6] max-w-md mx-auto lg:mx-0">
                 Ditch paper stamp cards. Earn rewards with a QR code. Built for Filipino SMEs and their customers.
               </p>
               <div className="mt-7 flex flex-wrap justify-center lg:justify-start gap-3">
                 <a href="#download" className="text-white text-[13px] font-semibold px-6 py-2.5 rounded-xl shadow-lg transition hover:opacity-90" style={{ background: S, boxShadow: `0 8px 24px ${S}30` }}>
                   Download APK
                 </a>
-                <a href="#how" className="text-[13px] font-semibold text-zinc-400 px-5 py-2.5 rounded-xl border border-zinc-200 hover:border-zinc-300 hover:text-zinc-600 transition">
+                <a href="#how" className="text-[13px] font-semibold text-[#8A94A6] px-5 py-2.5 rounded-xl border border-zinc-200 hover:border-zinc-300 hover:text-[#4A5A7A] transition">
                   Learn more
                 </a>
               </div>
@@ -64,8 +64,8 @@ export default function Home() {
         {/* ── How it works ── */}
         <section id="how" className="py-20 px-5 border-t border-zinc-100">
           <div className="mx-auto max-w-3xl text-center mb-12">
-            <h2 className="text-2xl font-bold text-zinc-900">How it works</h2>
-            <p className="text-sm text-zinc-400 mt-2">Three steps. No paper.</p>
+            <h2 className="text-2xl font-bold text-[#1A1A2E]">How it works</h2>
+            <p className="text-sm text-[#8A94A6] mt-2">Three steps. No paper.</p>
           </div>
           <div className="mx-auto max-w-4xl grid sm:grid-cols-3 gap-8 text-center">
             {[
@@ -75,8 +75,8 @@ export default function Home() {
             ].map((s) => (
               <div key={s.n}>
                 <div className="mx-auto w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white mb-3" style={{ background: S }}>{s.n}</div>
-                <h3 className="font-semibold text-zinc-900 text-[15px]">{s.t}</h3>
-                <p className="text-[13px] text-zinc-400 mt-1 leading-relaxed">{s.d}</p>
+                <h3 className="font-semibold text-[#1A1A2E] text-[15px]">{s.t}</h3>
+                <p className="text-[13px] text-[#8A94A6] mt-1 leading-relaxed">{s.d}</p>
               </div>
             ))}
           </div>
@@ -87,7 +87,7 @@ export default function Home() {
           <div className="mx-auto max-w-6xl">
             <div className="text-center mb-12">
               <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-600 mb-1">For customers</p>
-              <h2 className="text-2xl font-bold text-zinc-900">All your stamp cards in one app.</h2>
+              <h2 className="text-2xl font-bold text-[#1A1A2E]">All your stamp cards in one app.</h2>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-5">
               {[
@@ -102,7 +102,7 @@ export default function Home() {
                   <div className="rounded-2xl overflow-hidden border border-zinc-200 bg-white">
                     <Image src={`/images/${c.img}.png`} alt={c.t} width={300} height={650} className="w-full h-auto group-hover:scale-[1.015] transition-transform duration-300" />
                   </div>
-                  <p className="mt-2 text-[12px] sm:text-[13px] font-semibold text-zinc-700 text-center">{c.t}</p>
+                  <p className="mt-2 text-[12px] sm:text-[13px] font-semibold text-[#2F4366] text-center">{c.t}</p>
                 </div>
               ))}
             </div>
@@ -114,8 +114,8 @@ export default function Home() {
           <div className="mx-auto max-w-6xl">
             <div className="text-center mb-12">
               <p className="text-[11px] font-bold uppercase tracking-widest mb-1" style={{ color: S }}>For business owners</p>
-              <h2 className="text-2xl font-bold text-zinc-900">Launch a loyalty program in 5 minutes.</h2>
-              <p className="text-sm text-zinc-400 mt-2">No hardware. Just your Android phone.</p>
+              <h2 className="text-2xl font-bold text-[#1A1A2E]">Launch a loyalty program in 5 minutes.</h2>
+              <p className="text-sm text-[#8A94A6] mt-2">No hardware. Just your Android phone.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
               {[
@@ -127,13 +127,13 @@ export default function Home() {
                   <div className="rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-50">
                     <Image src={`/images/${c.img}.png`} alt={c.t} width={300} height={650} className="w-full h-auto group-hover:scale-[1.015] transition-transform duration-300" />
                   </div>
-                  <p className="mt-2 text-[13px] font-semibold text-zinc-700 text-center">{c.t}</p>
+                  <p className="mt-2 text-[13px] font-semibold text-[#2F4366] text-center">{c.t}</p>
                 </div>
               ))}
             </div>
             <div className="mt-10 flex flex-wrap justify-center gap-3">
               {["No hardware", "5-min setup", "Analytics", "Store map", "Announcements", "Geofencing"].map((t) => (
-                <span key={t} className="text-[11px] font-medium text-zinc-500 bg-zinc-100 rounded-full px-3.5 py-1.5 border border-zinc-200">{t}</span>
+                <span key={t} className="text-[11px] font-medium text-[#8A94A6] bg-zinc-100 rounded-full px-3.5 py-1.5 border border-zinc-200">{t}</span>
               ))}
             </div>
           </div>
@@ -143,8 +143,8 @@ export default function Home() {
         <section id="pricing" className="py-20 px-5 bg-zinc-50/70 border-t border-zinc-100">
           <div className="mx-auto max-w-5xl">
             <div className="text-center mb-12">
-              <h2 className="text-2xl font-bold text-zinc-900">Simple pricing.</h2>
-              <p className="text-sm text-zinc-400 mt-1">Free during beta. Built for PH businesses.</p>
+              <h2 className="text-2xl font-bold text-[#1A1A2E]">Simple pricing.</h2>
+              <p className="text-sm text-[#8A94A6] mt-1">Free during beta. Built for PH businesses.</p>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {[
@@ -156,9 +156,9 @@ export default function Home() {
                 <div key={pl.n} className={`bg-white rounded-xl p-4 sm:p-5 border relative ${pl.tag === "NOW" ? "border-[#8B5CF6] ring-1 ring-[#8B5CF6]/10" : pl.tag === "BEST" ? "border-[#27AE60] ring-1 ring-[#27AE60]/10" : "border-zinc-200"}`}>
                   {pl.tag && <span className="absolute -top-2 right-3 text-[9px] font-bold text-white px-2 py-px rounded-full" style={{ background: pl.c }}>{pl.tag}</span>}
                   <p className="text-[13px] font-bold" style={{ color: pl.c }}>{pl.n}</p>
-                  <p className="mt-1"><span className="text-xl sm:text-2xl font-extrabold text-zinc-900">{pl.p}</span><span className="text-[11px] text-zinc-400">{pl.per}</span></p>
+                  <p className="mt-1"><span className="text-xl sm:text-2xl font-extrabold text-[#1A1A2E]">{pl.p}</span><span className="text-[11px] text-[#8A94A6]">{pl.per}</span></p>
                   <ul className="mt-3 space-y-1.5">
-                    {pl.f.map((f) => <li key={f} className="text-[11px] text-zinc-500 flex items-center gap-1.5"><span className="w-1 h-1 rounded-full shrink-0" style={{ background: pl.c }} />{f}</li>)}
+                    {pl.f.map((f) => <li key={f} className="text-[11px] text-[#8A94A6] flex items-center gap-1.5"><span className="w-1 h-1 rounded-full shrink-0" style={{ background: pl.c }} />{f}</li>)}
                   </ul>
                 </div>
               ))}
@@ -181,16 +181,16 @@ export default function Home() {
                 <div className="w-36 h-36 mx-auto mb-3 rounded-lg bg-zinc-50 border border-zinc-100 flex items-center justify-center">
                   <svg viewBox="0 0 200 200" width="120" height="120"><rect width="200" height="200" fill="white"/><g fill="#2F4366"><rect x="20" y="20" width="60" height="60"/><rect x="30" y="30" width="40" height="40" fill="white"/><rect x="40" y="40" width="20" height="20"/><rect x="120" y="20" width="60" height="60"/><rect x="130" y="30" width="40" height="40" fill="white"/><rect x="140" y="40" width="20" height="20"/><rect x="20" y="120" width="60" height="60"/><rect x="30" y="130" width="40" height="40" fill="white"/><rect x="40" y="140" width="20" height="20"/><rect x="90" y="20" width="10" height="10"/><rect x="90" y="50" width="10" height="10"/><rect x="20" y="90" width="10" height="10"/><rect x="50" y="90" width="10" height="10"/><rect x="90" y="90" width="10" height="10"/><rect x="120" y="100" width="10" height="10"/><rect x="150" y="100" width="10" height="10"/><rect x="90" y="120" width="10" height="10"/><rect x="120" y="130" width="20" height="20"/><rect x="160" y="130" width="10" height="10"/><rect x="120" y="160" width="10" height="10"/><rect x="150" y="170" width="20" height="10"/></g></svg>
                 </div>
-                <p className="text-sm font-bold text-zinc-900">Stampworth</p>
-                <p className="text-[11px] text-zinc-400">For customers</p>
+                <p className="text-sm font-bold text-[#1A1A2E]">Stampworth</p>
+                <p className="text-[11px] text-[#8A94A6]">For customers</p>
               </div>
               {/* Business */}
               <div className="bg-white rounded-2xl p-5 w-52">
                 <div className="w-36 h-36 mx-auto mb-3 rounded-lg bg-zinc-50 border border-zinc-100 flex items-center justify-center">
                   <svg viewBox="0 0 200 200" width="120" height="120"><rect width="200" height="200" fill="white"/><g fill="#2F4366"><rect x="20" y="20" width="60" height="60"/><rect x="30" y="30" width="40" height="40" fill="white"/><rect x="40" y="40" width="20" height="20"/><rect x="120" y="20" width="60" height="60"/><rect x="130" y="30" width="40" height="40" fill="white"/><rect x="140" y="40" width="20" height="20"/><rect x="20" y="120" width="60" height="60"/><rect x="30" y="130" width="40" height="40" fill="white"/><rect x="40" y="140" width="20" height="20"/><rect x="90" y="30" width="10" height="10"/><rect x="90" y="60" width="10" height="10"/><rect x="30" y="90" width="10" height="10"/><rect x="60" y="90" width="10" height="10"/><rect x="90" y="90" width="20" height="20"/><rect x="130" y="90" width="10" height="10"/><rect x="160" y="90" width="10" height="10"/><rect x="90" y="130" width="10" height="10"/><rect x="130" y="120" width="10" height="10"/><rect x="160" y="140" width="10" height="10"/><rect x="120" y="160" width="20" height="10"/><rect x="160" y="160" width="10" height="10"/></g></svg>
                 </div>
-                <p className="text-sm font-bold text-zinc-900">Stampworth Business</p>
-                <p className="text-[11px] text-zinc-400">For store owners</p>
+                <p className="text-sm font-bold text-[#1A1A2E]">Stampworth Business</p>
+                <p className="text-[11px] text-[#8A94A6]">For store owners</p>
               </div>
             </div>
 
@@ -201,17 +201,17 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="py-8 px-5 border-t border-zinc-100">
-        <div className="mx-auto max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-4 text-[12px] text-zinc-400">
+        <div className="mx-auto max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-4 text-[12px] text-[#8A94A6]">
           <div className="flex items-center gap-1.5">
             <Image src="/images/logo.png" alt="Logo" width={16} height={16} />
-            <span className="font-semibold text-zinc-500">Stampworth</span>
+            <span className="font-semibold text-[#8A94A6]">Stampworth</span>
           </div>
           <div className="flex gap-5">
-            <a href="#" className="hover:text-zinc-600">Privacy</a>
-            <a href="#" className="hover:text-zinc-600">Terms</a>
-            <a href="#" className="hover:text-zinc-600">Contact</a>
+            <a href="#" className="hover:text-[#4A5A7A]">Privacy</a>
+            <a href="#" className="hover:text-[#4A5A7A]">Terms</a>
+            <a href="#" className="hover:text-[#4A5A7A]">Contact</a>
           </div>
-          <p className="text-zinc-300">© 2026 Stampworth</p>
+          <p className="text-[#C4CAD4]">© 2026 Stampworth</p>
         </div>
       </footer>
     </>
