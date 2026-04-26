@@ -34,36 +34,49 @@ export default function Home() {
 
       <main>
         {/* ── Hero ── */}
-        <section className="pt-28 sm:pt-36 pb-16 px-5">
-          <div className="mx-auto max-w-6xl flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
+        <section className="pt-28 sm:pt-36 pb-10 px-5">
+          <div className="mx-auto max-w-6xl flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
             <div className="flex-1 text-center lg:text-left">
-              <span className="inline-block text-[11px] font-bold uppercase tracking-widest text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 mb-5">
+              <span className="animate-fade-up inline-block text-[11px] font-bold uppercase tracking-widest text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 mb-5">
                 Android Beta
               </span>
-              <h1 className="text-[clamp(2rem,5vw,3.2rem)] font-extrabold leading-[1.1] text-[#1A1A2E] tracking-tight">
+              <h1 className="animate-fade-up delay-100 text-[clamp(2rem,5vw,3.2rem)] font-extrabold leading-[1.1] text-[#1A1A2E] tracking-tight">
                 Your virtual<br className="hidden sm:block" /> loyalty card.
               </h1>
-              <p className="mt-4 text-[15px] leading-relaxed text-[#8A94A6] max-w-md mx-auto lg:mx-0">
+              <p className="animate-fade-up delay-200 mt-4 text-[15px] leading-relaxed text-[#8A94A6] max-w-md mx-auto lg:mx-0">
                 Ditch paper stamp cards. Earn rewards with a QR code. Built for Filipino SMEs and their customers.
               </p>
-              <div className="mt-7 flex flex-wrap justify-center lg:justify-start gap-3">
-                <a href="#download" className="text-white text-[13px] font-semibold px-6 py-2.5 rounded-xl shadow-lg transition hover:opacity-90" style={{ background: S, boxShadow: `0 8px 24px ${S}30` }}>
+              <div className="animate-fade-up delay-300 mt-7 flex flex-wrap justify-center lg:justify-start gap-3">
+                <a href="#download" className="text-white text-[13px] font-semibold px-6 py-2.5 rounded-xl shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5" style={{ background: S, boxShadow: `0 8px 24px ${S}30` }}>
                   Download APK
                 </a>
-                <a href="#how" className="text-[13px] font-semibold text-[#8A94A6] px-5 py-2.5 rounded-xl border border-zinc-200 hover:border-zinc-300 hover:text-[#4A5A7A] transition">
+                <a href="#how" className="text-[13px] font-semibold text-[#8A94A6] px-5 py-2.5 rounded-xl border border-zinc-200 hover:border-[#2F4366] hover:text-[#2F4366] transition-all">
                   Learn more
                 </a>
               </div>
             </div>
-            <div className="w-52 sm:w-56 shrink-0">
-              <Phone src="/images/qrcode.png" alt="QR code screen" />
+            <div className="animate-scale-in delay-300 w-64 sm:w-72 shrink-0 animate-float">
+              <Phone src="/images/main.png" alt="Stampworth app" />
+            </div>
+          </div>
+        </section>
+
+        {/* App screenshots */}
+        <section className="px-5 pb-20">
+          <div className="mx-auto max-w-5xl">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {["qrcode", "cards", "map", "view"].map((name, i) => (
+                <div key={name} className={`animate-fade-up rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-50 hover:shadow-lg hover:-translate-y-1 transition-all duration-300`} style={{ animationDelay: `${(i + 2) * 100}ms` }}>
+                  <Image src={`/images/${name}.png`} alt={name} width={360} height={780} className="w-full h-auto" />
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
         {/* ── How it works ── */}
         <section id="how" className="py-20 px-5 border-t border-zinc-100">
-          <div className="mx-auto max-w-3xl text-center mb-12">
+          <div className="mx-auto max-w-3xl text-center mb-12 animate-fade-up">
             <h2 className="text-2xl font-bold text-[#1A1A2E]">How it works</h2>
             <p className="text-sm text-[#8A94A6] mt-2">Three steps. No paper.</p>
           </div>
@@ -73,7 +86,7 @@ export default function Home() {
               { n: "2", t: "Get stamped", d: "Merchant scans your code — you earn a stamp." },
               { n: "3", t: "Claim reward", d: "Card full? Your free reward is ready." },
             ].map((s) => (
-              <div key={s.n}>
+              <div key={s.n} className="animate-fade-up" style={{ animationDelay: `${Number(s.n) * 150}ms` }}>
                 <div className="mx-auto w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white mb-3" style={{ background: S }}>{s.n}</div>
                 <h3 className="font-semibold text-[#1A1A2E] text-[15px]">{s.t}</h3>
                 <p className="text-[13px] text-[#8A94A6] mt-1 leading-relaxed">{s.d}</p>
