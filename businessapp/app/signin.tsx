@@ -14,6 +14,7 @@ export default function SignInScreen() {
   const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [socialLoading, setSocialLoading] = useState<'google' | 'facebook' | null>(null);
 
@@ -61,7 +62,8 @@ export default function SignInScreen() {
 
         <View style={styles.inputBox}>
           <Ionicons name="lock-closed-outline" size={18} color="#B0B8C4" />
-          <TextInput value={password} onChangeText={setPassword} style={styles.input} placeholder="Password" placeholderTextColor="#C4CAD4" secureTextEntry />
+          <TextInput value={password} onChangeText={setPassword} style={styles.input} placeholder="Password" placeholderTextColor="#C4CAD4" secureTextEntry={!showPassword} />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={18} color="#B0B8C4" /></TouchableOpacity>
         </View>
 
         <TouchableOpacity style={styles.forgotRow} onPress={() => router.push('/forgotpassword')}>

@@ -6,7 +6,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { ThemedView } from '@/components/themed-view';
 import { Colors } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
-import { getMerchantDashboardSnapshot, resetLoyaltyProgram, sendSupportMessage } from '@/lib/database';
+import { getMerchantDashboardSnapshot, getCachedDashboard, resetLoyaltyProgram, sendSupportMessage } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 import { getActivePlan, getSubscription, cancelSubscription, PLANS, type PlanId, type Plan } from '@/lib/subscription';
 
@@ -38,7 +38,24 @@ export default function OptionsScreen() {
       let cancelled = false;
 
       const loadDashboard = async () => {
-        setLoading(true);
+        // Show cached data instantly
+        const cached = await getCachedDashboard();
+        if (cached) {
+          setBusinessName(cached.merchant?.business_name || 'Your Business');
+          setLogoUrl(cached.merchant?.logo_url || null);
+          setCardColor(cached.settings?.card_color || '#2F4366');
+          setTotalStamps(cached.settings?.stamps_per_redemption || 10);
+          setStampIconName(cached.settings?.stamp_icon_name || 'star');
+          setStampIconImageUrl(cached.settings?.stamp_icon_image_url || null);
+          setActiveUsers(cached.stats?.activeUsers || 0);
+          setStampsIssued(cached.stats?.stampsIssued || 0);
+          setRewardsRedeemed(cached.stats?.rewardsRedeemed || 0);
+          setLoading(false);
+          setLoadedOnce(true);
+        } else {
+          setLoading(true);
+        }
+        // Fetch fresh in background
         const { data, error } = await getMerchantDashboardSnapshot();
 
         if (cancelled) return;

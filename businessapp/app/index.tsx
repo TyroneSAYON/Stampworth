@@ -36,7 +36,7 @@ export default function LandingScreen() {
   const handlePress = () => {
     if (hasSession === null) return; // still checking session
     Animated.timing(screenOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
-      router.replace(SKIP_AUTH_MODE || hasSession ? '/(tabs)' : '/signin');
+      router.replace(SKIP_AUTH_MODE || hasSession ? '/(tabs)' : '/createaccount');
     });
   };
 

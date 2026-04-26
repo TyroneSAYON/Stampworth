@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { setCache, getCache } from '@/lib/cache';
 
 const CUSTOMER_QR_PREFIX = 'STAMPWORTH:';
 const MERCHANT_LOGO_BUCKET = 'merchant-logos';
@@ -1426,7 +1427,7 @@ export const getMerchantDashboardSnapshot = async () => {
     return { data: null, error: settingsResult.error || usersResult.error || stampsResult.error || rewardsResult.error };
   }
 
-  return {
+  const result = {
     data: {
       merchant,
       settings: settingsResult.data || null,
@@ -1438,4 +1439,9 @@ export const getMerchantDashboardSnapshot = async () => {
     },
     error: null,
   };
+
+  setCache('dashboard_snapshot', result.data, 2 * 60 * 1000);
+  return result;
 };
+
+export const getCachedDashboard = async () => getCache('dashboard_snapshot');

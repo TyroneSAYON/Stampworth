@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { setCache, getCache } from '@/lib/cache';
 
 type CustomerProfile = {
   id: string;
@@ -81,6 +82,10 @@ export const getCardStamps = async (loyaltyCardId: string) => {
 };
 
 export const getUserLoyaltyCards = async (customerId: string) => {
+  // Return cached data immediately, fetch fresh in background
+  const cacheKey = `cards_${customerId}`;
+  const cached = await getCache(cacheKey);
+
   // First get the loyalty cards
   const { data: cards, error: cardsError } = await supabase
     .from('loyalty_cards')
@@ -154,6 +159,7 @@ export const getUserLoyaltyCards = async (customerId: string) => {
     };
   });
 
+  setCache(cacheKey, enriched, 2 * 60 * 1000); // cache 2 min
   return { data: enriched, error: null };
 };
 
@@ -242,13 +248,20 @@ export const findNearbyStores = async (latitude: number, longitude: number, maxD
 
 // Get all active Stampworth businesses
 export const getAllMerchants = async () => {
+  // Return cached merchants while fetching fresh
+  const cached = await getCache('all_merchants');
+
   const { data, error } = await supabase
     .from('merchants')
     .select('id, business_name, address, city, state, country, latitude, longitude, logo_url, phone_number')
     .eq('is_active', true)
     .order('business_name', { ascending: true });
 
-  return { data: data || [], error };
+  if (data && data.length > 0) {
+    setCache('all_merchants', data, 5 * 60 * 1000); // cache 5 min
+  }
+
+  return { data: data || cached || [], error };
 };
 
 export const getMerchantById = async (merchantId: string) => {

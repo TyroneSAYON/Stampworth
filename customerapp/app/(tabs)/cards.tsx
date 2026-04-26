@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { getCustomerLoyaltyCards, getOrCreateCustomerProfile } from '@/lib/database';
+import { getCache, setCache } from '@/lib/cache';
 import { supabase } from '@/lib/supabase';
 
 export default function CardsScreen() {
@@ -14,10 +15,16 @@ export default function CardsScreen() {
   const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadCards = async (showLoader = false) => {
-    if (showLoader) setLoading(true);
+    if (showLoader) {
+      // Show cached cards instantly
+      const cached = await getCache('customer_cards');
+      if (cached) { setCards(cached); setLoading(false); }
+      else setLoading(true);
+    }
     const { data, error } = await getCustomerLoyaltyCards();
     if (error) console.warn('Cards load error:', error.message);
     setCards(data || []);
+    if (data) setCache('customer_cards', data, 2 * 60 * 1000);
     setLoading(false);
     loadedOnce.current = true;
   };

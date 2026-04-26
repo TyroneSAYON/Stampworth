@@ -7,7 +7,7 @@ export default function LoadingScreen() {
   useEffect(() => {
     const bootstrap = async () => {
       const user = await getCurrentUser();
-      router.replace(user ? '/(tabs)/qrcode' : '/signin');
+      router.replace(user ? '/(tabs)/qrcode' : '/createaccount');
     };
     const timeout = setTimeout(bootstrap, 800);
     return () => clearTimeout(timeout);
