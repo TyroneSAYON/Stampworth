@@ -15,6 +15,8 @@ export default function ForgotPasswordScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleSendReset = async () => {
     const trimmed = email.trim().toLowerCase();
@@ -208,9 +210,10 @@ export default function ForgotPasswordScreen() {
                 style={styles.input}
                 placeholder="Enter new password"
                 placeholderTextColor="#C4CAD4"
-                secureTextEntry
+                secureTextEntry={!showNew}
                 autoFocus
               />
+              <TouchableOpacity onPress={() => setShowNew(!showNew)}><Ionicons name={showNew ? "eye-off-outline" : "eye-outline"} size={18} color="#B0B8C4" /></TouchableOpacity>
             </View>
 
             <Text style={styles.fieldLabel}>CONFIRM PASSWORD</Text>
@@ -222,8 +225,9 @@ export default function ForgotPasswordScreen() {
                 style={styles.input}
                 placeholder="Confirm new password"
                 placeholderTextColor="#C4CAD4"
-                secureTextEntry
+                secureTextEntry={!showConfirm}
               />
+              <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}><Ionicons name={showConfirm ? "eye-off-outline" : "eye-outline"} size={18} color="#B0B8C4" /></TouchableOpacity>
             </View>
 
             {newPassword.length > 0 && newPassword.length < 6 && (
