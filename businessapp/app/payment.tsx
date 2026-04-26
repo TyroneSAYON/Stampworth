@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { PLANS, subscribe, PlanId } from '@/lib/subscription';
@@ -51,7 +52,7 @@ export default function PaymentScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={80} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
 
         {/* Header */}
         <View style={styles.header}>
@@ -138,7 +139,7 @@ export default function PaymentScreen() {
 
         <Text style={styles.disclaimer}>This is a sandbox environment. No real money will be charged. Your subscription will activate immediately and last for 30 days.</Text>
 
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </KeyboardAvoidingView>
   );
 }

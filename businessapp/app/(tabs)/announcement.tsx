@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Alert, ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, Text, TextInput, TouchableOpacity, SectionList } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -249,9 +250,9 @@ export default function AnnouncementScreen() {
                     </TouchableOpacity>
                   </View>
                   <View style={styles.msgDivider} />
-                  <ScrollView style={styles.msgBody} showsVerticalScrollIndicator={false}>
+                  <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={80} style={styles.msgBody} showsVerticalScrollIndicator={false}>
                     <Text style={styles.msgText}>{selectedNotif.body}</Text>
-                  </ScrollView>
+                  </KeyboardAwareScrollView>
                   <TouchableOpacity style={styles.msgDismissBtn} onPress={() => setSelectedNotif(null)}>
                     <Text style={styles.msgDismissText}>Dismiss</Text>
                   </TouchableOpacity>

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';

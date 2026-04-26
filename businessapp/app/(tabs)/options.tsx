@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleSheet, TextInput, View, useColorScheme, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -182,7 +183,7 @@ export default function OptionsScreen() {
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={80} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -485,7 +486,7 @@ export default function OptionsScreen() {
           <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Contact Support Modal */}
       <Modal visible={contactOpen} transparent animationType="slide" onRequestClose={() => setContactOpen(false)}>

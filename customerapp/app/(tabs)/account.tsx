@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View, ScrollView } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -133,7 +134,7 @@ export default function AccountScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <View style={[styles.container, { backgroundColor: '#F6F8FB' }]}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+      <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={80} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
         {/* Header */}
         <View style={styles.header}>
           <Image source={require('@/assets/images/stampworth-logo.png')} style={styles.logo} contentFit="contain" />
@@ -200,7 +201,7 @@ export default function AccountScreen() {
           <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Contact Support Modal */}
       <Modal visible={contactOpen} transparent animationType="slide" onRequestClose={() => setContactOpen(false)}>

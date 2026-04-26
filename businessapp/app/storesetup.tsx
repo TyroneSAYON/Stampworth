@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -89,7 +90,7 @@ export default function StoreSetupScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={80} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={22} color="#2F4366" />
@@ -149,7 +150,7 @@ export default function StoreSetupScreen() {
         <TouchableOpacity style={styles.primaryButton} onPress={handleSave} disabled={saving}>
           <Text style={styles.primaryButtonText}>{saving ? 'Saving...' : isEditMode ? 'Save Changes' : 'Save & Continue'}</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </KeyboardAvoidingView>
   );
 }

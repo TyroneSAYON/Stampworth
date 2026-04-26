@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Alert, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, View, useColorScheme, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -203,7 +204,7 @@ export default function LoyaltySystemScreen() {
           <Text style={[styles.loadingText, { color: theme.text }]}>Loading settings...</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+        <KeyboardAwareScrollView enableOnAndroid={true} extraScrollHeight={80} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -356,7 +357,7 @@ export default function LoyaltySystemScreen() {
           >
             <Text style={styles.saveButtonText}>{saving ? 'Saving...' : isEditMode ? 'Save Changes' : 'Save Configuration'}</Text>
           </TouchableOpacity>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       )}
     </ThemedView>
     </KeyboardAvoidingView>
