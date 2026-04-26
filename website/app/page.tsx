@@ -30,10 +30,9 @@ export default function Home() {
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
               Beta Testing — Android Only
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight max-w-3xl mx-auto">
-              <span className="text-[#2F4366]">Stampworth</span>
-              <br />
-              <span className="text-[#1A1A2E]">Your Virtual Loyalty Card</span>
+            <h1 className="max-w-3xl mx-auto">
+              <span className="block text-4xl sm:text-5xl lg:text-6xl font-extrabold text-[#2F4366]">Stampworth</span>
+              <span className="block text-2xl sm:text-3xl lg:text-4xl font-bold text-[#1A1A2E] mt-2">Your Virtual Loyalty Card</span>
             </h1>
             <p className="text-lg sm:text-xl text-[#8A94A6] mt-6 max-w-2xl mx-auto leading-relaxed">
               Replace paper stamp cards with a simple QR code on your phone. Customers earn rewards digitally, businesses grow repeat visits. Made for Filipino SMEs.
