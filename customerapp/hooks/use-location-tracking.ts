@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { getOrCreateCustomerProfile, updateUserLocation, getAllMerchants } from '@/lib/database';
 
-const TRACKING_INTERVAL_MS = 30000; // update every 30s
+const TRACKING_INTERVAL_MS = 10000; // update every 10s for live tracking
 const MAX_GEOFENCE_RADIUS = 2000; // 2km — only share location if near a store
 
 let Location: typeof import('expo-location') | null = null;

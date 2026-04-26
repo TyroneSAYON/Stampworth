@@ -14,7 +14,7 @@ import {
 } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
-const NEARBY_REFRESH_MS = 15000; // refresh nearby customers every 15s
+const NEARBY_REFRESH_MS = 8000; // refresh nearby customers every 8s for live tracking
 
 let Location: typeof import('expo-location') | null = null;
 try { Location = require('expo-location'); } catch {}
