@@ -55,7 +55,7 @@ export default function SignInScreen() {
           <TouchableOpacity onPress={() => setShowPassword(!showPassword)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={18} color="#B0B8C4" /></TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.forgotRow}>
+        <TouchableOpacity style={styles.forgotRow} onPress={() => router.push('/forgotpassword')}>
           <Text style={styles.forgotText}>Forgot password?</Text>
         </TouchableOpacity>
 
