@@ -18,7 +18,29 @@
       "Bash(cat /c/Users/AARON/Stampworth/customerapp/app/\\\\\\(tabs\\\\\\)/notifications.tsx)",
       "Bash(FILE=\"/c/Users/AARON/Stampworth/customerapp/app/\\(tabs\\)/qrcode.tsx\")",
       "Bash(perl -pi -e 's/}, 3000\\\\\\);/}, 500\\);/g' \"$FILE\")",
-      "Bash(perl -pi -e 's/await new Promise\\\\\\(\\\\\\(r\\\\\\) => setTimeout\\\\\\(r, 1000\\\\\\)\\\\\\);/await new Promise\\(\\(r\\) => setTimeout\\(r, 300\\)\\);/g' /c/Users/AARON/Stampworth/customerapp/app/\\\\\\(tabs\\\\\\)/qrcode.tsx)"
+      "Bash(perl -pi -e 's/await new Promise\\\\\\(\\\\\\(r\\\\\\) => setTimeout\\\\\\(r, 1000\\\\\\)\\\\\\);/await new Promise\\(\\(r\\) => setTimeout\\(r, 300\\)\\);/g' /c/Users/AARON/Stampworth/customerapp/app/\\\\\\(tabs\\\\\\)/qrcode.tsx)",
+      "Bash(grep -n \"subscription\\\\|price\\\\|plan\\\\|₱\\\\|$\\\\|month\\\\|Starter\\\\|Growth\\\\|Scale\\\\|Beta\" /c/Users/AARON/Stampworth/businessapp/app/\\\\\\(tabs\\\\\\)/options.tsx)",
+      "Bash(grep:*)",
+      "Bash(find C:UsersAARONStampworthcustomerappapp -type f -name *.tsx)",
+      "Bash(find C:UsersAARONStampworthbusinessappapp -type f -name *.tsx)",
+      "Bash(FILE=\"/c/Users/AARON/Stampworth/businessapp/app/\\(tabs\\)/announcement.tsx\")",
+      "Bash(perl -pi -e \"s/''From Stampworth''/''From Stampworth Dev Team''/g\" \"$FILE\")",
+      "Bash(perl -pi -e \"s/''Stampworth'' : ''Customer''/''Stampworth Dev Team'' : ''Customer''/g\" \"$FILE\")",
+      "Bash(for FILE in \"/c/Users/AARON/Stampworth/customerapp/app/signin.tsx\" \"/c/Users/AARON/Stampworth/customerapp/app/createaccount.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/signin.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/createaccount.tsx\")",
+      "Bash(do)",
+      "Bash(__NEW_LINE_101e77c6b99909f7__ perl:*)",
+      "Bash(__NEW_LINE_101e77c6b99909f7__ done:*)",
+      "Bash(for FILE in \"/c/Users/AARON/Stampworth/customerapp/app/forgotpassword.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/forgotpassword.tsx\")",
+      "Bash(__NEW_LINE_b8fe51740bbe18aa__ perl:*)",
+      "Bash(perl -pi -e 's/code\\\\.length < 6/code.length < 8/g' \"$FILE\")",
+      "Bash(perl -pi -e 's/maxLength=\\\\{6\\\\}/maxLength={8}/g' \"$FILE\")",
+      "Bash(perl -pi -e 's/placeholder=\"\"000000\"\"/placeholder=\"\"00000000\"\"/g' \"$FILE\")",
+      "Bash(for FILE in \"/c/Users/AARON/Stampworth/customerapp/app/signin.tsx\" \"/c/Users/AARON/Stampworth/customerapp/app/createaccount.tsx\" \"/c/Users/AARON/Stampworth/customerapp/app/forgotpassword.tsx\" \"/c/Users/AARON/Stampworth/customerapp/app/\\(tabs\\)/account.tsx\" \"/c/Users/AARON/Stampworth/customerapp/app/\\(tabs\\)/explore.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/signin.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/createaccount.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/forgotpassword.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/storesetup.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/loyaltysystem.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/payment.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/\\(tabs\\)/announcement.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/\\(tabs\\)/explore.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/\\(tabs\\)/scan.tsx\" \"/c/Users/AARON/Stampworth/businessapp/app/\\(tabs\\)/options.tsx\")",
+      "Bash(__NEW_LINE_3e67e58b673a01e9__ perl:*)",
+      "Bash(__NEW_LINE_3e67e58b673a01e9__ done:*)",
+      "WebFetch(domain:tarsi.pocketdevs.ph)",
+      "Bash(mkdir -p /c/Users/AARON/Stampworth/website)",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --no-turbopack)"
     ]
   }
 }
