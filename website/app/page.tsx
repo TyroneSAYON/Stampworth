@@ -177,31 +177,53 @@ export default function Home() {
 
         {/* Download */}
         <section id="download" className="py-24 px-6 bg-[#2F4366]">
-          <div className="max-w-3xl mx-auto text-center">
-            <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-4">Android Beta — Scan to download</p>
-            <Image src="/images/logo.png" alt="Stampworth" width={48} height={48} className="mx-auto mb-4" />
-            <h2 className="text-3xl font-bold text-white mb-2">Download Stampworth</h2>
-            <p className="text-white/50 mb-10">Scan the QR code or tap the button below to download both apps.</p>
-
-            {/* QR Code */}
-            <div className="bg-white rounded-2xl p-6 inline-block mb-8">
-              <Image src="/images/download-qr.png" alt="Download QR Code" width={200} height={200} className="mx-auto rounded-lg" />
-              <p className="text-sm font-bold text-[#1A1A2E] mt-3">Scan to download</p>
-              <p className="text-[11px] text-[#8A94A6]">Both apps available</p>
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-12">
+              <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-4">Android Beta</p>
+              <h2 className="text-3xl font-bold text-white mb-2">Download Stampworth</h2>
+              <p className="text-white/50">Get the APK and start earning or giving rewards today.</p>
             </div>
 
-            {/* Download button */}
-            <div>
-              <a
-                href="https://drive.google.com/drive/folders/1w0cLzPnKykE_H5OFHgysPbtGm3ytCzvd?usp=drive_link"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-white text-[#2F4366] text-base font-semibold px-8 py-3.5 rounded-2xl hover:bg-zinc-100 transition shadow-lg"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Download APK from Google Drive
-              </a>
-              <p className="text-[11px] text-white/30 mt-4">Contains Stampworth (customer) and Stampworth Business (store owner) APK files.</p>
+            <div className="bg-white/10 border border-white/10 rounded-2xl p-8 sm:p-10 flex flex-col md:flex-row items-center gap-8 md:gap-12">
+              {/* QR side */}
+              <div className="shrink-0">
+                <div className="bg-white rounded-xl p-4">
+                  <Image src="/images/download-qr.png" alt="Download QR Code" width={180} height={180} className="rounded-lg" />
+                </div>
+                <p className="text-[11px] text-white/40 text-center mt-3">Scan with your phone camera</p>
+              </div>
+
+              {/* Info side */}
+              <div className="flex-1 text-center md:text-left">
+                <h3 className="text-xl font-bold text-white mb-2">Scan or download directly</h3>
+                <p className="text-sm text-white/50 leading-relaxed mb-6">
+                  The folder contains both APK files — <span className="text-white/70 font-medium">Stampworth</span> for customers
+                  and <span className="text-white/70 font-medium">Stampworth Business</span> for store owners. Install on any Android device.
+                </p>
+
+                <div className="flex flex-col sm:flex-row gap-3 justify-center md:justify-start mb-6">
+                  <a
+                    href="https://drive.google.com/drive/folders/1w0cLzPnKykE_H5OFHgysPbtGm3ytCzvd?usp=drive_link"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 bg-white text-[#2F4366] text-sm font-semibold px-6 py-3 rounded-xl hover:bg-zinc-100 transition"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Download from Google Drive
+                  </a>
+                </div>
+
+                <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+                  <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
+                    <Image src="/images/logo.png" alt="Customer" width={16} height={16} />
+                    <span className="text-[12px] text-white/60 font-medium">Stampworth</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
+                    <Image src="/images/logo-business.png" alt="Business" width={16} height={16} />
+                    <span className="text-[12px] text-white/60 font-medium">Stampworth Business</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
