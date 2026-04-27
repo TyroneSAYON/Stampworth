@@ -250,8 +250,8 @@ export default function Home() {
               </div>
               <div className="flex flex-col gap-2">
                 <p className="text-xs font-semibold text-[#2F4366] uppercase tracking-wider">Legal</p>
-                <a href="#" className="hover:text-[#2F4366] transition">Privacy Policy</a>
-                <a href="#" className="hover:text-[#2F4366] transition">Terms of Service</a>
+                <a href="/privacy" className="hover:text-[#2F4366] transition">Privacy Policy</a>
+                <a href="/terms" className="hover:text-[#2F4366] transition">Terms of Service</a>
               </div>
             </div>
           </div>
