@@ -230,18 +230,39 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-zinc-100 py-12 px-6 bg-zinc-50">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <Image src="/images/logo.png" alt="Stampworth" width={24} height={24} />
-            <span className="text-sm font-semibold text-[#2F4366]">Stampworth</span>
+      <footer className="border-t border-zinc-200 bg-zinc-50">
+        <div className="max-w-6xl mx-auto px-6 py-12">
+          {/* Top row */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-8 mb-10">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Image src="/images/logo.png" alt="Stampworth" width={28} height={28} />
+                <span className="text-lg font-bold text-[#2F4366]">Stampworth</span>
+              </div>
+              <p className="text-sm text-[#8A94A6] max-w-xs">Your virtual loyalty card. Made for Filipino SMEs and their customers.</p>
+            </div>
+            <div className="flex gap-8 text-sm text-[#8A94A6]">
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold text-[#2F4366] uppercase tracking-wider">Product</p>
+                <a href="#features" className="hover:text-[#2F4366] transition">Features</a>
+                <a href="#pricing" className="hover:text-[#2F4366] transition">Pricing</a>
+                <a href="#download" className="hover:text-[#2F4366] transition">Download</a>
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold text-[#2F4366] uppercase tracking-wider">Legal</p>
+                <a href="#" className="hover:text-[#2F4366] transition">Privacy Policy</a>
+                <a href="#" className="hover:text-[#2F4366] transition">Terms of Service</a>
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-6 text-sm text-[#8A94A6]">
-            <a href="#" className="hover:text-[#2F4366] transition">Privacy Policy</a>
-            <a href="#" className="hover:text-[#2F4366] transition">Terms of Service</a>
-            <a href="#" className="hover:text-[#2F4366] transition">Contact</a>
+
+          {/* Divider */}
+          <div className="border-t border-zinc-200 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-sm text-[#8A94A6]">
+              <p>Developed by <span className="font-semibold text-[#2F4366]">Tyrone Sayon</span>, <span className="font-semibold text-[#2F4366]">Aaron Bales</span> & <span className="font-semibold text-[#2F4366]">Vonn Escodero</span></p>
+            </div>
+            <p className="text-xs text-[#C4CAD4]">© 2026 Stampworth. All rights reserved.</p>
           </div>
-          <p className="text-xs text-[#C4CAD4]">© 2026 Stampworth. Made in the Philippines.</p>
         </div>
       </footer>
     </>
