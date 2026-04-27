@@ -38,7 +38,7 @@ export default function Home() {
               Replace paper stamp cards with a simple QR code on your phone. Customers earn rewards digitally, businesses grow repeat visits. Made for Filipino SMEs.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-10">
-              <a href="#download" className="bg-[#2F4366] text-white text-base font-semibold px-8 py-3.5 rounded-2xl hover:bg-[#243552] transition shadow-lg shadow-[#2F4366]/20">
+              <a href="https://drive.google.com/drive/folders/1w0cLzPnKykE_H5OFHgysPbtGm3ytCzvd?usp=drive_link" target="_blank" rel="noopener noreferrer" className="bg-[#2F4366] text-white text-base font-semibold px-8 py-3.5 rounded-2xl hover:bg-[#243552] transition shadow-lg shadow-[#2F4366]/20">
                 Download APK
               </a>
               <a href="#business" className="bg-white text-[#2F4366] text-base font-semibold px-8 py-3.5 rounded-2xl border border-zinc-200 hover:bg-zinc-50 transition">
@@ -181,21 +181,27 @@ export default function Home() {
             <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-4">Android Beta — Scan to download</p>
             <Image src="/images/logo.png" alt="Stampworth" width={48} height={48} className="mx-auto mb-4" />
             <h2 className="text-3xl font-bold text-white mb-2">Download Stampworth</h2>
-            <p className="text-white/50 mb-10">Scan the QR code with your phone camera to get the APK.</p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
-              {[
-                { label: "Stampworth", sub: "For customers", logo: "/images/logo.png" },
-                { label: "Stampworth Business", sub: "For store owners", logo: "/images/logo-business.png" },
-              ].map((app) => (
-                <div key={app.label} className="bg-white rounded-2xl p-6 w-52">
-                  <div className="w-36 h-36 mx-auto mb-3 rounded-lg bg-zinc-50 border border-zinc-100 flex items-center justify-center">
-                    <svg viewBox="0 0 200 200" width="120" height="120"><rect width="200" height="200" fill="white"/><g fill="#2F4366"><rect x="20" y="20" width="60" height="60"/><rect x="30" y="30" width="40" height="40" fill="white"/><rect x="40" y="40" width="20" height="20"/><rect x="120" y="20" width="60" height="60"/><rect x="130" y="30" width="40" height="40" fill="white"/><rect x="140" y="40" width="20" height="20"/><rect x="20" y="120" width="60" height="60"/><rect x="30" y="130" width="40" height="40" fill="white"/><rect x="40" y="140" width="20" height="20"/><rect x="90" y="20" width="10" height="10"/><rect x="90" y="50" width="10" height="10"/><rect x="20" y="90" width="10" height="10"/><rect x="50" y="90" width="10" height="10"/><rect x="90" y="90" width="10" height="10"/><rect x="120" y="100" width="10" height="10"/><rect x="150" y="100" width="10" height="10"/><rect x="90" y="120" width="10" height="10"/><rect x="120" y="130" width="20" height="20"/><rect x="160" y="130" width="10" height="10"/><rect x="120" y="160" width="10" height="10"/><rect x="150" y="170" width="20" height="10"/></g></svg>
-                  </div>
-                  <Image src={app.logo} alt={app.label} width={24} height={24} className="mx-auto mb-1" />
-                  <p className="text-sm font-bold text-[#1A1A2E]">{app.label}</p>
-                  <p className="text-[11px] text-[#8A94A6]">{app.sub}</p>
-                </div>
-              ))}
+            <p className="text-white/50 mb-10">Scan the QR code or tap the button below to download both apps.</p>
+
+            {/* QR Code */}
+            <div className="bg-white rounded-2xl p-6 inline-block mb-8">
+              <Image src="/images/download-qr.png" alt="Download QR Code" width={200} height={200} className="mx-auto rounded-lg" />
+              <p className="text-sm font-bold text-[#1A1A2E] mt-3">Scan to download</p>
+              <p className="text-[11px] text-[#8A94A6]">Both apps available</p>
+            </div>
+
+            {/* Download button */}
+            <div>
+              <a
+                href="https://drive.google.com/drive/folders/1w0cLzPnKykE_H5OFHgysPbtGm3ytCzvd?usp=drive_link"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-white text-[#2F4366] text-base font-semibold px-8 py-3.5 rounded-2xl hover:bg-zinc-100 transition shadow-lg"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download APK from Google Drive
+              </a>
+              <p className="text-[11px] text-white/30 mt-4">Contains Stampworth (customer) and Stampworth Business (store owner) APK files.</p>
             </div>
           </div>
         </section>
