@@ -405,7 +405,11 @@ export const recordMerchantLogin = async () => {
 };
 
 export const getCurrentMerchantProfile = async () => {
-  return ensureCurrentMerchantProfile();
+  const cached = await getCache('merchant_profile');
+  const result = await ensureCurrentMerchantProfile();
+  if (result.data) setCache('merchant_profile', result.data, 10 * 60 * 1000);
+  if (!result.data && cached) return { data: cached, error: null };
+  return result;
 };
 
 export const saveMerchantStoreSetup = async (payload: {
@@ -1076,6 +1080,7 @@ export const getMerchantNotifications = async () => {
   // Sort by date
   notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+  setCache('merchant_notifications', notifications, 2 * 60 * 1000);
   return { data: notifications, error: null };
 };
 
@@ -1142,6 +1147,7 @@ export const getMerchantAnnouncements = async () => {
   const { data: merchant, error: merchantError } = await ensureCurrentMerchantProfile();
   if (merchantError || !merchant) return { data: null, error: merchantError };
 
+  const cached = await getCache('merchant_announcements');
   const { data, error } = await supabase
     .from('merchant_announcements')
     .select('*')
@@ -1149,13 +1155,18 @@ export const getMerchantAnnouncements = async () => {
     .order('created_at', { ascending: false })
     .limit(50);
 
-  return { data, error };
+  if (data) setCache('merchant_announcements', data, 3 * 60 * 1000);
+  return { data: data || cached, error };
 };
 
 // Explore analytics
 export const getMerchantExploreAnalytics = async () => {
+  const cached = await getCache('explore_analytics');
   const { data: merchant, error: merchantError } = await ensureCurrentMerchantProfile();
-  if (merchantError || !merchant) return { data: null, error: merchantError };
+  if (merchantError || !merchant) {
+    if (cached) return { data: cached, error: null };
+    return { data: null, error: merchantError };
+  }
 
   // Total redeemed
   const { count: totalRedeemed } = await supabase
@@ -1203,6 +1214,9 @@ export const getMerchantExploreAnalytics = async () => {
     },
     error: null,
   };
+
+  setCache('explore_analytics', result.data, 3 * 60 * 1000);
+  return result;
 };
 
 // Search customers by name or email

@@ -11,12 +11,16 @@ type CustomerProfile = {
 };
 
 export const getOrCreateCustomerProfile = async () => {
+  // Return cached profile instantly
+  const cached = await getCache<CustomerProfile>('customer_profile');
+
   const {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
+    if (cached) return { data: cached, error: null };
     return { data: null, error: userError || new Error('No authenticated user found') };
   }
 
@@ -28,6 +32,7 @@ export const getOrCreateCustomerProfile = async () => {
     .maybeSingle();
 
   if (existing) {
+    setCache('customer_profile', existing, 10 * 60 * 1000); // 10 min
     return { data: existing as CustomerProfile, error: null };
   }
 
@@ -233,6 +238,7 @@ export const getCustomerAnnouncements = async (customerId: string) => {
   // Sort by date descending
   all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+  setCache(`announcements_${customerId}`, all, 3 * 60 * 1000); // 3 min
   return { data: all, error: null };
 };
 
@@ -406,6 +412,7 @@ export const createStoreVisit = async (customerId: string, merchantId: string, l
 
 // Get stamp records for a loyalty card (valid only, ordered by date)
 export const getStampRecordsForCard = async (loyaltyCardId: string) => {
+  const cached = await getCache(`stamps_${loyaltyCardId}`);
   const { data, error } = await supabase
     .from('stamps')
     .select('id, earned_date, is_valid')
@@ -413,7 +420,8 @@ export const getStampRecordsForCard = async (loyaltyCardId: string) => {
     .eq('is_valid', true)
     .order('earned_date', { ascending: true });
 
-  return { data: data || [], error };
+  if (data) setCache(`stamps_${loyaltyCardId}`, data, 60 * 1000); // 1 min
+  return { data: data || cached || [], error };
 };
 
 export const sendSupportMessage = async (subject: string, message: string) => {
@@ -452,6 +460,8 @@ export const getCustomerPendingRewards = async (merchantId: string) => {
   const { data: customer } = await getOrCreateCustomerProfile();
   if (!customer) return { data: [], error: null };
 
+  const cacheKey = `pending_rewards_${merchantId}_${customer.id}`;
+  const cached = await getCache(cacheKey);
   const { data, error } = await supabase
     .from('redeemed_rewards')
     .select('id, reward_code, stamps_used, created_at')
@@ -460,7 +470,8 @@ export const getCustomerPendingRewards = async (merchantId: string) => {
     .eq('is_used', false)
     .order('created_at', { ascending: false });
 
-  return { data: data || [], error };
+  if (data) setCache(cacheKey, data, 2 * 60 * 1000); // 2 min
+  return { data: data || cached || [], error };
 };
 
 // Convenience: get current user's loyalty cards
