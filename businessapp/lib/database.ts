@@ -37,6 +37,7 @@ type MerchantProfile = {
   logo_url?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  created_at?: string | null;
 };
 
 type MerchantAccountInput = {
@@ -1191,7 +1192,7 @@ export const getMerchantExploreAnalytics = async () => {
     .eq('merchant_id', merchant.id)
     .order('total_stamps_earned', { ascending: false });
 
-  return {
+  const result = {
     data: {
       merchantId: merchant.id,
       totalRedeemed: totalRedeemed || 0,

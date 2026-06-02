@@ -540,8 +540,6 @@ const styles = StyleSheet.create({
   // Map
   mapContainer: { marginHorizontal: 16, height: 440, borderRadius: 16, overflow: 'hidden', marginBottom: 16, backgroundColor: '#E8ECF1' },
   map: { flex: 1 },
-  markerPin: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2F4366', borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  markerLogo: { width: 36, height: 36, borderRadius: 18 },
 
   mapExpandBtn: { position: 'absolute', top: 10, right: 10, width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(47, 67, 102, 0.85)', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 4 },
 

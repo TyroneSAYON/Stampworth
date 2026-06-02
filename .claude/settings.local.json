@@ -40,7 +40,10 @@
       "Bash(__NEW_LINE_3e67e58b673a01e9__ done:*)",
       "WebFetch(domain:tarsi.pocketdevs.ph)",
       "Bash(mkdir -p /c/Users/AARON/Stampworth/website)",
-      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --no-turbopack)"
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --no-turbopack)",
+      "Bash(git *)",
+      "PowerShell(Get-Content -Encoding Byte \"C:\\\\Users\\\\Hello World\\\\Desktop\\\\Stampworth\\\\businessapp\\\\app\\\\signin.tsx\" | Select-Object -First 10 | ForEach-Object { '{0:X2}' -f $_ })",
+      "Bash(python3 *)"
     ]
   }
 }

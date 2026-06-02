@@ -12,12 +12,12 @@ export class LocationsService {
       });
 
       if (error) {
-        throw new BadRequestException(error.message);
+        throw new BadRequestException((error as Error).message);
       }
 
       return data;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException((error as Error).message);
     }
   }
 
@@ -29,16 +29,16 @@ export class LocationsService {
       });
 
       if (error) {
-        throw new BadRequestException(error.message);
+        throw new BadRequestException((error as Error).message);
       }
 
       return data;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException((error as Error).message);
     }
   }
 
-  async checkGeofence(customerId: string, merchantId: string) {
+  async checkGeofence(latitude: number, longitude: number, customerId: string, merchantId: string) {
     try {
       const { data, error } = await supabaseAdmin.rpc('is_customer_in_geofence', {
         customer_id_param: customerId,
@@ -46,12 +46,12 @@ export class LocationsService {
       });
 
       if (error) {
-        throw new BadRequestException(error.message);
+        throw new BadRequestException((error as Error).message);
       }
 
       return { inGeofence: data };
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException((error as Error).message);
     }
   }
 
@@ -69,12 +69,12 @@ export class LocationsService {
         .single();
 
       if (error) {
-        throw new BadRequestException(error.message);
+        throw new BadRequestException((error as Error).message);
       }
 
       return data;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException((error as Error).message);
     }
   }
 
@@ -87,12 +87,12 @@ export class LocationsService {
         .order('created_at', { ascending: false });
 
       if (error) {
-        throw new BadRequestException(error.message);
+        throw new BadRequestException((error as Error).message);
       }
 
       return data;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException((error as Error).message);
     }
   }
 
@@ -110,12 +110,12 @@ export class LocationsService {
         .single();
 
       if (error) {
-        throw new BadRequestException(error.message);
+        throw new BadRequestException((error as Error).message);
       }
 
       return data;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException((error as Error).message);
     }
   }
 }
