@@ -480,3 +480,62 @@ export const getCustomerLoyaltyCards = async () => {
   if (customerError || !customer) return { data: null, error: customerError };
   return getUserLoyaltyCards(customer.id);
 };
+
+export type StampHistoryRecord = {
+  id: string;
+  loyalty_card_id: string;
+  earned_date: string;
+  merchant_id: string | null;
+  merchant_name: string;
+  merchant_logo: string | null;
+};
+
+export const getCustomerStampHistory = async () => {
+  const { data: customer } = await getOrCreateCustomerProfile();
+  if (!customer) return { data: [] as StampHistoryRecord[], error: new Error('Not authenticated') };
+
+  const cacheKey = `stamp_history_${customer.id}`;
+  const cached = await getCache<StampHistoryRecord[]>(cacheKey);
+
+  const { data: stamps, error } = await supabase
+    .from('stamps')
+    .select('id, earned_date, loyalty_card_id')
+    .eq('customer_id', customer.id)
+    .eq('is_valid', true)
+    .order('earned_date', { ascending: false })
+    .limit(300);
+
+  if (error || !stamps || stamps.length === 0) {
+    return { data: cached || [], error };
+  }
+
+  const loyaltyCardIds = [...new Set(stamps.map((s: any) => s.loyalty_card_id))];
+  const { data: loyaltyCards } = await supabase
+    .from('loyalty_cards')
+    .select('id, merchant_id')
+    .in('id', loyaltyCardIds);
+
+  const merchantIds = [...new Set((loyaltyCards || []).map((c: any) => c.merchant_id))];
+  const { data: merchants } = merchantIds.length > 0
+    ? await supabase.from('merchants').select('id, business_name, logo_url').in('id', merchantIds)
+    : { data: [] };
+
+  const cardToMerchant = new Map((loyaltyCards || []).map((c: any) => [c.id, c.merchant_id]));
+  const merchantMap = new Map((merchants || []).map((m: any) => [m.id, m]));
+
+  const enriched: StampHistoryRecord[] = stamps.map((stamp: any) => {
+    const merchantId = cardToMerchant.get(stamp.loyalty_card_id) || null;
+    const merchant = merchantId ? merchantMap.get(merchantId) : null;
+    return {
+      id: stamp.id,
+      loyalty_card_id: stamp.loyalty_card_id,
+      earned_date: stamp.earned_date,
+      merchant_id: merchantId,
+      merchant_name: merchant?.business_name || 'Unknown Store',
+      merchant_logo: merchant?.logo_url || null,
+    };
+  });
+
+  setCache(cacheKey, enriched, 2 * 60 * 1000);
+  return { data: enriched, error: null };
+};

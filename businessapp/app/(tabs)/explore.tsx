@@ -10,11 +10,17 @@ import {
   getCustomerLoyaltyCardProgress,
   getCurrentMerchantProfile,
   saveMerchantLocation,
-  getNearbyCustomersWithLocation,
+  getNearbyCustomerCount,
 } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
 
-const NEARBY_REFRESH_MS = 8000; // refresh nearby customers every 8s for live tracking
+const NEARBY_REFRESH_MS = 15000;
+const SLIDER_MAX = 2000;
+
+const formatRadius = (v: number) => {
+  if (v < 1000) return `${v}m`;
+  return v % 1000 === 0 ? `${v / 1000}km` : `${(v / 1000).toFixed(1)}km`;
+};
 
 let Location: typeof import('expo-location') | null = null;
 try { Location = require('expo-location'); } catch {}
@@ -27,17 +33,9 @@ const esc = (s: string) => s.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
 const buildLeafletHtml = (
   center: { latitude: number; longitude: number },
   storePin: { lat: number; lng: number; name: string; address: string } | null,
-  customers: { id: string; lat: number; lng: number; name: string; dist: number | null; inside: boolean }[],
   radius: number,
   userLoc: { latitude: number; longitude: number } | null,
 ) => {
-  const customerMarkers = customers.map((c) => {
-    const color = c.inside ? '#27AE60' : '#E74C3C';
-    const popup = '<b>' + esc(c.name) + '</b><br/>' + (c.dist !== null ? c.dist + 'm away' : '');
-    return `L.circleMarker([${c.lat},${c.lng}],{radius:8,fillColor:'${color}',color:'#fff',weight:2,fillOpacity:1}).addTo(map).bindPopup('${popup}');`;
-  }).join('\n');
-
-  // Zoom to fit the geofence radius around the store
   let viewSetup = '';
   if (storePin) {
     viewSetup = `var rc=L.circle([${storePin.lat},${storePin.lng}],{radius:${Math.max(radius, 200)}}).addTo(map).remove();map.fitBounds(rc.getBounds(),{padding:[30,30],maxZoom:17});`;
@@ -57,9 +55,6 @@ html,body,#map{width:100%;height:100%;margin:0;padding:0;}
 .user-pulse{width:14px;height:14px;position:relative}
 .user-pulse .dot{width:14px;height:14px;border-radius:50%;background:#4285F4;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);position:absolute;z-index:2}
 .user-pulse .ring{width:14px;height:14px;border-radius:50%;background:#4285F4;position:absolute;animation:pulse 2s ease-out infinite}
-.cust-green{width:12px;height:12px;position:relative}
-.cust-green .dot{width:12px;height:12px;border-radius:50%;background:#27AE60;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.2);position:absolute;z-index:2}
-.cust-green .ring{width:12px;height:12px;border-radius:50%;background:#27AE60;position:absolute;animation:pulse 2.5s ease-out infinite}
 </style>
 </head><body>
 <div id="map"></div>
@@ -71,7 +66,6 @@ var storeIcon=L.divIcon({className:'',html:'<div class="store-pin"><div class="d
 L.marker([${storePin.lat},${storePin.lng}],{icon:storeIcon,zIndexOffset:900}).addTo(map).bindPopup('<b>${esc(storePin.name)}</b><br/>${esc(storePin.address)}');
 L.circle([${storePin.lat},${storePin.lng}],{radius:${radius},color:'#2F4366',fillColor:'#2F4366',fillOpacity:0.06,weight:1.5,dashArray:'6,4'}).addTo(map);
 ` : ''}
-${customerMarkers}
 ${userLoc ? `
 var userIcon=L.divIcon({className:'',html:'<div class="user-pulse"><div class="ring"></div><div class="dot"></div></div>',iconSize:[14,14],iconAnchor:[7,7]});
 L.marker([${userLoc.latitude},${userLoc.longitude}],{icon:userIcon,zIndexOffset:1000}).addTo(map).bindPopup('You (merchant)');
@@ -80,8 +74,6 @@ ${viewSetup}
 <\/script>
 </body></html>`;
 };
-
-type NearbyCustomer = { id: string; name: string; email: string; latitude: number; longitude: number; updatedAt?: string };
 
 export default function ExploreScreen() {
   const [mapFullscreen, setMapFullscreen] = useState(false);
@@ -94,40 +86,37 @@ export default function ExploreScreen() {
   const [totalRedeemed, setTotalRedeemed] = useState(0);
   const [mostLoyal, setMostLoyal] = useState<{ name: string; totalStampsEarned: number } | null>(null);
   const [cardHolders, setCardHolders] = useState<any[]>([]);
-  const [nearbyCustomers, setNearbyCustomers] = useState<NearbyCustomer[]>([]);
+  const [nearbyCount, setNearbyCount] = useState(0);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [geofenceRadius, setGeofenceRadius] = useState(22);
+  const [geofenceRadius, setGeofenceRadius] = useState(500);
+  const [sliderWidth, setSliderWidth] = useState(1);
+  const [draftRadius, setDraftRadius] = useState<number | null>(null);
+  const activeRadius = draftRadius ?? geofenceRadius;
   const [savingLocation, setSavingLocation] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const merchantIdRef = useRef<string | null>(null);
+  const geofenceRadiusRef = useRef(500);
 
-  // Search
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
 
-  // Customer card modal
   const [selectedCard, setSelectedCard] = useState<any>(null);
   const [cardModalVisible, setCardModalVisible] = useState(false);
   const [loadingCard, setLoadingCard] = useState(false);
 
   const refreshNearby = useCallback(() => {
     if (merchantIdRef.current) {
-      getNearbyCustomersWithLocation(merchantIdRef.current).then(({ data }) => {
-        setNearbyCustomers(data || []);
-        setLastRefreshed(new Date());
+      getNearbyCustomerCount(merchantIdRef.current, geofenceRadiusRef.current).then(({ count }) => {
+        setNearbyCount(count);
       });
     }
   }, []);
 
   useFocusEffect(useCallback(() => {
     if (!loaded) init();
-
-    // Auto-refresh every 15s
     refreshIntervalRef.current = setInterval(refreshNearby, NEARBY_REFRESH_MS);
-
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
@@ -136,7 +125,6 @@ export default function ExploreScreen() {
     };
   }, [loaded]));
 
-  // Realtime: instant updates when customer locations change or scans happen
   useEffect(() => {
     const channel = supabase
       .channel('explore-realtime')
@@ -149,7 +137,6 @@ export default function ExploreScreen() {
   const init = async () => {
     setLoading(true);
 
-    // Run all queries in parallel
     const [merchantResult, analyticsResult, locationResult] = await Promise.all([
       getCurrentMerchantProfile(),
       getMerchantExploreAnalytics(),
@@ -181,16 +168,13 @@ export default function ExploreScreen() {
       setUserLocation({ latitude: locationResult.coords.latitude, longitude: locationResult.coords.longitude });
     }
 
-    // Nearby customers in background (don't block render)
     if (merchant) {
-      getNearbyCustomersWithLocation(merchant.id).then(({ data }) => setNearbyCustomers(data || []));
+      getNearbyCustomerCount(merchant.id, geofenceRadiusRef.current).then(({ count }) => setNearbyCount(count));
     }
 
     setLoading(false);
     setLoaded(true);
   };
-
-  const refresh = () => { setLoaded(false); };
 
   const handlePinLocation = async () => {
     if (!userLocation) { Alert.alert('No location', 'Enable location services first.'); return; }
@@ -221,15 +205,6 @@ export default function ExploreScreen() {
     setSelectedCard(data);
   };
 
-  const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const toRad = (v: number) => (v * Math.PI) / 180;
-    const R = 6371000;
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-    return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-  };
-
   if (loading) {
     return <ThemedView style={styles.container}><View style={styles.center}><ActivityIndicator size="large" color="#2F4366" /></View></ThemedView>;
   }
@@ -237,6 +212,10 @@ export default function ExploreScreen() {
   const mapCenter = merchantLat && merchantLng
     ? { latitude: merchantLat, longitude: merchantLng }
     : userLocation || { latitude: 14.5995, longitude: 120.9842 };
+
+  const storePin = merchantLat && merchantLng
+    ? { lat: merchantLat, lng: merchantLng, name: merchantName, address: merchantAddress || 'Your store' }
+    : null;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -254,33 +233,18 @@ export default function ExploreScreen() {
         </View>
 
         <Text style={styles.pageTitle}>Explore</Text>
-        <Text style={styles.pageSubtitle}>Your store location and nearby customers</Text>
+        <Text style={styles.pageSubtitle}>Your store location and nearby customer analytics</Text>
 
         {/* Map */}
         <View style={styles.sectionTitleRow}>
           <Text style={styles.sectionTitle}>Store Map</Text>
-          {nearbyCustomers.length > 0 && (
-            <View style={styles.liveBadge}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>LIVE</Text>
-            </View>
-          )}
         </View>
         {WebView ? (() => {
-          const mapHtml = buildLeafletHtml(
-            mapCenter,
-            merchantLat && merchantLng ? { lat: merchantLat, lng: merchantLng, name: merchantName, address: merchantAddress || 'Your store' } : null,
-            nearbyCustomers.map((c) => {
-              const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : null;
-              return { id: c.id, lat: c.latitude, lng: c.longitude, name: c.name, dist, inside: dist !== null && dist <= geofenceRadius };
-            }),
-            geofenceRadius,
-            userLocation,
-          );
+          const mapHtml = buildLeafletHtml(mapCenter, storePin, geofenceRadius, userLocation);
           return (
             <View style={styles.mapContainer}>
               <WebView
-                key={`map-${merchantLat}-${merchantLng}-${geofenceRadius}-${nearbyCustomers.length}`}
+                key={`map-${merchantLat}-${merchantLng}-${geofenceRadius}`}
                 source={{ html: mapHtml }}
                 style={{ flex: 1 }}
                 javaScriptEnabled
@@ -301,7 +265,7 @@ export default function ExploreScreen() {
           </View>
         )}
 
-        {/* Pin / Radius controls */}
+        {/* Pin location control */}
         <View style={styles.mapControls}>
           {!merchantLat || !merchantLng ? (
             <TouchableOpacity style={styles.pinButton} onPress={handlePinLocation} disabled={savingLocation || !userLocation}>
@@ -323,84 +287,83 @@ export default function ExploreScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.storeInfoName}>{merchantName}</Text>
                 <Text style={styles.storeInfoAddress}>{merchantAddress || 'No address set'}</Text>
-                <Text style={styles.storeInfoCoords}>{merchantLat.toFixed(5)}, {merchantLng.toFixed(5)}</Text>
               </View>
             </View>
 
-            <Text style={styles.geofenceLabel}>Geofence Radius</Text>
-            <View style={styles.radiusRow}>
-              {[22, 500, 1000, 2000].map((r) => (
-                <TouchableOpacity key={r} style={[styles.radiusChip, geofenceRadius === r && styles.radiusChipActive]} onPress={() => setGeofenceRadius(r)}>
-                  <Text style={[styles.radiusChipText, geofenceRadius === r && styles.radiusChipTextActive]}>{r}m</Text>
-                </TouchableOpacity>
-              ))}
+            {/* Geofence radius slider */}
+            <View style={styles.radiusSection}>
+              <View style={styles.radiusHeaderRow}>
+                <Text style={styles.geofenceLabel}>Geofence Radius</Text>
+                <View style={styles.radiusValueBadge}>
+                  <Text style={styles.radiusValueText}>{formatRadius(activeRadius)}</Text>
+                </View>
+              </View>
+              <View
+                style={styles.sliderOuter}
+                onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
+                onStartShouldSetResponder={() => true}
+                onMoveShouldSetResponder={() => true}
+                onResponderGrant={(e) => setDraftRadius(Math.round(Math.max(0, Math.min(1, e.nativeEvent.locationX / sliderWidth)) * SLIDER_MAX))}
+                onResponderMove={(e) => setDraftRadius(Math.round(Math.max(0, Math.min(1, e.nativeEvent.locationX / sliderWidth)) * SLIDER_MAX))}
+                onResponderRelease={(e) => {
+                  const v = Math.round(Math.max(0, Math.min(1, e.nativeEvent.locationX / sliderWidth)) * SLIDER_MAX);
+                  setDraftRadius(null);
+                  setGeofenceRadius(v);
+                  geofenceRadiusRef.current = v;
+                  if (merchantIdRef.current) {
+                    getNearbyCustomerCount(merchantIdRef.current, v).then(({ count }) => setNearbyCount(count));
+                  }
+                }}
+              >
+                <View style={styles.sliderTrack} pointerEvents="none">
+                  <View style={[styles.sliderFill, { width: `${(activeRadius / SLIDER_MAX) * 100}%` }]} />
+                </View>
+                <View style={[styles.sliderThumb, { left: (activeRadius / SLIDER_MAX) * Math.max(0, sliderWidth - 22) }]} pointerEvents="none" />
+              </View>
+              <View style={styles.sliderRangeRow}>
+                <Text style={styles.sliderRangeText}>0m</Text>
+                <Text style={styles.sliderRangeText}>2km</Text>
+              </View>
             </View>
 
-            {/* Nearby Customers within geofence */}
-            {(() => {
-              const insideCustomers = nearbyCustomers.filter((c) =>
-                merchantLat && merchantLng
-                  ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) <= geofenceRadius
-                  : false
-              );
-              const outsideCustomers = nearbyCustomers.filter((c) =>
-                merchantLat && merchantLng
-                  ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) > geofenceRadius
-                  : false
-              );
+            {/* Nearby customer analytics — privacy-preserving aggregate only */}
+            <View style={styles.nearbyCard}>
+              <View style={styles.nearbyCardHeader}>
+                <Text style={styles.nearbyCardTitle}>Nearby Customers</Text>
+                <View style={styles.privacyBadge}>
+                  <Ionicons name="shield-checkmark" size={12} color="#27AE60" />
+                  <Text style={styles.privacyBadgeText}>Privacy Protected</Text>
+                </View>
+              </View>
 
-              return (
-                <>
-                  <View style={styles.geofenceHeaderRow}>
-                    <Text style={styles.geofenceSectionTitle}>
-                      Nearby Customers
-                    </Text>
-                    <View style={[styles.geofenceCountBadge, { backgroundColor: insideCustomers.length > 0 ? '#E8F8EE' : '#F0F2F5' }]}>
-                      <Text style={[styles.geofenceCountText, { color: insideCustomers.length > 0 ? '#27AE60' : '#8A94A6' }]}>
-                        {insideCustomers.length} within {geofenceRadius}m
-                      </Text>
-                    </View>
+              {nearbyCount > 0 ? (
+                <View style={styles.nearbyCountRow}>
+                  <View style={styles.nearbyCountCircle}>
+                    <Text style={styles.nearbyCountNumber}>{nearbyCount}</Text>
                   </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.nearbyCountLabel}>
+                      {nearbyCount === 1
+                        ? 'There is 1 nearby customer'
+                        : `There are ${nearbyCount} nearby customers`}
+                    </Text>
+                    <Text style={styles.nearbyCountSub}>within your {formatRadius(geofenceRadius)} radius</Text>
+                  </View>
+                  <Ionicons name="people" size={22} color="#2F4366" style={{ opacity: 0.35 }} />
+                </View>
+              ) : (
+                <View style={styles.nearbyEmptyRow}>
+                  <Ionicons name="radio-outline" size={22} color="#C4CAD4" />
+                  <Text style={styles.nearbyEmptyText}>
+                    No customers detected within {formatRadius(geofenceRadius)}
+                  </Text>
+                </View>
+              )}
 
-                  {insideCustomers.length === 0 && outsideCustomers.length === 0 ? (
-                    <View style={styles.geofenceEmpty}>
-                      <Ionicons name="location-outline" size={28} color="#C4CAD4" />
-                      <Text style={styles.geofenceEmptyTitle}>No customers tracked yet</Text>
-                      <Text style={styles.geofenceEmptyText}>Customers using Stampworth with location enabled will appear here</Text>
-                    </View>
-                  ) : insideCustomers.length === 0 ? (
-                    <View style={styles.geofenceEmpty}>
-                      <Ionicons name="radio-outline" size={28} color="#C4CAD4" />
-                      <Text style={styles.geofenceEmptyTitle}>No customers within {geofenceRadius}m</Text>
-                      <Text style={styles.geofenceEmptyText}>{outsideCustomers.length} customer{outsideCustomers.length !== 1 ? 's' : ''} tracked outside the radius</Text>
-                    </View>
-                  ) : (
-                    insideCustomers.map((c) => {
-                      const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : 0;
-                      return (
-                        <TouchableOpacity key={c.id} style={styles.nearbyRow} onPress={() => viewCustomerCard(c.id)}>
-                          <View style={styles.nearbyAvatar}>
-                            <Ionicons name="person" size={14} color="#FFFFFF" />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.nearbyName}>{c.name}</Text>
-                            <Text style={styles.nearbyEmail}>{c.email}</Text>
-                          </View>
-                          <View style={styles.nearbyDistBadge}>
-                            <Ionicons name="navigate-outline" size={10} color="#27AE60" />
-                            <Text style={styles.nearbyDistText}>{dist}m</Text>
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })
-                  )}
-
-                  {outsideCustomers.length > 0 && insideCustomers.length > 0 && (
-                    <Text style={styles.outsideLabel}>{outsideCustomers.length} more outside {geofenceRadius}m radius</Text>
-                  )}
-                </>
-              );
-            })()}
+              <Text style={styles.nearbyDisclaimer}>
+                Only aggregate presence counts are shown. No identities, coordinates, or movement data are accessible.
+              </Text>
+            </View>
           </>
         )}
 
@@ -413,11 +376,7 @@ export default function ExploreScreen() {
           </View>
           <View style={[styles.statCard, { backgroundColor: '#E8F8EE' }]}>
             <Ionicons name="navigate" size={20} color="#27AE60" />
-            <Text style={[styles.statNumber, { color: '#27AE60' }]}>
-              {merchantLat && merchantLng
-                ? nearbyCustomers.filter((c) => haversine(merchantLat, merchantLng, c.latitude, c.longitude) <= geofenceRadius).length
-                : nearbyCustomers.length}
-            </Text>
+            <Text style={[styles.statNumber, { color: '#27AE60' }]}>{nearbyCount}</Text>
             <Text style={styles.statLabel}>Nearby</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: '#FFF4E6' }]}>
@@ -485,42 +444,19 @@ export default function ExploreScreen() {
         <Modal visible={mapFullscreen} animationType="slide" onRequestClose={() => setMapFullscreen(false)}>
           <View style={styles.fullscreenMap}>
             <WebView
-              key={`fullmap-${merchantLat}-${merchantLng}-${geofenceRadius}-${nearbyCustomers.length}`}
-              source={{ html: buildLeafletHtml(
-                mapCenter,
-                merchantLat && merchantLng ? { lat: merchantLat, lng: merchantLng, name: merchantName, address: merchantAddress || 'Your store' } : null,
-                nearbyCustomers.map((c) => {
-                  const dist = merchantLat && merchantLng ? haversine(merchantLat, merchantLng, c.latitude, c.longitude) : null;
-                  return { id: c.id, lat: c.latitude, lng: c.longitude, name: c.name, dist, inside: dist !== null && dist <= geofenceRadius };
-                }),
-                geofenceRadius,
-                userLocation,
-              )}}
+              key={`fullmap-${merchantLat}-${merchantLng}-${geofenceRadius}`}
+              source={{ html: buildLeafletHtml(mapCenter, storePin, geofenceRadius, userLocation) }}
               style={{ flex: 1 }}
               javaScriptEnabled
               domStorageEnabled
               originWhitelist={['*']}
             />
-            {/* Radius chips overlay */}
-            <View style={styles.fullscreenRadiusRow}>
-              {[22, 500, 1000, 2000].map((r) => (
-                <TouchableOpacity key={r} style={[styles.fullscreenRadiusChip, geofenceRadius === r && styles.fullscreenRadiusChipActive]} onPress={() => setGeofenceRadius(r)}>
-                  <Text style={[styles.fullscreenRadiusText, geofenceRadius === r && styles.fullscreenRadiusTextActive]}>{r >= 1000 ? `${r / 1000}km` : `${r}m`}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {/* Nearby count badge */}
             <View style={styles.fullscreenBadge}>
               <View style={styles.fullscreenBadgeDot} />
-              <Text style={styles.fullscreenBadgeText}>
-                {merchantLat && merchantLng
-                  ? nearbyCustomers.filter((c) => haversine(merchantLat, merchantLng, c.latitude, c.longitude) <= geofenceRadius).length
-                  : 0} nearby
-              </Text>
+              <Text style={styles.fullscreenBadgeText}>{nearbyCount} nearby</Text>
               <Text style={styles.fullscreenBadgeSep}>·</Text>
-              <Text style={styles.fullscreenBadgeText}>{nearbyCustomers.length} tracked</Text>
+              <Text style={styles.fullscreenBadgeText}>{formatRadius(geofenceRadius)} radius</Text>
             </View>
-            {/* Close button */}
             <TouchableOpacity style={styles.fullscreenCloseBtn} onPress={() => setMapFullscreen(false)}>
               <Ionicons name="contract" size={20} color="#FFFFFF" />
             </TouchableOpacity>
@@ -592,26 +528,17 @@ const styles = StyleSheet.create({
   pageSubtitle: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', paddingHorizontal: 24, marginTop: 4, marginBottom: 20 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 12, marginTop: 8 },
   sectionTitle: { fontSize: 15, fontFamily: 'Poppins-SemiBold', color: '#2F4366', paddingHorizontal: 24, marginBottom: 12, marginTop: 8 },
-  liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#E8F8EE', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#27AE60' },
-  liveText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#27AE60', letterSpacing: 0.5 },
 
-  // Map
   mapContainer: { marginHorizontal: 24, height: 450, borderRadius: 16, overflow: 'hidden', marginBottom: 12, backgroundColor: '#E8ECF1' },
   mapExpandBtn: { position: 'absolute', top: 10, right: 10, width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(47, 67, 102, 0.85)', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 4, elevation: 4 },
 
-  // Fullscreen map
   fullscreenMap: { flex: 1, backgroundColor: '#000' },
   fullscreenCloseBtn: { position: 'absolute', top: 56, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(47, 67, 102, 0.9)', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 6 },
-  fullscreenRadiusRow: { position: 'absolute', top: 56, left: 16, flexDirection: 'row', gap: 6 },
-  fullscreenRadiusChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.9)', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
-  fullscreenRadiusChipActive: { backgroundColor: '#2F4366' },
-  fullscreenRadiusText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
-  fullscreenRadiusTextActive: { color: '#FFFFFF' },
   fullscreenBadge: { position: 'absolute', bottom: 40, left: 16, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(47, 67, 102, 0.9)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
   fullscreenBadgeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#27AE60' },
   fullscreenBadgeText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
   fullscreenBadgeSep: { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
+
   mapPlaceholder: { marginHorizontal: 24, height: 180, borderRadius: 16, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 8 },
   placeholderText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
 
@@ -622,33 +549,34 @@ const styles = StyleSheet.create({
   storeInfoCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, marginBottom: 12 },
   storeInfoName: { fontSize: 15, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
   storeInfoAddress: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 1 },
-  storeInfoCoords: { fontSize: 10, fontFamily: 'Poppins-Regular', color: '#C4CAD4', marginTop: 2 },
 
-  geofenceLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#8A94A6', paddingHorizontal: 24, marginBottom: 8, letterSpacing: 0.5, textTransform: 'uppercase' },
-  radiusRow: { flexDirection: 'row', paddingHorizontal: 24, gap: 8, marginBottom: 16 },
-  radiusChip: { flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: '#FFFFFF', alignItems: 'center', borderWidth: 1, borderColor: '#E0E4EA' },
-  radiusChipActive: { backgroundColor: '#2F4366', borderColor: '#2F4366' },
-  radiusChipText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
-  radiusChipTextActive: { color: '#FFFFFF' },
+  geofenceLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#8A94A6', letterSpacing: 0.5, textTransform: 'uppercase' },
+  radiusSection: { paddingHorizontal: 24, marginBottom: 16 },
+  radiusHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  radiusValueBadge: { backgroundColor: '#2F4366', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  radiusValueText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+  sliderOuter: { height: 32, justifyContent: 'center', position: 'relative' },
+  sliderTrack: { height: 6, backgroundColor: '#DDE3EF', borderRadius: 3, overflow: 'hidden' },
+  sliderFill: { height: 6, backgroundColor: '#2F4366', borderRadius: 3 },
+  sliderThumb: { position: 'absolute', top: 5, width: 22, height: 22, borderRadius: 11, backgroundColor: '#FFFFFF', borderWidth: 2.5, borderColor: '#2F4366', shadowColor: '#2F4366', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
+  sliderRangeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  sliderRangeText: { fontSize: 10, fontFamily: 'Poppins-Regular', color: '#A0A8B5' },
 
-  geofenceHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, marginBottom: 10 },
-  geofenceSectionTitle: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
-  geofenceCountBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
-  geofenceCountText: { fontSize: 11, fontFamily: 'Poppins-SemiBold' },
+  // Privacy-preserving nearby analytics card
+  nearbyCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  nearbyCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  nearbyCardTitle: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  privacyBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E8F8EE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  privacyBadgeText: { fontSize: 10, fontFamily: 'Poppins-SemiBold', color: '#27AE60' },
+  nearbyCountRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 12 },
+  nearbyCountCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#EEF2F8', alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: '#2F4366' },
+  nearbyCountNumber: { fontSize: 22, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
+  nearbyCountLabel: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
+  nearbyCountSub: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
+  nearbyEmptyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  nearbyEmptyText: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6', flex: 1 },
+  nearbyDisclaimer: { fontSize: 10, fontFamily: 'Poppins-Regular', color: '#B0B8C4', borderTopWidth: 1, borderTopColor: '#F0F2F5', paddingTop: 10 },
 
-  geofenceEmpty: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 24, alignItems: 'center', marginBottom: 20, gap: 6 },
-  geofenceEmptyTitle: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
-  geofenceEmptyText: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#C4CAD4', textAlign: 'center' },
-
-  nearbyRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 12, marginBottom: 8, gap: 10 },
-  nearbyAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#27AE60', alignItems: 'center', justifyContent: 'center' },
-  nearbyName: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
-  nearbyEmail: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6', marginTop: 1 },
-  nearbyDistBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#E8F8EE', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  nearbyDistText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#27AE60' },
-  outsideLabel: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6', textAlign: 'center', marginBottom: 20, marginTop: 4 },
-
-  // Stats
   statsRow: { flexDirection: 'row', paddingHorizontal: 24, gap: 8, marginBottom: 16 },
   statCard: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center', gap: 4 },
   statNumber: { fontSize: 20, fontWeight: '700', fontFamily: 'Poppins-SemiBold' },
@@ -660,7 +588,6 @@ const styles = StyleSheet.create({
   loyalName: { fontSize: 14, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E', marginTop: 1 },
   loyalStamps: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#E67E22' },
 
-  // Search
   searchBox: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: 14, height: 46, gap: 10, marginBottom: 8 },
   searchInput: { flex: 1, fontSize: 14, fontFamily: 'Poppins-Regular', color: '#1A1A2E', padding: 0 },
   searchResults: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 12, marginBottom: 16, overflow: 'hidden' },
@@ -669,7 +596,6 @@ const styles = StyleSheet.create({
   searchName: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
   searchEmail: { fontSize: 11, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
 
-  // Card holders
   customerRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 12, marginBottom: 8, gap: 10 },
   customerAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   customerName: { fontSize: 13, fontFamily: 'Poppins-SemiBold', color: '#1A1A2E' },
@@ -677,7 +603,6 @@ const styles = StyleSheet.create({
   emptyCard: { marginHorizontal: 24, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 24, alignItems: 'center' },
   emptyText: { fontSize: 13, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
 
-  // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 48, minHeight: 350 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },

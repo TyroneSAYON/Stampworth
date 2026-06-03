@@ -1,21 +1,16 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
-import { signIn, signInWithOAuth } from '@/lib/auth';
-import { GoogleLogo } from '@/components/google-logo';
-
-WebBrowser.maybeCompleteAuthSession();
+import { signIn } from '@/lib/auth';
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<'google' | 'facebook' | null>(null);
 
   const handleSignIn = async () => {
     if (!email.trim() || !password.trim()) { Alert.alert('Missing fields', 'Please enter your email and password.'); return; }
@@ -23,14 +18,6 @@ export default function SignInScreen() {
     const { error } = await signIn(email.trim(), password);
     setLoading(false);
     if (error) { Alert.alert('Sign in failed', error.message); return; }
-    router.replace('/(tabs)/qrcode');
-  };
-
-  const handleOAuth = async (provider: 'google' | 'facebook') => {
-    setSocialLoading(provider);
-    const { error } = await signInWithOAuth(provider);
-    setSocialLoading(null);
-    if (error) { Alert.alert(`${provider} sign in failed`, error.message); return; }
     router.replace('/(tabs)/qrcode');
   };
 
@@ -68,21 +55,6 @@ export default function SignInScreen() {
           <Text style={styles.linkText}>Don't have an account? <Text style={styles.linkBold}>Create one</Text></Text>
         </TouchableOpacity>
 
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        <View style={styles.socialRow}>
-          <TouchableOpacity style={styles.socialButton} onPress={() => handleOAuth('facebook')} disabled={loading || socialLoading !== null}>
-            <Ionicons name="logo-facebook" size={32} color="#1877F2" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.socialButton} onPress={() => handleOAuth('google')} disabled={loading || socialLoading !== null}>
-            <GoogleLogo size={32} />
-          </TouchableOpacity>
-        </View>
-        {socialLoading && <Text style={styles.socialLoadingText}>Signing in with {socialLoading}...</Text>}
       </KeyboardAwareScrollView>
     </KeyboardAvoidingView>
   );
@@ -105,10 +77,4 @@ const styles = StyleSheet.create({
   linkRow: { alignItems: 'center', marginBottom: 32 },
   linkText: { fontSize: 14, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
   linkBold: { color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
-  dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 28, gap: 12 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#E0E4EA' },
-  dividerText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#C4CAD4' },
-  socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 32 },
-  socialButton: { padding: 8, justifyContent: 'center', alignItems: 'center' },
-  socialLoadingText: { textAlign: 'center', marginTop: 16, fontSize: 13, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
 });

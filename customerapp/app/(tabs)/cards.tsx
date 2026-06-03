@@ -72,6 +72,9 @@ export default function CardsScreen() {
           <Image source={require('@/assets/images/stampworth-logo.png')} style={styles.logo} contentFit="contain" />
           <Text style={styles.brandName}>Stampworth</Text>
         </View>
+        <TouchableOpacity style={styles.historyBtn} onPress={() => router.push('/stamphistory')}>
+          <Ionicons name="time-outline" size={18} color="#2F4366" />
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.pageTitle}>My Cards</Text>
@@ -246,6 +249,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 8 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  historyBtn: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#EEF2F8', alignItems: 'center', justifyContent: 'center' },
   logo: { width: 32, height: 32 },
   brandName: { fontSize: 20, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold' },
   pageTitle: { fontSize: 26, fontWeight: '700', color: '#2F4366', fontFamily: 'Poppins-SemiBold', paddingHorizontal: 24, marginTop: 20 },

@@ -43,7 +43,11 @@
       "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --no-turbopack)",
       "Bash(git *)",
       "PowerShell(Get-Content -Encoding Byte \"C:\\\\Users\\\\Hello World\\\\Desktop\\\\Stampworth\\\\businessapp\\\\app\\\\signin.tsx\" | Select-Object -First 10 | ForEach-Object { '{0:X2}' -f $_ })",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Hello World\\\\Desktop\\\\Stampworth\\\\customerapp\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "Bash(node -e \"const p=require\\('C:/Users/Hello World/Desktop/Stampworth/customerapp/package.json'\\); const keys=Object.keys\\({...p.dependencies,...p.devDependencies}\\); console.log\\(keys.filter\\(k=>k.includes\\('slider'\\)||k.includes\\('Slider'\\)\\)\\)\")"
     ]
   }
 }

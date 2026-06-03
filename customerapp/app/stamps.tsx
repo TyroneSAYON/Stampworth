@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { getStampRecordsForCard, getCustomerPendingRewards, deleteCustomerLoyaltyCard, getOrCreateCustomerProfile } from '@/lib/database';
 import { supabase } from '@/lib/supabase';
+import { setActiveStampsCardId } from '@/lib/navigationState';
 
 const REWARD_CARD_W = 130;
 
@@ -46,6 +47,12 @@ export default function StampsScreen() {
     setStampCount(records.length);
     setPendingRewards(rewardsResult.data || []);
   };
+
+  // Tell qrcode.tsx which card is open so it skips redundant navigation
+  useEffect(() => {
+    setActiveStampsCardId(params.loyaltyCardId || null);
+    return () => { setActiveStampsCardId(null); };
+  }, [params.loyaltyCardId]);
 
   // Fetch on mount
   useEffect(() => { refreshData(); }, []);

@@ -6,12 +6,12 @@ import { useFocusEffect } from 'expo-router';
 import { getAllMerchants } from '@/lib/database';
 import { getGeofenceRadius, setGeofenceRadius, checkNearbyStores } from '@/lib/geofence';
 
-const RADIUS_OPTIONS = [
-  { label: '22m', value: 22 },
-  { label: '500m', value: 500 },
-  { label: '1km', value: 1000 },
-  { label: '2km', value: 2000 },
-];
+const SLIDER_MAX = 2000;
+
+const formatRadius = (v: number) => {
+  if (v < 1000) return `${v}m`;
+  return v % 1000 === 0 ? `${v / 1000}km` : `${(v / 1000).toFixed(1)}km`;
+};
 
 // Persists across remounts — stores that already triggered an alert this session
 const alertedStoresThisSession = new Set<string>();
@@ -108,6 +108,10 @@ export default function ExploreScreen() {
   const [loaded, setLoaded] = useState(false);
   const [nearbyAlert, setNearbyAlert] = useState<Merchant | null>(null);
   const [radius, setRadius] = useState(getGeofenceRadius());
+  const [sliderWidth, setSliderWidth] = useState(1);
+  const [fullSliderWidth, setFullSliderWidth] = useState(1);
+  const [draftRadius, setDraftRadius] = useState<number | null>(null);
+  const activeRadius = draftRadius ?? radius;
   const dismissedNearbyRef = useRef<Set<string>>(new Set());
   const nearbySlideAnim = useRef(new Animated.Value(-150)).current;
 
@@ -280,22 +284,38 @@ export default function ExploreScreen() {
       <Text style={styles.pageTitle}>Explore</Text>
       <Text style={styles.pageSubtitle}>Discover Stampworth partner stores</Text>
 
-      {/* Geofence radius selector */}
-      <View style={styles.radiusRow}>
-        <View style={styles.radiusLabelRow}>
-          <Ionicons name="navigate-circle" size={16} color="#2F4366" />
-          <Text style={styles.radiusLabel}>Alert radius</Text>
+      {/* Geofence radius slider */}
+      <View style={styles.radiusSection}>
+        <View style={styles.radiusHeaderRow}>
+          <View style={styles.radiusHeaderLeft}>
+            <Ionicons name="navigate-circle" size={16} color="#2F4366" />
+            <Text style={styles.radiusLabel}>Alert radius</Text>
+          </View>
+          <View style={styles.radiusValueBadge}>
+            <Text style={styles.radiusValueText}>{formatRadius(activeRadius)}</Text>
+          </View>
         </View>
-        <View style={styles.radiusChips}>
-          {RADIUS_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              style={[styles.radiusChip, radius === opt.value && styles.radiusChipActive]}
-              onPress={() => handleRadiusChange(opt.value)}
-            >
-              <Text style={[styles.radiusChipText, radius === opt.value && styles.radiusChipTextActive]}>{opt.label}</Text>
-            </TouchableOpacity>
-          ))}
+        <View
+          style={styles.sliderOuter}
+          onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderGrant={(e) => setDraftRadius(Math.round(Math.max(0, Math.min(1, e.nativeEvent.locationX / sliderWidth)) * SLIDER_MAX))}
+          onResponderMove={(e) => setDraftRadius(Math.round(Math.max(0, Math.min(1, e.nativeEvent.locationX / sliderWidth)) * SLIDER_MAX))}
+          onResponderRelease={(e) => {
+            const v = Math.round(Math.max(0, Math.min(1, e.nativeEvent.locationX / sliderWidth)) * SLIDER_MAX);
+            setDraftRadius(null);
+            handleRadiusChange(v);
+          }}
+        >
+          <View style={styles.sliderTrack} pointerEvents="none">
+            <View style={[styles.sliderFill, { width: `${(activeRadius / SLIDER_MAX) * 100}%` }]} />
+          </View>
+          <View style={[styles.sliderThumb, { left: (activeRadius / SLIDER_MAX) * Math.max(0, sliderWidth - 22) }]} pointerEvents="none" />
+        </View>
+        <View style={styles.sliderRangeRow}>
+          <Text style={styles.sliderRangeText}>0m</Text>
+          <Text style={styles.sliderRangeText}>2km</Text>
         </View>
       </View>
 
@@ -454,17 +474,30 @@ export default function ExploreScreen() {
               originWhitelist={['*']}
             />
           )}
-          {/* Radius chips overlay */}
-          <View style={styles.fullscreenRadiusRow}>
-            {RADIUS_OPTIONS.map((opt) => (
-              <TouchableOpacity
-                key={opt.value}
-                style={[styles.fullscreenRadiusChip, radius === opt.value && styles.fullscreenRadiusChipActive]}
-                onPress={() => handleRadiusChange(opt.value)}
-              >
-                <Text style={[styles.fullscreenRadiusText, radius === opt.value && styles.fullscreenRadiusTextActive]}>{opt.label}</Text>
-              </TouchableOpacity>
-            ))}
+          {/* Radius slider overlay */}
+          <View style={styles.fullscreenSliderContainer}>
+            <View style={styles.fullscreenSliderHeader}>
+              <Text style={styles.fullscreenSliderLabel}>Alert radius</Text>
+              <Text style={styles.fullscreenSliderValue}>{formatRadius(activeRadius)}</Text>
+            </View>
+            <View
+              style={styles.sliderOuter}
+              onLayout={(e) => setFullSliderWidth(e.nativeEvent.layout.width)}
+              onStartShouldSetResponder={() => true}
+              onMoveShouldSetResponder={() => true}
+              onResponderGrant={(e) => setDraftRadius(Math.round(Math.max(0, Math.min(1, e.nativeEvent.locationX / fullSliderWidth)) * SLIDER_MAX))}
+              onResponderMove={(e) => setDraftRadius(Math.round(Math.max(0, Math.min(1, e.nativeEvent.locationX / fullSliderWidth)) * SLIDER_MAX))}
+              onResponderRelease={(e) => {
+                const v = Math.round(Math.max(0, Math.min(1, e.nativeEvent.locationX / fullSliderWidth)) * SLIDER_MAX);
+                setDraftRadius(null);
+                handleRadiusChange(v);
+              }}
+            >
+              <View style={styles.sliderTrack} pointerEvents="none">
+                <View style={[styles.sliderFill, { width: `${(activeRadius / SLIDER_MAX) * 100}%` }]} />
+              </View>
+              <View style={[styles.sliderThumb, { left: (activeRadius / SLIDER_MAX) * Math.max(0, fullSliderWidth - 22) }]} pointerEvents="none" />
+            </View>
           </View>
           {/* Store count badge */}
           <View style={styles.fullscreenBadge}>
@@ -546,11 +579,10 @@ const styles = StyleSheet.create({
   // Fullscreen map
   fullscreenMap: { flex: 1, backgroundColor: '#000' },
   fullscreenCloseBtn: { position: 'absolute', top: 56, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(47, 67, 102, 0.9)', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 6 },
-  fullscreenRadiusRow: { position: 'absolute', top: 56, left: 16, flexDirection: 'row', gap: 6 },
-  fullscreenRadiusChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.9)', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
-  fullscreenRadiusChipActive: { backgroundColor: '#2F4366' },
-  fullscreenRadiusText: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
-  fullscreenRadiusTextActive: { color: '#FFFFFF' },
+  fullscreenSliderContainer: { position: 'absolute', top: 56, left: 16, right: 68, backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 14, padding: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 5 },
+  fullscreenSliderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  fullscreenSliderLabel: { fontSize: 11, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
+  fullscreenSliderValue: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
   fullscreenBadge: { position: 'absolute', bottom: 40, left: 16, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(47, 67, 102, 0.9)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
   fullscreenBadgeText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
   markerPin: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#2F4366', borderWidth: 3, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
@@ -595,15 +627,19 @@ const styles = StyleSheet.create({
   noLocationBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F6F8FB', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginTop: 8 },
   noLocationText: { fontSize: 12, fontFamily: 'Poppins-Regular', color: '#8A94A6' },
 
-  // Radius selector
-  radiusRow: { paddingHorizontal: 24, marginBottom: 14 },
-  radiusLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  // Radius slider
+  radiusSection: { paddingHorizontal: 24, marginBottom: 14 },
+  radiusHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  radiusHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   radiusLabel: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#2F4366' },
-  radiusChips: { flexDirection: 'row', gap: 8 },
-  radiusChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E0E4EA' },
-  radiusChipActive: { backgroundColor: '#2F4366', borderColor: '#2F4366' },
-  radiusChipText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#8A94A6' },
-  radiusChipTextActive: { color: '#FFFFFF' },
+  radiusValueBadge: { backgroundColor: '#2F4366', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  radiusValueText: { fontSize: 12, fontFamily: 'Poppins-SemiBold', color: '#FFFFFF' },
+  sliderOuter: { height: 32, justifyContent: 'center', position: 'relative' },
+  sliderTrack: { height: 6, backgroundColor: '#DDE3EF', borderRadius: 3, overflow: 'hidden' },
+  sliderFill: { height: 6, backgroundColor: '#2F4366', borderRadius: 3 },
+  sliderThumb: { position: 'absolute', top: 5, width: 22, height: 22, borderRadius: 11, backgroundColor: '#FFFFFF', borderWidth: 2.5, borderColor: '#2F4366', shadowColor: '#2F4366', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
+  sliderRangeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  sliderRangeText: { fontSize: 10, fontFamily: 'Poppins-Regular', color: '#A0A8B5' },
 
   // Nearby alert
   nearbyBanner: { paddingHorizontal: 24, marginBottom: 12 },

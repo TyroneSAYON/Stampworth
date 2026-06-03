@@ -1365,11 +1365,8 @@ const distMeters = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const MAX_VISIBLE_RADIUS = 2000; // 2km — only show customers within this range
-
-// Get customers with recent location data who are near this merchant's store
-export const getNearbyCustomersWithLocation = async (merchantId: string) => {
-  // Get merchant's store location
+// Returns only an aggregate count of customers within the given radius — no identities or coordinates exposed
+export const getNearbyCustomerCount = async (merchantId: string, radiusMeters: number) => {
   const { data: merchant } = await supabase
     .from('merchants')
     .select('latitude, longitude')
@@ -1378,50 +1375,27 @@ export const getNearbyCustomersWithLocation = async (merchantId: string) => {
 
   const storeLat = merchant?.latitude;
   const storeLng = merchant?.longitude;
+  if (!storeLat || !storeLng) return { count: 0, error: null };
 
-  // Get recent locations (last 30 min — customer must be actively nearby)
   const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-
-  const { data: locations } = await supabase
+  const { data: locations, error } = await supabase
     .from('user_locations')
-    .select('customer_id, latitude, longitude, created_at')
+    .select('customer_id, latitude, longitude')
     .gte('created_at', thirtyMinAgo)
     .order('created_at', { ascending: false });
 
-  if (!locations || locations.length === 0) return { data: [], error: null };
+  if (error || !locations || locations.length === 0) return { count: 0, error };
 
-  // Build map of latest location per customer
-  const locationMap = new Map<string, { latitude: number; longitude: number; updatedAt: string }>();
+  // Count unique customers within the radius using only their most recent location
+  const seen = new Set<string>();
+  let count = 0;
   for (const loc of locations) {
-    if (!locationMap.has(loc.customer_id)) {
-      // Privacy: only include customers within max radius of the store
-      if (storeLat && storeLng) {
-        const dist = distMeters(storeLat, storeLng, loc.latitude, loc.longitude);
-        if (dist > MAX_VISIBLE_RADIUS) continue; // outside geofence — don't show
-      }
-      locationMap.set(loc.customer_id, { latitude: loc.latitude, longitude: loc.longitude, updatedAt: loc.created_at });
-    }
+    if (seen.has(loc.customer_id)) continue;
+    seen.add(loc.customer_id);
+    if (distMeters(storeLat, storeLng, loc.latitude, loc.longitude) <= radiusMeters) count++;
   }
 
-  if (locationMap.size === 0) return { data: [], error: null };
-
-  const customerIds = [...locationMap.keys()];
-
-  const { data: customers } = await supabase
-    .from('customers')
-    .select('id, full_name, username, email')
-    .in('id', customerIds);
-
-  const result = (customers || [])
-    .filter((c: any) => locationMap.has(c.id))
-    .map((c: any) => ({
-      id: c.id,
-      name: c.full_name || c.username || 'Customer',
-      email: c.email,
-      ...locationMap.get(c.id)!,
-    }));
-
-  return { data: result, error: null };
+  return { count, error: null };
 };
 
 export const getMerchantDashboardSnapshot = async () => {
